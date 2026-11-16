@@ -15,7 +15,7 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
 import { keysKey, keysView } from "@fireflies/keyhelp";
@@ -63,7 +63,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
 
   const want = ask.verdict.target ?? "yes";
 
-  if ((ask.input?.value() ?? "").trim() !== want) {
+  if (Str.trim((ask.input?.value() ?? "")) !== want) {
     v.say(`type ${want} to go on, or esc`, "failed");
 
     return true;
@@ -81,7 +81,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
 export function digitsOf(rows: Menu["rows"]): (number | null)[] {
   let n = 0;
 
-  return rows.map((r) => ((r.key !== undefined && Str.isNonEmpty(r.key)) || n >= 9 ? null : ++n));
+  return Arr.map(rows, (r) => ((r.key !== undefined && Str.isNonEmpty(r.key)) || n >= 9 ? null : ++n));
 }
 
 function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
@@ -98,7 +98,7 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
     row?.go();
   } else {
     // A row's own key (as the panel has it) runs it from the menu too.
-    const row = m.rows.find((r) => r.key === k);
+    const row = Option.getOrUndefined(Arr.findFirst(m.rows, (r) => r.key === k));
 
     if (row !== undefined) {
       v.menu = null;
@@ -283,7 +283,7 @@ export function keyedAt(v: DbView, m: Menu): Rect | null {
 export function menuSize(v: DbView, m: Menu): Box {
   return {
     width: Math.min((m.near !== null && m.near !== undefined) || keyedAt(v, m) !== null ? 380 : 560, v.size.width - 40),
-    height: Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24), 0)),
+    height: Math.min(440, v.size.height - 80, 26 + Arr.reduce(m.rows, 0, (n, r) => n + (r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24))),
   };
 }
 
@@ -299,7 +299,7 @@ export function menuLayer(t: Theme, v: DbView): Element | null {
   // What a key's menu stands at is found now, not when it opened: the window may have been resized since.
   const at = placeMenu({ width: w, height: h }, v.size, m.near ?? keyedAt(v, m));
 
-  const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
+  const rows = Arr.map(m.rows, (r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edge(t)}55`))
     .when(i === m.at, (el) => el.children(band(t, true)))
     .on_click((_e, cx) => {
@@ -339,7 +339,7 @@ function passwordPanel(t: Theme, v: DbView): Element {
 
   if (pw === null) return div();
 
-  const c = [...v.saved, ...v.sent, ...v.found.map((f) => f.conn)].find((x) => x.id === pw.conn);
+  const c = Option.getOrUndefined(Arr.findFirst([...v.saved, ...v.sent, ...Arr.map(v.found, (f) => f.conn)], (x) => x.id === pw.conn));
 
   return centered("db-password", v_flex().id("db-password-box").w(Math.min(420, v.size.width - 40)).bg(t.background).border(1).border_color(t.accent).p(14).gap(10)
     .child(div().text_color(t.foreground).child(`Password for ${c?.name ?? "the connection"}`))

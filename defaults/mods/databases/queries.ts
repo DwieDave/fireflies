@@ -3,7 +3,7 @@
 // answered. Found and sent connections keep theirs in memory only.
 
 import type { Context } from "gpui-kit";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { arrayOf, isString, object, parseJson } from "./guard.ts";
 import type { Conn } from "./kinds.ts";
 import { IO, dataHome } from "./session.ts";
@@ -13,7 +13,7 @@ import type { default as DbView } from "./main.ts";
 const isQueriesDoc = object({ tabs: arrayOf(object({ name: isString, text: isString })) });
 
 /** The file of a connection's tabs. */
-export const queriesFile = (home: string, id: string): string => `${home}/data/databases/queries/${id.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+export const queriesFile = (home: string, id: string): string => `${home}/data/databases/queries/${Str.replace(/[^A-Za-z0-9_-]/g, "_")(id)}.json`;
 
 /** Whose tabs the view holds now (they're saved under this connection). */
 const owner = new WeakMap<DbView, string>();
@@ -30,7 +30,7 @@ export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void
 
   if (v.active !== c) return;
 
-  v.queries = tabs.map((t) => {
+  v.queries = Arr.map(tabs, (t) => {
     const q = newQuery(v, t.text);
 
     q.name = t.name;
@@ -46,7 +46,7 @@ export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void
 /** Writes the tabs of the connection they belong to (a saved one). */
 export async function saveQueries(v: DbView): Promise<void> {
   const id = owner.get(v);
-  const c = v.saved.find((s) => s.id === id);
+  const c = Option.getOrUndefined(Arr.findFirst(v.saved, (s) => s.id === id));
 
   v.queriesDirty = false;
 
@@ -54,7 +54,7 @@ export async function saveQueries(v: DbView): Promise<void> {
 
   const path = queriesFile(dataHome(), c.id);
   const was = await IO.readTextFile(path).catch(() => null);
-  const doc = { tabs: v.queries.map((q) => ({ name: q.name, text: q.editor.value() })) };
+  const doc = { tabs: Arr.map(v.queries, (q) => ({ name: q.name, text: q.editor.value() })) };
   const text = `${JSON.stringify(doc, null, 2)}\n`;
 
   if (text !== was) await IO.writeTextFile(path, text, was).catch(() => null);

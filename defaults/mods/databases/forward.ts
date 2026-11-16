@@ -13,7 +13,7 @@
 
 import type { Context } from "gpui-kit";
 import { appHome, exec, hc, openOverlay, readTextFile, run, terminals } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import type { KubeForward } from "./kube.ts";
 import { FORWARD_LABEL, forwardProblem, forwardStartArgs } from "./kube.ts";
@@ -129,7 +129,7 @@ export async function startForward(v: DbView, ask: ForwardAsk, cx: Context, conn
     return;
   }
 
-  const address = parseJson(r.stdout.trim(), object({ address: isString }))?.address ?? null;
+  const address = parseJson(Str.trim(r.stdout), object({ address: isString }))?.address ?? null;
   let seen = false;
 
   for (let i = 0; i < TRIES; i++) {
@@ -173,7 +173,9 @@ function failed(v: DbView, ask: ForwardAsk, output: string, cx: Context, head: s
     ask.why = "gone";
     ask.note = `${ask.conn.forward?.target.startsWith("pod/") === true ? `the pod ${pod}` : ask.conn.forward?.target ?? "its target"} isn't there any more (a deployment's pods change names): ${lastLine(output)}`;
   } else {
-    ask.note = [head, lastLine(output)].filter(Boolean).join(": ") || "the forward ended";
+    const said = Arr.join(Arr.filter([head ?? "", lastLine(output)], Str.isNonEmpty), ": ");
+
+    ask.note = Str.isNonEmpty(said) ? said : "the forward ended";
   }
 
   cx.notify();
@@ -181,7 +183,7 @@ function failed(v: DbView, ask: ForwardAsk, output: string, cx: Context, head: s
 
 /** The terminal's state (herdr-core's list), or null when it's gone from it. */
 function terminalOf(address: string): { readonly live: boolean } | null {
-  const t = terminals().find((x) => isTerminalEntry(x) && x.address === address);
+  const t = Option.getOrUndefined(Arr.findFirst(terminals(), (x) => isTerminalEntry(x) && x.address === address));
 
   return t && isTerminalEntry(t) ? { live: t.state !== "exited" && t.state !== "dead" } : null;
 }
@@ -194,7 +196,7 @@ async function outputOf(address: string): Promise<string> {
 }
 
 /** The last line that says something. */
-const lastLine = (s: string): string => s.split("\n").map((l) => l.trim()).filter(Boolean).at(-1) ?? "";
+const lastLine = (s: string): string => Arr.filter(Arr.map(Str.split(s, "\n"), (l) => Str.trim(l)), Boolean).at(-1) ?? "";
 
 /** The connection on the forward's port (another one when its own was taken): the pinned record
  *  or the sent list follows. */
@@ -205,8 +207,8 @@ async function placedOn(v: DbView, c: Conn, f: KubeForward, cx: Context): Promis
 
   const next: ConnDraft = { ...c, port: f.local, forward: f };
 
-  if (c.origin === "saved") await changePinned(v, (list) => list.map((x) => (x.id === c.id ? next : x)), cx);
-  else v.sent = v.sent.map((x) => (x.id === c.id ? next : x));
+  if (c.origin === "saved") await changePinned(v, (list) => Arr.map(list, (x) => (x.id === c.id ? next : x)), cx);
+  else v.sent = Arr.map(v.sent, (x) => (x.id === c.id ? next : x));
 
   return next;
 }

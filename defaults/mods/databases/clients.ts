@@ -95,7 +95,7 @@ export type MysqlFlavor = "mysql" | "mariadb";
 
 /** The flavor from the client's `--version` ("… from 11.4.13-MariaDB, client 15.2 …"), else from its name. */
 export function flavorOf(version: string, path: string): MysqlFlavor {
-  return /MariaDB/.test(version) || (Str.isEmpty(version.trim()) && path.endsWith("/mariadb")) ? "mariadb" : "mysql";
+  return /MariaDB/.test(version) || (Str.isEmpty(Str.trim(version)) && Str.endsWith("/mariadb")(path)) ? "mariadb" : "mysql";
 }
 
 /** MySQL's --ssl-mode for each sslmode (it has no allow: preferred is the nearest). The verify

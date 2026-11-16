@@ -3,6 +3,7 @@
 // and what copying it gives: one cell's plain value, a range as TSV (a
 // spreadsheet takes it as it is), rows as JSON, CSV or INSERTs.
 
+import { Array as Arr, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
 
@@ -53,7 +54,7 @@ export const unselected = (at: GridAt): GridAt => ({ ...at, anchor: null });
 const tsvField = (v: Cell): string => {
   const s = v === null ? "NULL" : v;
 
-  return /[\t\r\n"]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[\t\r\n"]/.test(s) ? `"${Str.replace(/"/g, '""')(s)}"` : s;
 };
 
 /** What copying gives: one cell's value as it is, a range as TSV (no header; `header` adds the
@@ -64,19 +65,19 @@ export function copied(set: ResultSet, g: Range, header = false): string {
   const cols = Array.from({ length: g.c1 - g.c0 + 1 }, (_x, k) => g.c0 + k);
   const lines: string[] = [];
 
-  if (header) lines.push(cols.map((c) => tsvField(set.columns[c] ?? "")).join("\t"));
+  if (header) lines.push(Arr.join(Arr.map(cols, (c) => tsvField(set.columns[c] ?? "")), "\t"));
 
-  for (let r = g.r0; r <= g.r1; r++) lines.push(cols.map((c) => tsvField(set.rows[r]?.[c] ?? null)).join("\t"));
+  for (let r = g.r0; r <= g.r1; r++) lines.push(Arr.join(Arr.map(cols, (c) => tsvField(set.rows[r]?.[c] ?? null)), "\t"));
 
-  return lines.join("\n");
+  return Arr.join(lines, "\n");
 }
 
 /** Some rows of a result, every column (or without those named in `skip`): for JSON, CSV, INSERTs. */
 export function rowsOf(set: ResultSet, rows: readonly number[], skip: readonly string[] = []): ResultSet {
-  const keep = set.columns.map((c, i) => (skip.includes(c) ? -1 : i)).filter((i) => i >= 0);
+  const keep = Arr.filter(Arr.map(set.columns, (c, i) => (skip.includes(c) ? -1 : i)), (i) => i >= 0);
 
   return {
-    columns: keep.map((i) => set.columns[i] ?? ""),
-    rows: rows.map((r) => keep.map((i) => set.rows[r]?.[i] ?? null)),
+    columns: Arr.map(keep, (i) => set.columns[i] ?? ""),
+    rows: Arr.map(rows, (r) => Arr.map(keep, (i) => set.rows[r]?.[i] ?? null)),
   };
 }

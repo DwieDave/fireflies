@@ -14,7 +14,7 @@ import { pickFile, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn, ConnDraft, Kind, SslMode } from "./kinds.ts";
 import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId, speaksTls } from "./kinds.ts";
@@ -146,7 +146,7 @@ export class ConnForm {
 
   /** The stops in tab order: the kind, the fields, the toggles, the buttons. */
   stops(): Stop[] {
-    const fields = fieldsOf(this.kind, this.remote).map((f): Stop => ({ id: f, kind: "text" }));
+    const fields = Arr.map(fieldsOf(this.kind, this.remote), (f): Stop => ({ id: f, kind: "text" }));
 
     const toggles: Stop[] = [
       ...(this.kind === "libsql" ? [{ id: "remote", kind: "toggle" } as const] : []),
@@ -234,7 +234,7 @@ export class ConnForm {
       : source !== undefined ? "kubernetes"
       : this.ask || (typed && !keychain) ? "ask" : Str.isNonEmpty(typed) || this.editing?.secret === "keychain" ? "keychain" : "none";
 
-    const c: ConnDraft = { id, name: this.value("name") || this.value("database") || this.value("path").split("/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
+    const c: ConnDraft = { id, name: this.value("name") || this.value("database") || Str.split(this.value("path"), "/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
 
     if (source !== undefined) c.source = source;
 
@@ -246,7 +246,7 @@ export class ConnForm {
 
     if (has("database")) c.database = this.value("database");
 
-    if (has("path")) c.path = this.value("path").replace(/^~(?=\/)/, "");
+    if (has("path")) c.path = Str.replace(/^~(?=\/)/, "")(this.value("path"));
 
     if (has("url")) c.url = this.value("url");
 
@@ -311,15 +311,15 @@ export class ConnForm {
     if (Str.isNonEmpty(pw) && c.secret === "ask") this.v.secrets.set(id, pw);
 
     const v = this.v;
-    const i = v.saved.findIndex((s) => s.id === id);
+    const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
 
-    const list = await changePinned(v, (now) => (now.some((s) => s.id === id) ? now.map((s) => (s.id === id ? c : s)) : [...now, c]), cx);
+    const list = await changePinned(v, (now) => (Arr.some(now, (s) => s.id === id) ? Arr.map(now, (s) => (s.id === id ? c : s)) : [...now, c]), cx);
 
     if (list === null) return;
 
     if (v.active?.id === id) v.active = c;
 
-    v.connAt = v.saved.findIndex((s) => s.id === id);
+    v.connAt = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
     v.say(`${i >= 0 ? "saved" : "added"} ${c.name}`, "done");
     this.close();
     cx.notify();
@@ -343,7 +343,7 @@ export class ConnForm {
           .when(this.error !== null, (el) => el.child(div().text_color(t.blocked).child(this.error ?? "")))
           .child(this.buttons(t, on)))
         .child(h_flex().h(22).px(14).gap(12).items_center().text_size(11)
-          .children(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "save" }).map(([k, w], i) => hint(t, `form-hint-${i}`, k, w)))));
+          .children(Arr.map(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "save" }), ([k, w], i) => hint(t, `form-hint-${i}`, k, w)))));
   }
 
   kindRow(t: Theme, focused: boolean): Element {
@@ -352,7 +352,7 @@ export class ConnForm {
     const missing = found !== undefined && "missing" in found && !(this.kind === "libsql" && this.remote) ? found.missing : null;
 
     return v_flex().gap(4).child(div().text_color(t.foreground).child("kind"))
-      .child(ring(h_flex().gap(4).p(2), focused, t.accent).children(KINDS.map((k) => chip(t, `form-kind-${k}`, KIND_NAME[k], this.kind === k, () => {
+      .child(ring(h_flex().gap(4).p(2), focused, t.accent).children(Arr.map(KINDS, (k) => chip(t, `form-kind-${k}`, KIND_NAME[k], this.kind === k, () => {
         this.kind = k;
         this.at = 0;
         void clientOf(this.v, k);
@@ -374,7 +374,7 @@ export class ConnForm {
 
       return v_flex().id(`form-${f}`).gap(4).w(f === "name" || f === "path" || f === "url" ? Math.min(560, this.v.size.width - 60) : Math.min(272, (this.v.size.width - 74) / 2))
         .on_mouse_down("left", (_e, cx) => {
-          this.at = this.stops().findIndex((s) => s.id === f);
+          this.at = Option.getOrElse(Arr.findFirstIndex(this.stops(), (s) => s.id === f), () => -1);
           input?.focus();
           cx.notify();
         })
@@ -382,7 +382,7 @@ export class ConnForm {
         .child(box);
     };
 
-    return h_flex().flex_wrap().gap(12).children(fields.map(cell));
+    return h_flex().flex_wrap().gap(12).children(Arr.map(fields, cell));
   }
 
   toggleRow(t: Theme, on: (id: string) => boolean): Element {
@@ -395,9 +395,9 @@ export class ConnForm {
       .child(div().text_color(t.muted).child(label))
       .when(note !== "", (el) => el.child(div().id(`form-${id}-note`).text_color(t.dim).child(note))), on(id), t.accent);
 
-    const ids = this.stops().filter((s) => s.kind === "toggle").map((s) => s.id);
+    const ids = Arr.map(Arr.filter(this.stops(), (s) => s.kind === "toggle"), (s) => s.id);
 
-    return h_flex().flex_wrap().gap(14).children(ids.map((id) => (id === "remote" ? toggle(id, "remote (Turso, sqld)", this.remote)
+    return h_flex().flex_wrap().gap(14).children(Arr.map(ids, (id) => (id === "remote" ? toggle(id, "remote (Turso, sqld)", this.remote)
       : id === "ssl" ? toggle(id, "ssl", this.ssl(), sslWords(this.sslmode))
       : id === "ask" ? toggle(id, "ask for the password each time", this.ask) : toggle(id, "read only", this.readonly))));
   }
@@ -438,5 +438,5 @@ export function sslWords(mode: SslMode | undefined): string {
 function fieldOf(id: string): Field | null {
   const fields: readonly Field[] = ["name", "host", "port", "user", "database", "path", "url", "password"];
 
-  return fields.find((f) => f === id) ?? null;
+  return Option.getOrUndefined(Arr.findFirst(fields, (f) => f === id)) ?? null;
 }

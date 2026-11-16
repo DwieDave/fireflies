@@ -6,7 +6,7 @@
 
 import type { Context } from "gpui-kit";
 import { readTextFile } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { baseName } from "./kinds.ts";
 import { receive } from "./conns.ts";
 import type { default as DbView } from "./main.ts";
@@ -24,8 +24,8 @@ export const droppedAs = (path: string): Dropped => (SQLITE_EXT.test(path) ? "sq
 
 /** Files dropped on the window: the first SQLite file connects, each .sql file opens in a tab. */
 export function dropFiles(v: DbView, paths: readonly string[], cx: Context): void {
-  const db = paths.find((p) => droppedAs(p) === "sqlite");
-  const sql = paths.filter((p) => droppedAs(p) === "sql");
+  const db = Option.getOrUndefined(Arr.findFirst(paths, (p) => droppedAs(p) === "sqlite"));
+  const sql = Arr.filter(paths, (p) => droppedAs(p) === "sql");
 
   if ((db === undefined || Str.isEmpty(db)) && sql.length === 0) {
     v.say("only a SQLite file (.db, .sqlite, .sqlite3, .db3) or a .sql file opens here", "failed");
@@ -51,7 +51,7 @@ async function openSql(v: DbView, path: string, cx: Context): Promise<void> {
   } else {
     const q = v.addQuery(text, cx);
 
-    q.name = baseName(path).replace(/\.sql$/i, "");
+    q.name = Str.replace(/\.sql$/i, "")(baseName(path));
     v.say(`${baseName(path)} in a query tab · not run`, "done");
   }
 

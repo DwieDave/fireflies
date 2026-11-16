@@ -8,7 +8,7 @@
 // Turso's Hrana takes instead, and the check that a cell still holds what was
 // read (the old value in the UPDATE's WHERE). Names are catalog.ts' quoteName.
 
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell } from "./parse-out.ts";
 import type { BoundValue } from "./script.ts";
@@ -20,7 +20,7 @@ export type ColType = "int" | "float" | "decimal" | "bool" | "json" | "blob" | "
 /** A column's kind of value, from its declared type ("integer", "int(11) unsigned", "double
  *  precision", "tinyint(1)", "bytea", "varchar(40)"; SQLite's free words too). */
 export function typeOf(declared: string): ColType {
-  const t = declared.trim().toLowerCase();
+  const t = Str.toLowerCase(Str.trim(declared));
 
   if (/blob|bytea|^(var)?binary\b|^image\b/.test(t)) return "blob";
 
@@ -48,13 +48,13 @@ export function refusal(value: Cell, type: ColType): string | null {
 
   if (type === "blob") return "a blob can't be edited here";
 
-  if (value.includes("\0")) return "a value can't hold a NUL character";
+  if (Str.includes("\0")(value)) return "a value can't hold a NUL character";
 
-  if (type === "int" && !WHOLE.test(value.trim())) return "it takes a whole number";
+  if (type === "int" && !WHOLE.test(Str.trim(value))) return "it takes a whole number";
 
-  if ((type === "float" || type === "decimal") && !NUMBER.test(value.trim()) && !/^[-+]?(nan|inf(inity)?)$/i.test(value.trim())) return "it takes a number";
+  if ((type === "float" || type === "decimal") && !NUMBER.test(Str.trim(value)) && !/^[-+]?(nan|inf(inity)?)$/i.test(Str.trim(value))) return "it takes a number";
 
-  if (type === "bool" && !YES.test(value.trim()) && !NO.test(value.trim())) return "it takes true or false";
+  if (type === "bool" && !YES.test(Str.trim(value)) && !NO.test(Str.trim(value))) return "it takes true or false";
 
   return null;
 }
@@ -71,19 +71,19 @@ export function utf8Hex(s: string): string {
       : c < 0x10000 ? [0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)]
       : [0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)];
 
-    out += bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+    out += Arr.join(Arr.map(bytes, (b) => Str.padStart(2, "0")(b.toString(16))), "");
   }
 
-  return out.toUpperCase();
+  return Str.toUpperCase(out);
 }
 
 /** A text as a string literal for the engine. */
 export function textLiteral(kind: Kind, s: string): string {
-  if (kind === "postgres" && s.includes("\\")) return `E'${s.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+  if (kind === "postgres" && Str.includes("\\")(s)) return `E'${Str.replace(/'/g, "''")(Str.replace(/\\/g, "\\\\")(s))}'`;
 
-  if (kind === "mysql" && s.includes("\\")) return `_utf8mb4 X'${utf8Hex(s)}'`;
+  if (kind === "mysql" && Str.includes("\\")(s)) return `_utf8mb4 X'${utf8Hex(s)}'`;
 
-  return `'${s.replace(/'/g, "''")}'`;
+  return `'${Str.replace(/'/g, "''")(s)}'`;
 }
 
 /** A literal for a value refused by `refusal` (the caller asks first). */
@@ -98,11 +98,11 @@ export function literal(kind: Kind, value: Cell, type: ColType): Literal {
 
   if (value === null) return { sql: "NULL" };
 
-  const v = value.trim();
+  const v = Str.trim(value);
 
-  if (type === "int") return { sql: v.replace(/^\+/, "") };
+  if (type === "int") return { sql: Str.replace(/^\+/, "")(v) };
 
-  if ((type === "float" || type === "decimal") && NUMBER.test(v)) return { sql: v.replace(/^\+/, "") };
+  if ((type === "float" || type === "decimal") && NUMBER.test(v)) return { sql: Str.replace(/^\+/, "")(v) };
 
   if (type === "bool") {
     const yes = YES.test(v);
@@ -124,9 +124,9 @@ export function bound(value: Cell, type: ColType): Bound | { readonly refused: s
 
   if (value === null) return { type: "null" };
 
-  const v = value.trim();
+  const v = Str.trim(value);
 
-  if (type === "int") return { type: "integer", value: v.replace(/^\+/, "") };
+  if (type === "int") return { type: "integer", value: Str.replace(/^\+/, "")(v) };
 
   if ((type === "float" || type === "decimal") && NUMBER.test(v)) return { type: "float", value: Number(v) };
 
@@ -137,7 +137,7 @@ export function bound(value: Cell, type: ColType): Bound | { readonly refused: s
 
 /** Postgres types without an equality operator: compared by their text (json's is its input as
  *  typed, which is what psql prints). */
-const textCompared = (declared: string): boolean => /^(json|xml|point|line|lseg|box|path|polygon|circle)\b/i.test(declared.trim());
+const textCompared = (declared: string): boolean => /^(json|xml|point|line|lseg|box|path|polygon|circle)\b/i.test(Str.trim(declared));
 
 /** The check that a column still holds `old` (as the client printed it). Postgres reads the
  *  printed text back as the column's type (its ::text isn't what psql prints: a boolean's is

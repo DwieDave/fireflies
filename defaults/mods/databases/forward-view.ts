@@ -9,6 +9,7 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr, Option } from "effect";
 import { chip, pip } from "./kit.ts";
 import { forwardArgv } from "./kube.ts";
 import { connectNow } from "./conns.ts";
@@ -43,7 +44,7 @@ export function askActions(v: DbView, a: ForwardAsk): { readonly key: string; re
 /** A key while the ask is up: its buttons' keys; the rest is taken (nothing types here). */
 export function forwardAskKey(v: DbView, a: ForwardAsk, e: KeyEvent, cx: Context): Taken {
   const key = e.key === "escape" ? "esc" : e.key;
-  askActions(v, a).find((x) => x.key === key)?.go(cx);
+  Option.getOrUndefined(Arr.findFirst(askActions(v, a), (x) => x.key === key))?.go(cx);
   cx.notify();
 
   return true;
@@ -57,7 +58,7 @@ const fact = (t: Theme, name: string, value: string, color: Color): Element => h
 /** The command it runs: one piece per argument, so a line breaks only between arguments; a click
  *  copies it. */
 function commandRow(t: Theme, v: DbView, argv: readonly string[]): Element {
-  const line = argv.join(" ");
+  const line = Arr.join(argv, " ");
 
   return h_flex().id("db-fwd-command").gap(10).items_start().cursor_pointer().tooltip("A click copies it")
     .on_click((_e, cx) => {
@@ -67,7 +68,7 @@ function commandRow(t: Theme, v: DbView, argv: readonly string[]): Element {
       cx.notify();
     })
     .child(div().w(84).flex_none().text_color(t.dim).child("runs"))
-    .child(h_flex().flex_1().min_w(0).flex_wrap().gap_x(6).children(argv.map((a, i) => div().id(`db-fwd-arg-${i}`).flex_none().text_color(t.ansi3).child(a))))
+    .child(h_flex().flex_1().min_w(0).flex_wrap().gap_x(6).children(Arr.map(argv, (a, i) => div().id(`db-fwd-arg-${i}`).flex_none().text_color(t.ansi3).child(a))))
     .child(div().flex_none().text_color(t.accent).child("copy"));
 }
 
@@ -94,7 +95,7 @@ export function forwardAskPanel(t: Theme, v: DbView, a: ForwardAsk, centered: (i
       .child(pip(t.working, 6, true)).child(div().text_color(t.muted).child(`starting the forward… ${secs} s · it stays up when this window closes`))))
     .when(a.note !== null, (el) => el.child(div().id("db-fwd-note").text_size(11).text_color(t.blocked).child(a.note ?? "")))
     .child(h_flex().gap(8).justify_end().flex_wrap()
-      .children(askActions(v, a).map((x, i) => chip(t, `db-fwd-${i}`, `${x.key}  ${x.label}`, false, (cx) => x.go(cx), i === 0 ? t.accent : null))));
+      .children(Arr.map(askActions(v, a), (x, i) => chip(t, `db-fwd-${i}`, `${x.key}  ${x.label}`, false, (cx) => x.go(cx), i === 0 ? t.accent : null))));
 
   return centered("db-fwd", box, () => {
     v.forwardAsk = null;

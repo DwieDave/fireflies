@@ -7,7 +7,7 @@
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { home, run } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Binding, Place } from "./keys.ts";
 import { BINDINGS, actionsFor } from "./keys.ts";
 import { PANELS, STRUCT_TABS, gridStart, tablesTabsOf } from "./state.ts";
@@ -35,7 +35,7 @@ import { dbMenu, stateMenu } from "./connmark.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
-const isAction = (place: Place, name: string): boolean => [...BINDINGS[place], ...BINDINGS.window].some((b: Binding) => b[2] === name);
+const isAction = (place: Place, name: string): boolean => Arr.some([...BINDINGS[place], ...BINDINGS.window], (b: Binding) => b[2] === name);
 
 /** Does what a key (or an action's name) asks in a place; false when it means nothing there. */
 export function act(v: DbView, place: Place, key: string, cx: Context): boolean {
@@ -89,7 +89,7 @@ export function setPanel(v: DbView, p: PanelId): void {
 /** The window's own actions. */
 function windowAct(v: DbView, action: string, cx: Context): boolean {
   const panel = /^panel-(conns|tables|structure|main|log)$/.exec(action)?.[1];
-  const found = PANELS.find((p) => p === panel);
+  const found = Option.getOrUndefined(Arr.findFirst(PANELS, (p) => p === panel));
 
   if (found !== undefined) setPanel(v, found);
   else if (action === "panel-next" || action === "panel-prev") {
@@ -241,7 +241,7 @@ export function disconnect(v: DbView): void {
 
 /** A saved connection moved `by` places among the saved ones (J / K, a drag), kept. */
 export function moveConn(v: DbView, c: Conn, by: number, cx: Context): void {
-  const i = v.saved.findIndex((s) => s.id === c.id);
+  const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === c.id), () => -1);
 
   if (i < 0) {
     v.say("only saved connections keep an order (s saves it)", "failed");
@@ -254,11 +254,11 @@ export function moveConn(v: DbView, c: Conn, by: number, cx: Context): void {
 
 /** A saved connection put at place `to` among the saved ones, kept; the cursor goes with it. */
 export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
-  const i = v.saved.findIndex((s) => s.id === c.id);
+  const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === c.id), () => -1);
 
   if (i < 0 || i === to) return;
 
-  const list = v.saved.filter((s) => s.id !== c.id);
+  const list = Arr.filter(v.saved, (s) => s.id !== c.id);
 
   list.splice(to, 0, c);
   v.saved = list;
@@ -267,9 +267,9 @@ export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
   const before = list[to + 1]?.id ?? null;
 
   void changePinned(v, (now) => {
-    const rest = now.filter((s) => s.id !== c.id);
-    const at = before !== null && Str.isNonEmpty(before) ? rest.findIndex((s) => s.id === before) : -1;
-    const kept = now.find((s) => s.id === c.id) ?? c;
+    const rest = Arr.filter(now, (s) => s.id !== c.id);
+    const at = before !== null && Str.isNonEmpty(before) ? Option.getOrElse(Arr.findFirstIndex(rest, (s) => s.id === before), () => -1) : -1;
+    const kept = Option.getOrUndefined(Arr.findFirst(now, (s) => s.id === c.id)) ?? c;
 
     rest.splice(at < 0 ? rest.length : at, 0, kept);
 
@@ -417,7 +417,7 @@ function structAct(v: DbView, action: string, cx: Context): boolean {
 
 /** enter on a structure row: a key's other table opens; a column's name goes into the query. */
 function structOpen(v: DbView, r: ReturnType<typeof structRows>[number], cx: Context): void {
-  const other = r.table !== null && Str.isNonEmpty(r.table) ? v.catalog.tables.find((t) => t.name === r.table) : undefined;
+  const other = r.table !== null && Str.isNonEmpty(r.table) ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (t) => t.name === r.table)) : undefined;
 
   if (other !== undefined) openTable(v, other, cx);
   else if ((r.name !== null && Str.isNonEmpty(r.name)) && v.active !== null) insertName(v, quoteName(v.active.kind, r.name), cx);

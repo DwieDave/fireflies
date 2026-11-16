@@ -24,7 +24,7 @@ export type FolderEnv =
   | { readonly kind: "unused"; readonly dir: string; readonly note: string };
 
 /** A folder as a person reads it (~ for the home). */
-export const tilde = (p: string): string => (p.startsWith(home()) ? `~${p.slice(home().length)}` : p);
+export const tilde = (p: string): string => (Str.startsWith(home())(p) ? `~${Str.slice(home().length)(p)}` : p);
 
 /** Starts loading the folder's environment (once per window). */
 export function loadFolderEnv(v: DbView, cx: Context): Promise<void> {

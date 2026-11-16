@@ -17,7 +17,7 @@ import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Column } from "@fireflies/viewer/table";
 import { table, oneLine } from "@fireflies/viewer/table";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
 import type { GridColumn } from "./columns.ts";
@@ -35,7 +35,7 @@ const GUTTER_MIN = 28;
 
 /** The grid's columns, measured once per result (table.ts: widths, numbers). */
 export function columnsOf(set: ResultSet): readonly Column[] {
-  const text = [set.columns.map((c) => c), ...set.rows.slice(0, 400).map((r) => r.map((v) => (v === null ? "null" : v)))];
+  const text = [Arr.map(set.columns, (c) => c), ...Arr.map(set.rows.slice(0, 400), (r) => Arr.map(r, (v) => (v === null ? "null" : v)))];
 
   return table(text).cols;
 }
@@ -136,7 +136,7 @@ function cellLook(t: Theme, v: Cell, num: boolean): readonly [string, Color] {
 }
 
 function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn[], shown: readonly number[], gutter: number, h: GridHandlers): Element {
-  const cells = shown.map((i) => {
+  const cells = Arr.map(shown, (i) => {
     const name = set.columns[i] ?? "";
     const sorted = look.sort?.column === name;
     const c = cols[i] ?? { name, num: false, ch: 4 };
@@ -188,7 +188,7 @@ function editCell(t: Theme, look: GridLook, r: number, i: number, c: GridColumn,
 function cutTip(v: Cell, w: number): string | null {
   if (v === null || (v.length * CH + PAD <= w && !/[\r\n\t]/.test(v))) return null;
 
-  return v.length > 600 ? `${v.slice(0, 600)}…` : v;
+  return v.length > 600 ? `${Str.slice(0, 600)(v)}…` : v;
 }
 
 function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn[], shown: readonly number[], gutter: number, r: number, at: GridAt, range: Range | null, h: GridHandlers): Element {
@@ -197,7 +197,7 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
   const o = look.overlay;
   const ed = o?.editing?.row === r ? o.editing : null;
 
-  const cells = shown.map((i) => {
+  const cells = Arr.map(shown, (i) => {
     const c = cols[i] ?? { name: "", num: false, ch: 4 };
 
     if (ed?.col === i) return editCell(t, look, r, i, c, ed);
@@ -311,15 +311,15 @@ export function scrollGrid(at: GridAt, set: ResultSet, cols: readonly GridColumn
 export const cellAt = (set: ResultSet | null, at: GridAt): Cell | undefined => set?.rows[at.row]?.[at.col];
 
 /** A row as tab-separated text (copying a row). */
-export const rowText = (set: ResultSet, r: number): string => (set.rows[r] ?? []).map((v) => (v === null ? "NULL" : v)).join("\t");
+export const rowText = (set: ResultSet, r: number): string => Arr.join(Arr.map((set.rows[r] ?? []), (v) => (v === null ? "NULL" : v)), "\t");
 
 /** A cell's whole value for reading: JSON pretty-printed when it is JSON. */
 export function prettyValue(v: Cell): string {
   if (v === null) return "NULL";
 
-  const s = v.trim();
+  const s = Str.trim(v);
 
-  if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
+  if ((Str.startsWith("{")(s) && Str.endsWith("}")(s)) || (Str.startsWith("[")(s) && Str.endsWith("]")(s))) {
     try {
       return JSON.stringify(JSON.parse(s), null, 2);
     } catch {

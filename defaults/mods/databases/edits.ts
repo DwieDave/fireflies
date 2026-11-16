@@ -6,7 +6,7 @@
 // and which cells (not a blob, not the rowid, one line). Plain functions: no
 // app calls (scripts/databases-edit.test.ts).
 
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { Browse, ColumnInfo, TableRef } from "./catalog.ts";
@@ -164,10 +164,10 @@ export function editability(f: GridFacts): Editability {
 
   if (f.columns === null) return { why: "reading its structure… a moment" };
 
-  const keyCols = f.columns.filter((c) => c.pk).map((c) => c.name);
+  const keyCols = Arr.map(Arr.filter(f.columns, (c) => c.pk), (c) => c.name);
 
   if (keyCols.length !== 0) {
-    const missing = keyCols.find((k) => f.set?.columns.includes(k) !== true);
+    const missing = Option.getOrUndefined(Arr.findFirst(keyCols, (k) => f.set?.columns.includes(k) !== true));
 
     return missing !== undefined && Str.isNonEmpty(missing) ? { why: `its key ${missing} isn't in the rows` } : { keyCols };
   }
@@ -195,4 +195,4 @@ export function cellRefusal(e: Editability, columns: readonly ColumnInfo[] | nul
 /** Whether a table without a primary key is read with its rowid (SQLite and a libSQL file;
  *  a table WITHOUT ROWID always has a primary key). */
 export const readsRowid = (kind: Kind, columns: readonly ColumnInfo[], type: "table" | "view"): boolean =>
-  (kind === "sqlite" || kind === "libsql") && type === "table" && columns.length > 0 && !columns.some((c) => c.pk || /^(rowid|oid|_rowid_)$/i.test(c.name));
+  (kind === "sqlite" || kind === "libsql") && type === "table" && columns.length > 0 && !Arr.some(columns, (c) => c.pk || /^(rowid|oid|_rowid_)$/i.test(c.name));

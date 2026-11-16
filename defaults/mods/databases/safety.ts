@@ -5,7 +5,7 @@
 // twice, the second time by typing the object's name). Read with comments and
 // literals blanked (split.ts), so a word inside a string never counts.
 
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import { blankLiterals } from "./split.ts";
 
@@ -34,7 +34,7 @@ const READ_PRAGMAS = new Set([
 
 /** The words of blanked text: names and keywords lowercased, other characters one by one. */
 function words(blank: string): string[] {
-  return blank.toLowerCase().match(/[a-z_][a-z0-9_$]*|[^\s]/g) ?? [];
+  return Str.toLowerCase(blank).match(/[a-z_][a-z0-9_$]*|[^\s]/g) ?? [];
 }
 
 /** A name as written at `at` in the raw text (quotes taken off, the last dotted part). */
@@ -46,10 +46,10 @@ function nameAt(raw: string, blank: string, word: number): string | null {
     if (n++ !== word) continue;
 
     // The name runs over names, dots and quoted parts in the raw text.
-    const rest = raw.slice(m.index).match(/^(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+)(?:\.(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+))*/);
+    const rest = Str.slice(m.index)(raw).match(/^(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+)(?:\.(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+))*/);
     const last = rest?.[0].split(".").at(-1) ?? null;
 
-    return last !== null && Str.isNonEmpty(last) ? last.replace(/^["`[]|["`\]]$/g, "").replace(/""/g, '"') : null;
+    return last !== null && Str.isNonEmpty(last) ? Str.replace(/""/g, '"')(Str.replace(/^["`[]|["`\]]$/g, "")(last)) : null;
   }
 
   return null;
@@ -76,7 +76,7 @@ export function classify(sql: string, kind: Kind): Verdict {
 
     if (analyze) {
       const at = ws[1] === "(" ? ws.indexOf(")") + 1 : 2;
-      const inner = classify(sql.slice(offsetOfWord(blank, at)), kind);
+      const inner = classify(Str.slice(offsetOfWord(blank, at))(sql), kind);
 
       return inner.risk === "read" ? { risk: "read", verb: "explain analyze", target: null } : inner;
     }
@@ -89,7 +89,7 @@ export function classify(sql: string, kind: Kind): Verdict {
   if (READS.has(first)) return { risk: "read", verb: first, target: null };
 
   if (first === "with") {
-    const writes = ws.find((w) => WRITES_IN_WITH.has(w));
+    const writes = Option.getOrUndefined(Arr.findFirst(ws, (w) => WRITES_IN_WITH.has(w)));
 
     return writes !== undefined && Str.isNonEmpty(writes) ? { risk: "write", verb: `with … ${writes}`, target: null } : { risk: "read", verb: "with … select", target: null };
   }
@@ -147,12 +147,14 @@ function writeVerdict(raw: string, blank: string, ws: readonly string[]): Verdic
     return { risk: "destructive", verb: `alter ${ws[1] ?? ""} … drop`, target: nameAt(raw, blank, skip(ws, 2, ["if", "exists", "only"])) };
   }
 
-  return { risk: "write", verb: [first, ws[1] === "into" || ws[1] === "table" || ws[1] === "index" || ws[1] === "view" ? ws[1] : ""].filter(Boolean).join(" "), target: null };
+  return { risk: "write", verb: Arr.join(Arr.filter([first, ws[1] === "into" || ws[1] === "table" || ws[1] === "index" || ws[1] === "view" ? ws[1] : ""], Str.isNonEmpty), " "), target: null };
 }
 
 /** The worst of several statements' verdicts (a run of all of them asks once, for this one). */
+const NOTHING: Verdict = { risk: "read", verb: "", target: null };
+
 export function worst(list: readonly Verdict[]): Verdict {
-  return list.reduce<Verdict>((a, b) => (RANK[b.risk] > RANK[a.risk] ? b : a), { risk: "read", verb: "", target: null });
+  return Arr.reduce(list, NOTHING, (a: Verdict, b) => (RANK[b.risk] > RANK[a.risk] ? b : a));
 }
 
 /** Whether a verdict may run on a read-only connection. */

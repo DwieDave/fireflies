@@ -9,7 +9,7 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { EditorState, InputState } from "gpui-base";
 import { settings, theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import type { Statement } from "./split.ts";
 import { splitStatements, statementAt } from "./split.ts";
@@ -50,10 +50,10 @@ export function offsetOf(text: string, p: Pos): number {
 
 /** An offset as a 0-based place. */
 export function posOf(text: string, offset: number): Pos {
-  const before = text.slice(0, offset);
+  const before = Str.slice(0, offset)(text);
   const nl = before.lastIndexOf("\n");
 
-  return { line: before.split("\n").length - 1, col: offset - nl - 1 };
+  return { line: Str.split(before, "\n").length - 1, col: offset - nl - 1 };
 }
 
 let ids = 0;
@@ -107,11 +107,11 @@ export function pickStatements(tab: QueryTab, kind: Conn["kind"], all: boolean):
   const text = tab.editor.value();
   const sel = tab.editor.selection();
 
-  if (Str.isNonEmpty(sel.text.trim())) {
+  if (Str.isNonEmpty(Str.trim(sel.text))) {
     const base = offsetOf(text, sel.start);
     const lineBase = sel.start.line;
 
-    return splitStatements(sel.text, kind).map((s) => ({ ...s, start: s.start + base, end: s.end + base, line: s.line + lineBase }));
+    return Arr.map(splitStatements(sel.text, kind), (s) => ({ ...s, start: s.start + base, end: s.end + base, line: s.line + lineBase }));
   }
 
   const list = splitStatements(text, kind);
@@ -130,7 +130,7 @@ function askText(c: Conn, v: Verdict, count: number): string {
 
   const said = v.risk === "destructive" ? `${what}${more} on ${c.name}? It can't be undone.` : `Run ${what}${more} on ${c.name}?`;
 
-  return said.charAt(0).toUpperCase() + said.slice(1);
+  return Str.toUpperCase(said.charAt(0)) + Str.slice(1)(said);
 }
 
 /** Runs the tab's statements, after the asks. */
@@ -153,10 +153,10 @@ export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): v
     return;
   }
 
-  const verdicts = list.map((s) => classify(s.text, c.kind));
+  const verdicts = Arr.map(list, (s) => classify(s.text, c.kind));
   const w = worst(verdicts);
 
-  if (c.readonly && !verdicts.every(allowedReadOnly)) {
+  if (c.readonly && !Arr.every(verdicts, allowedReadOnly)) {
     v.say(`${c.name} is read only: ${w.verb} is refused here (e on the connection to change that)`, "failed");
 
     return;
@@ -185,7 +185,7 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   tab.editor.set_diagnostics([]);
   cx.notify();
 
-  const o = await runOn(v, c, list.map((s, i) => ({ text: s.text, risk: verdicts[i]?.risk ?? "write" })), (nonce) => {
+  const o = await runOn(v, c, Arr.map(list, (s, i) => ({ text: s.text, risk: verdicts[i]?.risk ?? "write" })), (nonce) => {
     tab.running = { nonce, at: tab.running?.at ?? Date.now() };
   });
 
@@ -195,16 +195,16 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   tab.at = gridStart();
 
   // The last statement that returned rows, else the last one.
-  const withRows = o.results.reduce((last, r, i) => (r.set !== null && r.set.columns.length > 0 ? i : last), -1);
+  const withRows = Arr.reduce(o.results, -1, (last, r, i) => (r.set !== null && r.set.columns.length > 0 ? i : last));
 
   tab.shown = withRows >= 0 ? withRows : Math.max(0, o.results.length - 1);
   tab.inResults = false;
   placeError(tab, list, o);
   record(v, c, list, verdicts, o);
-  tab.verdicts = verdicts.map((x) => x.risk);
+  tab.verdicts = Arr.map(verdicts, (x) => x.risk);
 
   // A statement that changed the schema: read the tables again.
-  if (verdicts.some((x) => x.risk !== "read" && x.risk !== "session") && o.error === null) v.refreshCatalog(cx);
+  if (Arr.some(verdicts, (x) => x.risk !== "read" && x.risk !== "session") && o.error === null) v.refreshCatalog(cx);
 
   cx.notify();
 }
@@ -213,7 +213,7 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
 function withSuggestion(v: DbView, o: Ran): Ran {
   const e = o.error;
   const name = e !== null && (e.hint === null || Str.isEmpty(e.hint)) ? namedIn(e.message) : null;
-  const near = name !== null && Str.isNonEmpty(name) ? closest(name, v.catalog.tables.map((t) => t.name)) : null;
+  const near = name !== null && Str.isNonEmpty(name) ? closest(name, Arr.map(v.catalog.tables, (t) => t.name)) : null;
 
   return e !== null && (near !== null && Str.isNonEmpty(near)) ? { ...o, error: { ...e, hint: `did you mean ${near}?` } } : o;
 }
@@ -235,8 +235,8 @@ function placeError(tab: QueryTab, list: readonly Statement[], o: Ran): void {
 
 /** The Log panel's lines and the history's entries for a run. */
 function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], o: Ran): void {
-  list.forEach((s, i) => {
-    const r = o.results.find((x) => x.index === i);
+  Arr.forEach(list, (s, i) => {
+    const r = Option.getOrUndefined(Arr.findFirst(o.results, (x) => x.index === i));
     const failed = o.error?.index === i;
 
     if (r === undefined && !failed) return;
@@ -256,7 +256,7 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     }
   });
 
-  if (o.error !== null && o.error.index === null) v.logLine({ sql: list.map((s) => s.text).join("; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name, run: o.run });
+  if (o.error !== null && o.error.index === null) v.logLine({ sql: Arr.join(Arr.map(list, (s) => s.text), "; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name, run: o.run });
 }
 
 /** Stops the tab's run. */

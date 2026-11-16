@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
 import type { TabMore } from "./kit.ts";
@@ -131,7 +131,7 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
       atPointer(v, () => rowMenu(v, row, cx), e);
     },
     scroll: (by, across, cx) => v.scrollGrid(by, across, cx),
-    target: (el, key) => dropTarget(t, el, v, key, key.startsWith("col:")),
+    target: (el, key) => dropTarget(t, el, v, key, Str.startsWith("col:")(key)),
   };
 }
 
@@ -209,12 +209,12 @@ function overlayOf(v: DbView, g: GridNow): GridOverlay {
 function headerTips(v: DbView, g: GridNow): string[] {
   const s = v.struct.data;
 
-  return g.set.columns.map((name) => {
+  return Arr.map(g.set.columns, (name) => {
     const c = s?.columns.find((x) => x.name === name);
 
     if (c === undefined) return name;
 
-    return [name, c.type, c.pk ? "primary key" : "", c.nullable ? "" : "not null", c.default !== null ? `default ${c.default}` : ""].filter(Boolean).join(" · ");
+    return Arr.join(Arr.filter([name, c.type, c.pk ? "primary key" : "", c.nullable ? "" : "not null", c.default !== null ? `default ${c.default}` : ""], Boolean), " · ");
   });
 }
 
@@ -243,7 +243,7 @@ function orderPart(t: Theme, v: DbView): Element | null {
 
   return h_flex().id("rows-order").relative().flex_none().gap(6).items_center().tooltip("the database sorts the rows: this is in the statement the window runs · s on a column, or click its header")
     .child(div().text_color(t.ansi5).child("order by"))
-    .child(div().text_color(t.foreground).child(orderSql(v.active?.kind ?? "sqlite", sort).replace(/^order by /, "")))
+    .child(div().text_color(t.foreground).child(Str.replace(/^order by /, "")(orderSql(v.active?.kind ?? "sqlite", sort))))
     .child(chip(t, "rows-order-clear", "✕", false, (cx) => setSort(v, null, cx)));
 }
 
@@ -323,7 +323,7 @@ function rowsBody(t: Theme, v: DbView, active: boolean): Element {
     : set.rows.length === 0 ? empty(t, Str.isNonEmpty(b.filter) ? "No row matches" : "No rows", Str.isNonEmpty(b.filter) ? `where ${b.filter}` : null, null)
     : grid(t, {
       id: "rows-grid", width: v.gridSize.width, height: v.gridSize.height, active, sort: b.sort,
-      types: types !== undefined ? g.shown.cols.map((c) => types[c] ?? "") : undefined, tips: headerTips(v, g), overlay: overlayOf(v, g),
+      types: types !== undefined ? Arr.map(g.shown.cols, (c) => types[c] ?? "") : undefined, tips: headerTips(v, g), overlay: overlayOf(v, g),
     }, g.set, g.cols, g.at, handlers(t, v, null));
 
   const changes = changesBar(t, v);
@@ -347,7 +347,7 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 
   const r = o.results[q.shown];
   const said = resultWords(r, (q.verdicts[r?.index ?? 0] ?? "read") !== "read");
-  const sets = o.results.length > 1 ? o.results.map((x, i) => h_flex().id(`result-${i}-tip`).flex_none().tooltip("statement's result · < > step through them").child(chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; }))) : [];
+  const sets = o.results.length > 1 ? Arr.map(o.results, (x, i) => h_flex().id(`result-${i}-tip`).flex_none().tooltip("statement's result · < > step through them").child(chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; }))) : [];
 
   const sort = q.sort;
 
@@ -418,7 +418,7 @@ export function moveQuery(v: DbView, from: number, to: RegExpExecArray | null): 
   if (q === undefined || to === null) return;
 
   const at = Math.max(0, Number(to[1]) - 1);
-  const list = v.queries.filter((x) => x !== q);
+  const list = Arr.filter(v.queries, (x) => x !== q);
 
   list.splice(Math.min(at, list.length), 0, q);
   v.queries = list;
@@ -430,7 +430,7 @@ export function moveQuery(v: DbView, from: number, to: RegExpExecArray | null): 
 export function mainPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "main";
   const q = v.shownQuery();
-  const tabs: (readonly [string, string])[] = [["0", "Rows"], ...v.queries.map((x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
+  const tabs: (readonly [string, string])[] = [["0", "Rows"], ...Arr.map(v.queries, (x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
 
   const pick = (key: string, cx: Context) => {
     if (key === "+") v.addQuery("", cx);

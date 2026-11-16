@@ -4,7 +4,7 @@
 // The token is a header of fetch: in no process's arguments. Values come back
 // typed (integer as text, float, text, blob as base64, null).
 
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, literal, nullable, object, oneOf, parseJson } from "./guard.ts";
 import type { Cell, Outcome, StatementResult } from "./parse-out.ts";
@@ -15,7 +15,7 @@ export type Fetch = (url: string, init: { method: string; headers: { readonly [n
 
 /** The HTTP base of a libsql:// or https:// URL. */
 export function httpBase(url: string): string {
-  return url.trim().replace(/^libsql:\/\//, "https://").replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://").replace(/\/+$/, "");
+  return Str.replace(/\/+$/, "")(Str.replace(/^ws:\/\//, "http://")(Str.replace(/^wss:\/\//, "https://")(Str.replace(/^libsql:\/\//, "https://")(Str.trim(url)))));
 }
 
 /** A statement for the pipeline: its text and the values bound to its `?`s, if any. */
@@ -28,11 +28,11 @@ export interface HranaStatement {
 const hranaValue = (b: BoundValue) => (b.type === "null" ? { type: "null" } : { type: b.type, value: b.value });
 
 /** A statement as Hrana writes it. */
-const stmt = (s: HranaStatement) => (s.args !== undefined ? { sql: s.sql, args: s.args.map(hranaValue) } : { sql: s.sql });
+const stmt = (s: HranaStatement) => (s.args !== undefined ? { sql: s.sql, args: Arr.map(s.args, hranaValue) } : { sql: s.sql });
 
 /** The pipeline's body: one batch of the statements, each after the one before went well, then close. */
 export function pipelineBody(statements: readonly HranaStatement[]): string {
-  const steps = statements.map((s, i) => (i === 0 ? { stmt: stmt(s) } : { stmt: stmt(s), condition: { type: "ok", step: i - 1 } }));
+  const steps = Arr.map(statements, (s, i) => (i === 0 ? { stmt: stmt(s) } : { stmt: stmt(s), condition: { type: "ok", step: i - 1 } }));
 
   return JSON.stringify({ requests: [{ type: "batch", batch: { steps } }, { type: "close" }] });
 }
@@ -60,7 +60,7 @@ type Value = Guarded<typeof isValue>;
 function cell(v: Value): Cell {
   switch (v.type) {
     case "null": return null;
-    case "blob": return `x'${[...atob(v.base64 ?? "")].map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("")}'`;
+    case "blob": return `x'${Arr.join(Arr.map([...atob(v.base64 ?? "")], (c) => Str.padStart(2, "0")(c.charCodeAt(0).toString(16))), "")}'`;
     default: return String(v.value ?? "");
   }
 }
@@ -90,16 +90,16 @@ export function parseHrana(status: number, text: string, count: number): Outcome
 
     if (r === null || r === undefined) continue;
 
-    const columns = r.cols.map((c, n) => c.name ?? `column ${n + 1}`);
-    const types = r.cols.map((c) => c.decltype ?? "");
+    const columns = Arr.map(r.cols, (c, n) => c.name ?? `column ${n + 1}`);
+    const types = Arr.map(r.cols, (c) => c.decltype ?? "");
 
-    results.push({ index: i, set: columns.length !== 0 ? { columns, types, rows: r.rows.map((row) => row.map(cell)) } : null, affected: r.affected_row_count ?? null, tag: null });
+    results.push({ index: i, set: columns.length !== 0 ? { columns, types, rows: Arr.map(r.rows, (row) => Arr.map(row, cell)) } : null, affected: r.affected_row_count ?? null, tag: null });
   }
 
-  const failed = errors.findIndex((e) => e !== null);
+  const failed = Option.getOrElse(Arr.findFirstIndex(errors, (e) => e !== null), () => -1);
   const e = failed >= 0 ? errors[failed] : null;
 
-  return { results, error: e !== null && e !== undefined ? { index: failed, message: e.message.replace(/^SQLite error: /, ""), line: null, col: null, hint: null } : null, cut: false };
+  return { results, error: e !== null && e !== undefined ? { index: failed, message: Str.replace(/^SQLite error: /, "")(e.message), line: null, col: null, hint: null } : null, cut: false };
 }
 
 /** Runs the statements on a remote libSQL database. */

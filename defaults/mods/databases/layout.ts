@@ -5,6 +5,7 @@
 // kept in shared state, one set for the window and one for panes.
 
 import { shared, setShared } from "herdr";
+import { Array as Arr } from "effect";
 import { isNumber, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import type { Divider, Edge, Sizes } from "@fireflies/dividers";
@@ -114,10 +115,10 @@ export function edgesOf(place: Place, room: Room, size: (d: Divider) => number):
     case "conns": return [{ divider: w.left, sign: 1 }, { divider: w.conns, sign: 1 }];
     case "tables": return [{ divider: w.left, sign: 1 }, { divider: w.conns, sign: -1 }, { divider: w.struct, sign: -1 }];
     case "structure": return [{ divider: w.left, sign: 1 }, { divider: w.struct, sign: 1 }];
-    case "log": return [{ divider: w.left, sign: -1 }, ...log.map((d): Edge => ({ divider: d, sign: 1 }))];
+    case "log": return [{ divider: w.left, sign: -1 }, ...Arr.map(log, (d): Edge => ({ divider: d, sign: 1 }))];
     case "rows":
     case "results":
-    case "editor": return [{ divider: w.left, sign: -1 }, ...log.map((d): Edge => ({ divider: d, sign: -1 })), ...split];
+    case "editor": return [{ divider: w.left, sign: -1 }, ...Arr.map(log, (d): Edge => ({ divider: d, sign: -1 })), ...split];
     case "window": return [];
   }
 }

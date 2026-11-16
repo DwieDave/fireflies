@@ -5,7 +5,7 @@
 
 import type { Context } from "gpui-kit";
 import { exec, writeTextFile, readTextFile, appHome } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn, Kind } from "./kinds.ts";
 import { onFile } from "./kinds.ts";
 import type { RunIo } from "./runner.ts";
@@ -109,9 +109,9 @@ export const needsPassword = (v: DbView, c: Conn): boolean => c.secret === "ask"
 /** A run's line for the Log: the program and its arguments (nothing secret: clients.ts builds
  *  them), where the program came from. */
 export function runLine(v: DbView, kind: Kind, found: ClientFound, args: readonly string[]): string {
-  if ("missing" in found) return `${PROGRAMS[kind].join(" / ")}: ${clientFrom(v, found)}`;
+  if ("missing" in found) return `${Arr.join(PROGRAMS[kind], " / ")}: ${clientFrom(v, found)}`;
 
-  return `${found.path} ${args.join(" ")} · from ${clientFrom(v, found)}`;
+  return `${found.path} ${Arr.join(args, " ")} · from ${clientFrom(v, found)}`;
 }
 
 /** A Log line's words while its run goes on. */
@@ -124,7 +124,7 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 
   if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) {
     const token = c.secret === "ask" ? v.secrets.get(c.id) ?? null : c.secret === "keychain" ? await readSecret(IO, c.id) : null;
-    const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args !== undefined ? { sql: s.text, args: s.args } : { sql: s.text })));
+    const o = await runHrana(FETCH, c.url, token, Arr.map(statements, (s) => (s.args !== undefined ? { sql: s.text, args: s.args } : { sql: s.text })));
 
     // An error of no statement is the request's own (the server not reached, the token refused).
     heard(v, c, (o.error && o.error.index === null) !== true, o.error?.message ?? null);
@@ -159,8 +159,8 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
     account: c.secret === "keychain" ? c.id : null, secret, readonly: c.readonly, limit,
   }, started);
 
-  const texts = statements.map((s) => s.text);
-  const writes = statements.map((s) => s.risk !== "read");
+  const texts = Arr.map(statements, (s) => s.text);
+  const writes = Arr.map(statements, (s) => s.risk !== "read");
 
   const o = onFile(c) ? parseSqlite(r.stdout, r.stderr, r.code, texts, r.cut, writes)
     : c.kind === "postgres" ? parsePsql(r.stdout, r.stderr, r.code, writes, r.cut)
@@ -177,7 +177,7 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
     // Interrupted or killed (the window's stop): said so, not as the shell's words for it.
     const done: LogLine = { sql: pending.sql, ok: error === null, ms: r.ms, said: stopped ? "stopped" : error !== null ? error.message : `exit ${r.code}`, conn: c.name, run: line };
 
-    v.log = v.log.map((l) => (l === pending ? done : l));
+    v.log = Arr.map(v.log, (l) => (l === pending ? done : l));
   }
 
   return { ...o, error, ms: r.ms, noSecret: r.code === NO_KEYCHAIN_ITEM, run: line };
@@ -257,13 +257,13 @@ async function countTables(v: DbView, c: Conn, cx: Context): Promise<void> {
 
   if (v.active !== c || !("value" in e)) return;
 
-  const counted = v.catalog.tables.filter((t) => t.type === "table");
+  const counted = Arr.filter(v.catalog.tables, (t) => t.type === "table");
 
   for (const r of e.value.results) {
     const t = counted[r.index];
     const n = Number(r.set?.rows[0]?.[0]);
 
-    if (t !== undefined && Number.isFinite(n)) v.catalog.tables = v.catalog.tables.map((x) => (x === t ? { ...x, rows: n } : x));
+    if (t !== undefined && Number.isFinite(n)) v.catalog.tables = Arr.map(v.catalog.tables, (x) => (x === t ? { ...x, rows: n } : x));
   }
 
   cx.notify();
@@ -302,7 +302,7 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
     // A count read now is better than the server's estimate.
     const count = s.data?.count ?? null;
 
-    if (count !== null) v.catalog.tables = v.catalog.tables.map((x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: count } : x));
+    if (count !== null) v.catalog.tables = Arr.map(v.catalog.tables, (x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: count } : x));
 
     // A SQLite table without a primary key: its rows read again with their rowid, so they can be edited.
     const b = v.rows.browse;
@@ -337,7 +337,7 @@ export async function countRows(v: DbView, t: TableRef, cx: Context): Promise<vo
     if (!("value" in e)) v.say(endWords(e, `counting ${t.name}'s rows`) ?? "", "failed");
     else if (e.value.error !== null) v.say(`${t.name}: ${e.value.error.message}`, "failed");
     else if (Number.isFinite(n)) {
-      v.catalog.tables = v.catalog.tables.map((x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: n } : x));
+      v.catalog.tables = Arr.map(v.catalog.tables, (x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: n } : x));
       v.say(`${t.name}: ${n} rows, counted`, "done");
     }
   } catch (error) {
@@ -392,15 +392,15 @@ export async function loadRows(v: DbView, cx: Context, keepCursor = false): Prom
 
     rows.error = o.error !== null ? o.error.message : null;
 
-    const set = o.results.find((r) => r.index === 0)?.set ?? null;
-    const columns = v.struct.data !== null && v.struct.table?.name === b.table.name ? v.struct.data.columns.map((x) => x.name) : [];
+    const set = Option.getOrUndefined(Arr.findFirst(o.results, (r) => r.index === 0))?.set ?? null;
+    const columns = v.struct.data !== null && v.struct.table?.name === b.table.name ? Arr.map(v.struct.data.columns, (x) => x.name) : [];
 
     // An empty page prints no header: the structure's columns stand in.
     rows.set = o.error !== null ? null : set ?? { columns, rows: [] };
 
-    const counted = o.results.find((r) => r.index === 1)?.set?.rows[0]?.[0];
+    const counted = Option.getOrUndefined(Arr.findFirst(o.results, (r) => r.index === 1))?.set?.rows[0]?.[0];
 
-    rows.total = counted !== undefined && counted !== null ? Number(counted) : Str.isNonEmpty(b.filter.trim()) ? null : v.tableRows(b.table);
+    rows.total = counted !== undefined && counted !== null ? Number(counted) : Str.isNonEmpty(Str.trim(b.filter)) ? null : v.tableRows(b.table);
 
     if (!keepCursor) rows.at = gridStart();
   } catch (error) {

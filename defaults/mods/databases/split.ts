@@ -5,7 +5,7 @@
 // lands in the editor. Also the text with comments and literals blanked, which
 // safety.ts reads.
 
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 
 /** A statement: its text (trimmed, without its closing semicolon), where it starts and ends in
@@ -69,7 +69,7 @@ function step(sc: Scan): boolean {
 
       return false;
     case "dollar":
-      if (s.startsWith(sc.tag, sc.i)) {
+      if (Str.startsWith(sc.tag, sc.i)(s)) {
         sc.i += sc.tag.length;
         sc.inside = "code";
       } else sc.i += 1;
@@ -101,7 +101,7 @@ function codeStep(sc: Scan, c: string, next: string): boolean {
   if (c === "/" && next === "*") return opens("block", 2);
 
   if (c === "$" && sc.kind === "postgres") {
-    const m = DOLLAR.exec(sc.s.slice(sc.i, sc.i + 64));
+    const m = DOLLAR.exec(Str.slice(sc.i, sc.i + 64)(sc.s));
 
     if (m !== null) {
       sc.tag = m[0];
@@ -125,7 +125,7 @@ export function blankLiterals(text: string, kind: Kind): string {
     const from = sc.i;
     const was = sc.inside;
     const code = step(sc);
-    const piece = text.slice(from, sc.i);
+    const piece = Str.slice(from, sc.i)(text);
     const name = was === "double" || was === "back" || ((sc.inside === "double" || sc.inside === "back") && was === "code");
 
     out += code ? piece : piece.replace(/[^\n]/g, name ? "x" : " ");
@@ -139,14 +139,14 @@ const TRIGGER_END = /\bend\s*$/i;
 
 /** A piece's statement (trimmed, null when it holds only comments and spaces). */
 function statementOf(text: string, kind: Kind, from: number, to: number): Statement | null {
-  const piece = text.slice(from, to);
-  const lead = piece.length - piece.trimStart().length;
-  const body = piece.trim();
+  const piece = Str.slice(from, to)(text);
+  const lead = piece.length - Str.trimStart(piece).length;
+  const body = Str.trim(piece);
 
-  if (Str.isEmpty(blankLiterals(body, kind).trim())) return null;
+  if (Str.isEmpty(Str.trim(blankLiterals(body, kind)))) return null;
 
   const start = from + lead;
-  const line = text.slice(0, start).split("\n").length;
+  const line = Str.split(Str.slice(0, start)(text), "\n").length;
 
   return { text: body, start, end: start + body.length, line };
 }
@@ -164,7 +164,7 @@ export function splitStatements(text: string, kind: Kind): Statement[] {
     if (!code || text[at] !== ";") continue;
 
     // A trigger's body holds statements of its own: it ends at END;.
-    const sofar = blankLiterals(text.slice(from, at), kind);
+    const sofar = blankLiterals(Str.slice(from, at)(text), kind);
 
     if (TRIGGER.test(sofar) && !TRIGGER_END.test(sofar)) continue;
 
@@ -185,14 +185,14 @@ export function splitStatements(text: string, kind: Kind): Statement[] {
 /** The statement the caret is in: the one that holds it, else the one it follows on the same
  *  line (just after its semicolon), else the next, else the last. */
 export function statementAt(list: readonly Statement[], text: string, caret: number): Statement | null {
-  const holding = list.find((s) => caret >= s.start && caret <= s.end + 1);
+  const holding = Option.getOrUndefined(Arr.findFirst(list, (s) => caret >= s.start && caret <= s.end + 1));
 
   if (holding !== undefined) return holding;
 
   const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
-  const before = [...list].reverse().find((s) => s.end <= caret && s.end >= lineStart);
+  const before = Option.getOrUndefined(Arr.findFirst([...list].reverse(), (s) => s.end <= caret && s.end >= lineStart));
 
-  return before ?? list.find((s) => s.start >= caret) ?? list.at(-1) ?? null;
+  return before ?? Option.getOrUndefined(Arr.findFirst(list, (s) => s.start >= caret)) ?? list.at(-1) ?? null;
 }
 
 /** A place in a text: its line and column, both 1-based. */
@@ -203,8 +203,8 @@ export interface Place {
 
 /** A 0-based offset in `text` as a 1-based line and column. */
 export function lineCol(text: string, offset: number): Place {
-  const before = text.slice(0, Math.max(0, offset));
+  const before = Str.slice(0, Math.max(0, offset))(text);
   const nl = before.lastIndexOf("\n");
 
-  return { line: before.split("\n").length, col: offset - nl };
+  return { line: Str.split(before, "\n").length, col: offset - nl };
 }

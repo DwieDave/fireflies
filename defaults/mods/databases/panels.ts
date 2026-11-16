@@ -12,11 +12,11 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { ScrollHandle } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import { KIND_NAME, onFile, where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
-import type { PanelId, StructTab, TablesTab } from "./state.ts";
+import type { LogLine, PanelId, StructTab, TablesTab } from "./state.ts";
 import { PANEL_KEY, tablesTabsOf } from "./state.ts";
 import { ART, band, chip, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "./kit.ts";
 import { connState, stateTip, stateWord, whereOf } from "./connstate.ts";
@@ -75,7 +75,7 @@ function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boole
       atPointer(v, () => h.menu(cx), e);
       cx.notify();
     })
-    .children(parts.map((p) => p.relative()));
+    .children(Arr.map(parts, (p) => p.relative()));
 
   return h.target !== undefined && Str.isNonEmpty(h.target) ? dropTarget(t, row, v, h.target) : row;
 }
@@ -93,8 +93,7 @@ function secretWords(c: Conn): string {
 
 /** A connection's hover: where it is, what it is, where it came from and its password. */
 function connTip(c: Conn): string {
-  return [addressOf(c), KIND_NAME[c.kind], c.readonly ? "read only" : "", c.from !== undefined && Str.isNonEmpty(c.from) ? `sent by ${c.from}` : c.origin === "found" ? "found in the folder" : "", secretWords(c)]
-    .filter(Boolean).join(" · ");
+  return Arr.join(Arr.filter([addressOf(c), KIND_NAME[c.kind], c.readonly ? "read only" : "", c.from !== undefined && Str.isNonEmpty(c.from) ? `sent by ${c.from}` : c.origin === "found" ? "found in the folder" : "", secretWords(c)], Boolean), " · ");
 }
 
 /** A list in a scrolled column, the cursor's row kept in view once per move. */
@@ -115,7 +114,7 @@ export function count(n: number | null): string {
 
   if (n >= 1e5) return `${Math.round(n / 1000)} k`;
 
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return Str.replace(/\B(?=(\d{3})+(?!\d))/g, " ")(String(n));
 }
 
 const text = (_t: Theme, s: string, color: Color) => div().truncate().text_color(color).child(s);
@@ -205,7 +204,7 @@ function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Elem
     press: saved ? (e) => pressAt(v, e, {
       kind: "conn", label: c.name, takes: ["conn:"],
       drop: (to, cx) => {
-        const at = to !== null && Str.isNonEmpty(to) ? v.saved.findIndex((s) => `conn:${s.id}` === to) : -1;
+        const at = to !== null && Str.isNonEmpty(to) ? Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => `conn:${s.id}` === to), () => -1) : -1;
 
         if (at >= 0) placeConn(v, c, at, cx);
       },
@@ -219,9 +218,9 @@ export function connsPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "conns";
   const all = connList(v);
   const rows: Element[] = [];
-  const folder = v.folder !== null && Str.isNonEmpty(v.folder) ? v.folder.replace(home(), "~") : "";
+  const folder = v.folder !== null && Str.isNonEmpty(v.folder) ? Str.replace(home(), "~")(v.folder) : "";
 
-  all.forEach((c, i) => {
+  Arr.forEach(all, (c, i) => {
     if (c.origin === "saved" && i === 0) rows.push(groupRule(t, "g-pinned", "pinned · every window"));
 
     if (c.origin === "sent" && (i === 0 || all[i - 1]?.origin !== "sent")) rows.push(groupRule(t, "g-sent", "sent here"));
@@ -264,11 +263,11 @@ export function shownTables(v: DbView): TableRef[] {
   const find = v.tableFind?.value().trim().toLowerCase() ?? "";
   const type = v.tablesTab === "views" ? "view" : "table";
 
-  return v.catalog.tables.filter((x) => x.type === type && (v.schema === null || x.schema === v.schema) && (Str.isEmpty(find) || x.name.toLowerCase().includes(find)));
+  return Arr.filter(v.catalog.tables, (x) => x.type === type && (v.schema === null || x.schema === v.schema) && (Str.isEmpty(find) || Str.includes(find)(Str.toLowerCase(x.name))));
 }
 
 /** The schemas the tables are in. */
-export const schemasOf = (v: DbView): string[] => [...new Set(v.catalog.tables.flatMap((x) => (x.schema !== null && Str.isNonEmpty(x.schema) ? [x.schema] : [])))];
+export const schemasOf = (v: DbView): string[] => [...new Set(Arr.flatMap(v.catalog.tables, (x) => (x.schema !== null && Str.isNonEmpty(x.schema) ? [x.schema] : [])))];
 
 function tablesBody(t: Theme, v: DbView, active: boolean): Element {
   if (v.active === null) return empty(t, "Pick a connection", "in [1], and enter", null);
@@ -298,7 +297,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const kind = v.active.kind;
 
-  const rows = shownTables(v).map((x, i) => listRow(t, v, `table-${i}`, v.tableAt === i, active, [
+  const rows = Arr.map(shownTables(v), (x, i) => listRow(t, v, `table-${i}`, v.tableAt === i, active, [
     ...(many && (x.schema !== null && Str.isNonEmpty(x.schema)) ? [text(t, `${x.schema}.`, t.dim).flex_none()] : []),
     text(t, x.name, v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0), div().flex_1(),
     text(t, count(x.rows), t.dim).flex_none(),
@@ -327,7 +326,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 function schemasBody(t: Theme, v: DbView, active: boolean): Element {
   const names = ["every schema", ...schemasOf(v)];
 
-  const rows = names.map((s, i) => listRow(t, v, `schema-${i}`, v.tableAt === i, active, [
+  const rows = Arr.map(names, (s, i) => listRow(t, v, `schema-${i}`, v.tableAt === i, active, [
     text(t, s, (i === 0 ? v.schema === null : v.schema === s) ? t.ansi5 : t.muted).flex_1(),
   ], {
     pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
@@ -355,7 +354,7 @@ export function tablesCaption(v: DbView): TablesCaption {
 
   if (c === null) return { count: String(n), where: "" };
 
-  if (onFile(c) || (c.kind === "libsql" && c.url)) return { count: String(n), where: where(c, home()).split("/").at(-1) ?? "" };
+  if (onFile(c) || (c.kind === "libsql" && c.url)) return { count: String(n), where: Str.split(where(c, home()), "/").at(-1) ?? "" };
 
   const db = whereNow(c, v.catalog.here).database ?? "every database";
 
@@ -365,7 +364,7 @@ export function tablesCaption(v: DbView): TablesCaption {
 /** [2] Tables · Views · Schemas · Databases (by kind: state.ts tablesTabsOf). */
 export function tablesPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "tables";
-  const tabs = tablesTabsOf(v.active?.kind ?? "postgres").map((k) => [k, TAB_NAME[k]] as const);
+  const tabs = Arr.map(tablesTabsOf(v.active?.kind ?? "postgres"), (k) => [k, TAB_NAME[k]] as const);
 
   const caption = tablesCaption(v);
 
@@ -384,7 +383,7 @@ function emptyDbView(t: Theme, v: DbView, e: EmptyWords): Element {
     .child(div().text_center().text_color(t.muted).child(e.title))
     .child(div().text_center().max_w(460).text_color(t.dim).child(e.note))
     .when(e.others.length > 0, (el) => el.child(h_flex().flex_wrap().justify_center().gap(4).max_w(460)
-      .children(e.others.map((name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.muted, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
+      .children(Arr.map(e.others, (name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.muted, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
       .child(chip(t, "tables-empty-list", "the list · b", false, (cx) => showDatabases(v, cx)))));
 }
 
@@ -422,7 +421,7 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
 
   if (names.length === 0) return empty(t, d?.busy === true || d === null ? "reading the server's databases…" : "No databases this connection may use", null, null);
 
-  const rows = names.map((name, i) => {
+  const rows = Arr.map(names, (name, i) => {
     const on = name === here;
     const size = name === null ? null : d?.list.find((x) => x.name === name)?.size ?? null;
 
@@ -463,8 +462,8 @@ export function structRows(v: DbView): StructRow[] {
   if (s === null) return [];
 
   if (v.structTab === "columns") {
-    return s.columns.map((c) => {
-      const fk = s.keys.find((k) => !k.incoming && k.fromColumns.split(", ").includes(c.name));
+    return Arr.map(s.columns, (c) => {
+      const fk = Option.getOrUndefined(Arr.findFirst(s.keys, (k) => !k.incoming && Str.split(k.fromColumns, ", ").includes(c.name)));
       const right = `${c.type}${c.default !== null ? ` = ${c.default}` : c.nullable ? " null" : ""}`;
 
       return { mark: c.pk ? "pk" : fk !== undefined ? "fk" : "", markColor: c.pk ? "pk" : fk !== undefined ? "fk" : "", name: c.name, note: fk !== undefined ? `→ ${fk.to}.${fk.toColumns}` : "", right, table: fk?.to ?? null, copy: c.name };
@@ -472,11 +471,11 @@ export function structRows(v: DbView): StructRow[] {
   }
 
   if (v.structTab === "indexes") {
-    return s.indexes.map((x) => ({ mark: x.kind === "primary" ? "pk" : x.kind === "unique" ? "u" : "", markColor: x.kind === "primary" ? "pk" : "", name: x.name, note: `(${x.columns})`, right: x.method, table: null, copy: x.name }));
+    return Arr.map(s.indexes, (x) => ({ mark: x.kind === "primary" ? "pk" : x.kind === "unique" ? "u" : "", markColor: x.kind === "primary" ? "pk" : "", name: x.name, note: `(${x.columns})`, right: x.method, table: null, copy: x.name }));
   }
 
   if (v.structTab === "keys") {
-    return s.keys.map((k) => (k.incoming
+    return Arr.map(s.keys, (k) => (k.incoming
       ? { mark: "←", markColor: "in", name: null, note: `${k.from}.${k.fromColumns}`, right: k.onDelete ?? "", table: k.from, copy: `${k.from}.${k.fromColumns}` }
       : { mark: "→", markColor: "fk", name: k.fromColumns, note: `→ ${k.to}.${k.toColumns}`, right: k.onDelete ?? "", table: k.to, copy: `${k.fromColumns} → ${k.to}.${k.toColumns}` }));
   }
@@ -503,7 +502,7 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
 
   const kind = v.active?.kind ?? "sqlite";
 
-  return list("struct-list", v.scrolls.structure, rows.map((r, i) => listRow(t, v, `struct-${i}`, v.structAt === i, active, [
+  return list("struct-list", v.scrolls.structure, Arr.map(rows, (r, i) => listRow(t, v, `struct-${i}`, v.structAt === i, active, [
     text(t, r.mark, markColor[r.markColor]).w(16).flex_none(),
     h_flex().flex_shrink(1).min_w(0).gap(6).child(text(t, r.name ?? r.note, v.structAt === i && active ? t.foreground : t.muted)).when(r.name !== null && r.note !== "", (el) => el.child(text(t, r.note, t.dim))),
     div().flex_1(), text(t, r.right, t.ansi10).flex_shrink(1).min_w(0).max_w(200),
@@ -523,11 +522,11 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
 
 /** A JSON line's colours: keys cyan, strings yellow-green, numbers yellow. */
 function jsonLine(t: Theme, line: string, i: number): Element {
-  const parts = line.split(/("(?:[^"\\]|\\.)*"\s*:|"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|\btrue\b|\bfalse\b|\bnull\b)/);
+  const parts = Str.split(line, /("(?:[^"\\]|\\.)*"\s*:|"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|\btrue\b|\bfalse\b|\bnull\b)/);
 
-  return h_flex().id(`value-${i}`).children(parts.filter((p) => p !== "").map((p) => div().flex_none().text_color(
-    p.endsWith(":") && p.startsWith('"') ? t.ansi6 : p.startsWith('"') ? t.ansi11 : /^-?\d/.test(p) ? t.ansi3 : /^(true|false|null)$/.test(p) ? t.ansi5 : t.foreground,
-  ).child(p.replace(/ /g, " "))));
+  return h_flex().id(`value-${i}`).children(Arr.map(Arr.filter(parts, (p) => p !== ""), (p) => div().flex_none().text_color(
+    Str.endsWith(":")(p) && Str.startsWith('"')(p) ? t.ansi6 : Str.startsWith('"')(p) ? t.ansi11 : /^-?\d/.test(p) ? t.ansi3 : /^(true|false|null)$/.test(p) ? t.ansi5 : t.foreground,
+  ).child(Str.replace(/ /g, " ")(p))));
 }
 
 /** The Value tab: the picked cell of the shown grid, whole (JSON pretty-printed). */
@@ -541,14 +540,14 @@ function valueBody(t: Theme, v: DbView): Element {
   // A staged change shows its new value, and what was read under the title.
   const change = g.place === "results" ? null : changeAt(liveEdits(v), g.raw, g.at.row, column);
   const cell = change !== null ? change.now : read;
-  const lines = prettyValue(cell).split("\n").slice(0, 400);
+  const lines = Str.split(prettyValue(cell), "\n").slice(0, 400);
 
   return v_flex().size_full().px(10).pt(2).gap(4)
     .child(h_flex().gap(8).text_size(10).text_color(t.muted).child(div().child(`${column} · row ${g.at.row + 1}`)).child(div().flex_1()).child(div().text_color(t.accent).child("y")).child(div().child("copy")))
     .when(change !== null, (el) => el.child(h_flex().gap(6).text_size(10).child(div().flex_none().text_color(t.ansi3).child("changed · was")).child(div().min_w(0).truncate().text_color(t.muted).child(change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : change?.was ?? ""))))
     .child(v_flex().id("value-text").relative().flex_1().min_h(0).p(8).overflow_y_scroll().bg(`${edge(t)}55`)
       .when(cell === null, (el) => el.text_color(t.dim))
-      .children(lines.map((l, i) => jsonLine(t, l, i))));
+      .children(Arr.map(lines, (l, i) => jsonLine(t, l, i))));
 }
 
 /** [3] Structure · Indexes · Keys · Value. */
@@ -567,11 +566,11 @@ export function structPanel(t: Theme, v: DbView): Element {
 export function logPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "log";
 
-  const rows = v.log.map((l, i) => listRow(t, v, `log-${i}`, v.logAt === i, active, [
+  const rows = Arr.map(v.log, (l, i) => listRow(t, v, `log-${i}`, v.logAt === i, active, [
     // A run still going (its line written as it started): a working pip, not a ✓.
     l.said === RUNNING ? pip(t.working, 6, true) : text(t, l.ok ? "✓" : "✕", l.ok ? t.done : t.blocked).flex_none(),
     // A read's label is short ("the tables"): kept whole beside its run's line.
-    text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(l.run !== undefined && Str.isNonEmpty(l.run) ? 0 : 1).min_w(0),
+    text(t, Str.replace(/\s+/g, " ")(l.sql), l.ok ? t.muted : t.foreground).flex_shrink(l.run !== undefined && Str.isNonEmpty(l.run) ? 0 : 1).min_w(0),
     ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(l.said.length < 24 ? 0 : 1).min_w(0)]),
     // The client run behind it: the program, its arguments, where it came from, its exit.
     ...(l.run !== undefined && Str.isNonEmpty(l.run) ? [text(t, l.run, t.muted).flex_shrink(3).min_w(0)] : []),
@@ -580,7 +579,7 @@ export function logPanel(t: Theme, v: DbView): Element {
     pick: () => { v.logAt = i; v.panel = "log"; v.focusSelf(); },
     open: (cx) => v.act("log", "open", cx),
     menu: (cx) => v.act("log", "menu", cx),
-    tip: [l.ok ? null : l.said, l.run ?? null].filter(Boolean).join("\n") || undefined,
+    tip: logTip(l),
   }));
 
   return panel(t, "p-log", titleTabs(t, "log", PANEL_KEY.log, [["l", "Log"]], "l", active, () => v.setPanel("log")), active,
@@ -590,3 +589,10 @@ export function logPanel(t: Theme, v: DbView): Element {
 
 /** The panel ids in the order the narrow tab row shows them. */
 export const NARROW_ORDER: readonly PanelId[] = ["conns", "tables", "structure", "main", "log"];
+
+/** A Log line's hover: what it said when it failed, and the client run behind it. */
+function logTip(l: LogLine): string | undefined {
+  const tip = Arr.join(Arr.filter([l.ok ? "" : l.said, l.run ?? ""], Str.isNonEmpty), "\n");
+
+  return Str.isEmpty(tip) ? undefined : tip;
+}

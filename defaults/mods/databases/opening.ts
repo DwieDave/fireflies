@@ -7,7 +7,7 @@
 
 import type { Context } from "gpui-kit";
 import { spaces, panes, focused, shared, setShared, run, openOverlay, closeOverlay } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { parseJson, readShared, writeShared } from "./guard.ts";
 import type { DbProps, Handover, KeptCopy } from "./state.ts";
 import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCopy } from "./state.ts";
@@ -27,10 +27,10 @@ export interface Place {
 
 /** The shown space's folder and machine (an attached folder first, then the focused pane's). */
 export function here(): Place {
-  const space = spaces().find((s) => s.active) ?? null;
+  const space = Option.getOrUndefined(Arr.findFirst(spaces(), (s) => s.active)) ?? null;
   const tab = space?.tabs.find((c) => c.active)?.id ?? null;
   const ps = panes();
-  const pane = ps.find((p) => p.focused && p.tab === tab) ?? ps.find((p) => p.tab === tab && p.terminal !== null && p.cwd);
+  const pane = Option.getOrUndefined(Arr.findFirst(ps, (p) => p.focused && p.tab === tab)) ?? Option.getOrUndefined(Arr.findFirst(ps, (p) => p.tab === tab && p.terminal !== null && p.cwd !== null && Str.isNonEmpty(p.cwd)));
   const cwd = pane !== undefined && pane.terminal !== null ? pane.cwd : null;
 
   return { folder: (space?.attached && space.folder) || cwd || focused()?.cwd || space?.folder || null, on: space?.machine ?? null };
@@ -42,7 +42,7 @@ export function windowSpec(props: DbProps): Parameters<typeof openOverlay>[0] {
 }
 
 /** A pane's slot: unique, names the copy. */
-export const newSlot = (): string => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+export const newSlot = (): string => Date.now().toString(36) + Str.slice(2, 6)(Math.random().toString(36));
 
 /** This copy's pane (a mod isn't told its pane: it finds itself by its slot). */
 export function ownPane(v: DbView): string | null {
@@ -50,7 +50,7 @@ export function ownPane(v: DbView): string | null {
 
   const slot = v.slot;
 
-  return panes().find((p) => p.mod === MOD && isKeptSlot(p.props) && p.props.slot === slot)?.pane ?? null;
+  return Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.mod === MOD && isKeptSlot(p.props) && p.props.slot === slot))?.pane ?? null;
 }
 
 /** A pane's props that carry a slot. */
@@ -139,7 +139,7 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
 function restore(v: DbView, kept: KeptCopy | null, cx: Context): void {
   cx = v.held(cx);
 
-  const c = kept?.conn !== undefined && Str.isNonEmpty(kept?.conn) ? connList(v).find((x) => x.id === kept.conn) : undefined;
+  const c = kept?.conn !== undefined && Str.isNonEmpty(kept?.conn) ? Option.getOrUndefined(Arr.findFirst(connList(v), (x) => x.id === kept.conn)) : undefined;
 
   if (kept === null || c === undefined) return;
 
@@ -157,7 +157,7 @@ function restore(v: DbView, kept: KeptCopy | null, cx: Context): void {
 
 /** A command from keys.json, `herdr-app do`, nocturne or another mod. */
 export function command(v: DbView, c: string, cx: Context): void {
-  const name = c.replace(/^databases\./, "");
+  const name = Str.replace(/^databases\./, "")(c);
 
   if (name === "focus") {
     v.focusShown();
@@ -178,7 +178,7 @@ export function command(v: DbView, c: string, cx: Context): void {
   const press = { "forward-start": "enter", "forward-anyway": "c", "forward-k8s": "k" }[name];
 
   if (press !== undefined && Str.isNonEmpty(press)) {
-    if (ask !== null) askActions(v, ask).find((x) => x.key === press)?.go(cx);
+    if (ask !== null) Option.getOrUndefined(Arr.findFirst(askActions(v, ask), (x) => x.key === press))?.go(cx);
 
     return;
   }
@@ -190,15 +190,15 @@ export function command(v: DbView, c: string, cx: Context): void {
     return;
   }
 
-  if (name.startsWith("connect:")) {
-    const args = parseJson(name.slice("connect:".length), isConnectArgs);
+  if (Str.startsWith("connect:")(name)) {
+    const args = parseJson(Str.slice("connect:".length)(name), isConnectArgs);
 
     if (args !== undefined) receive(v, args, cx);
     else v.say("databases.connect: its argument isn't a connection", "failed");
-  } else if (name.startsWith("sql:")) v.addQuery(name.slice("sql:".length), cx);
+  } else if (Str.startsWith("sql:")(name)) v.addQuery(Str.slice("sql:".length)(name), cx);
   else if (name === "run" || name === "run-all") runShown(v, name === "run-all", cx);
-  else if (name.startsWith("table:")) openNamed(v, name.slice("table:".length), cx);
-  else if (name.startsWith("set:")) setCell(v, name.slice("set:".length));
+  else if (Str.startsWith("table:")(name)) openNamed(v, Str.slice("table:".length)(name), cx);
+  else if (Str.startsWith("set:")(name)) setCell(v, Str.slice("set:".length)(name));
   else if (name === "to-pane" && (v.overlay !== null && Str.isNonEmpty(v.overlay))) handoverOut(v, cx);
   else if (name === "to-window" && (v.overlay === null || Str.isEmpty(v.overlay))) handoverOut(v, cx);
   // A command is no keystroke: in a query tab it reaches the results' actions, not the editor.
@@ -235,8 +235,8 @@ function runShown(v: DbView, all: boolean, cx: Context): void {
 
 /** Opens a table by name (databases.table:<name> or <schema>.<name>) on the connection. */
 function openNamed(v: DbView, name: string, cx: Context): void {
-  const [a, b] = name.includes(".") ? name.split(".", 2) : [null, name];
-  const t = v.catalog.tables.find((x) => x.name === b && (a === null || x.schema === a));
+  const [a, b] = Str.includes(".")(name) ? name.split(".", 2) : [null, name];
+  const t = Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === b && (a === null || x.schema === a)));
 
   if (t === undefined) {
     v.say(v.active !== null ? `no table ${name} on ${v.active.name}` : "connect first", "failed");
@@ -245,7 +245,7 @@ function openNamed(v: DbView, name: string, cx: Context): void {
   }
 
   v.panel = "tables";
-  v.tableAt = Math.max(0, v.catalog.tables.filter((x) => x.type === t.type).indexOf(t));
+  v.tableAt = Math.max(0, Arr.filter(v.catalog.tables, (x) => x.type === t.type).indexOf(t));
   openTable(v, t, cx);
 }
 

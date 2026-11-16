@@ -157,9 +157,9 @@ export async function cancel(io: RunIo, dir: string, n: string): Promise<void> {
 /** The window's private folder: a new 0700 folder in the temp folder (mktemp -d), or null. */
 export async function privateDir(io: RunIo): Promise<string | null> {
   const r = await io.exec("sh", ["-c", 'umask 077; mktemp -d "${TMPDIR:-/tmp}/fireflies-db.XXXXXX"', "ff-dir"]).catch(() => null);
-  const dir = r?.code === 0 ? r.stdout.trim() : "";
+  const dir = r?.code === 0 ? Str.trim(r.stdout) : "";
 
-  return dir.startsWith("/") ? dir : null;
+  return Str.startsWith("/")(dir) ? dir : null;
 }
 
 /** Removes the private folder and anything a run left in it. */

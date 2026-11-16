@@ -11,7 +11,7 @@ import { pickFolder, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { TableRef } from "./catalog.ts";
 import { browseSql, qualified } from "./catalog.ts";
 import type { ResultSet } from "./parse-out.ts";
@@ -115,7 +115,7 @@ export class ExportForm {
 
     if (id === "format") {
       this.format = turn(FORMATS, this.format);
-      this.name.set_value(this.name.value().replace(/\.[a-z]+$/, `.${this.format}`));
+      this.name.set_value(Str.replace(/\.[a-z]+$/, `.${this.format}`)(this.name.value()));
     } else if (id === "to") this.toFile = !this.toFile;
     else if (id === "which") this.which = turn(this.whichList(), this.which);
   }
@@ -205,7 +205,7 @@ export class ExportForm {
       return null;
     }
 
-    const dest = `${folder.replace(/\/$/, "")}/${this.name.value().trim() || exportName("export", this.format)}`;
+    const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.trim(this.name.value()) || exportName("export", this.format)}`;
     const failed = await writeOut(IO, dir, dest, text);
 
     this.error = failed;
@@ -229,8 +229,8 @@ export class ExportForm {
       .child(v_flex().id("db-export-box").relative().w(Math.min(520, this.v.size.width - 32)).bg(t.background).border(1).border_color(t.accent).on_mouse_down("left", stop)
         .child(h_flex().h(30).px(14).items_center().text_color(t.foreground).child(title))
         .child(v_flex().px(14).pb(12).gap(10)
-          .when(this.whichList().length > 1, (el) => el.child(row("which", "what", this.whichList().map((w) => pickChip(`exp-w-${w}`, WHICH_NAME[w], this.which === w, () => { this.which = w; })))))
-          .child(row("format", "format", FORMATS.map((f) => pickChip(`exp-f-${f}`, FORMAT_NAME[f], this.format === f, () => { this.format = f; }))))
+          .when(this.whichList().length > 1, (el) => el.child(row("which", "what", Arr.map(this.whichList(), (w) => pickChip(`exp-w-${w}`, WHICH_NAME[w], this.which === w, () => { this.which = w; })))))
+          .child(row("format", "format", Arr.map(FORMATS, (f) => pickChip(`exp-f-${f}`, FORMAT_NAME[f], this.format === f, () => { this.format = f; }))))
           .child(row("to", "to", [pickChip("exp-to-clip", "the clipboard", !this.toFile, () => { this.toFile = false; }), pickChip("exp-to-file", "a file…", this.toFile, () => { this.toFile = true; })]))
           .when(this.toFile, (el) => el.child(v_flex().gap(4).child(div().text_color(t.dim).child("named (the folder is asked next)"))
             .child(h_flex().h(26).px(8).items_center().border(1).border_color(on("name") ? t.accent : t.muted).child(Input.new(this.name).flex_1().text_size(12).text_color(t.foreground)))))
@@ -239,6 +239,6 @@ export class ExportForm {
             .child(ring(chip(t, "exp-go", this.busy ? "exporting…" : "Export  enter", false, (cx) => void this.go(cx), t.accent), on("go"), t.accent))
             .child(ring(chip(t, "exp-cancel", "Cancel  esc", false, () => this.close()), on("cancel"), t.accent))))
         .child(h_flex().h(22).px(14).gap(12).items_center().text_size(11)
-          .children(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "export" }).map(([k, w], i) => hint(t, `exp-hint-${i}`, k, w)))));
+          .children(Arr.map(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "export" }), ([k, w], i) => hint(t, `exp-hint-${i}`, k, w)))));
   }
 }

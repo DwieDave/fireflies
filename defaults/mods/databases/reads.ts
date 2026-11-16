@@ -9,7 +9,7 @@
 
 import type { Context } from "gpui-kit";
 import { exec, writeTextFile } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { cancel } from "./runner.ts";
 import type { default as DbView } from "./main.ts";
 
@@ -54,7 +54,7 @@ export async function reading<T>(v: DbView, what: string, panel: ReadPanel, cx: 
     end: (how) => {
       if (!v.reads.includes(read)) return;
 
-      v.reads = v.reads.filter((r) => r !== read);
+      v.reads = Arr.filter(v.reads, (r) => r !== read);
       settle(how === "stopped" ? { stopped: true } : { late: deadline ?? Date.now() - at });
 
       if ((read.nonce !== null && Str.isNonEmpty(read.nonce)) && (v.dir !== null && Str.isNonEmpty(v.dir))) void cancel({ exec, writeTextFile }, v.dir, read.nonce);
@@ -71,13 +71,13 @@ export async function reading<T>(v: DbView, what: string, panel: ReadPanel, cx: 
   try {
     return await Promise.race([done, ended]);
   } finally {
-    v.reads = v.reads.filter((r) => r !== read);
+    v.reads = Arr.filter(v.reads, (r) => r !== read);
     cx.notify();
   }
 }
 
 /** The read shown in a panel (the newest), or null. */
-export const readIn = (v: DbView, panel: ReadPanel): Read | null => v.reads.filter((r) => r.panel === panel).at(-1) ?? null;
+export const readIn = (v: DbView, panel: ReadPanel): Read | null => Arr.filter(v.reads, (r) => r.panel === panel).at(-1) ?? null;
 
 /** A read's words with its seconds: "reading the tables… 4 s". */
 export function readWords(r: Read, now = Date.now()): string {
@@ -88,7 +88,7 @@ export function readWords(r: Read, now = Date.now()): string {
 
 /** Stops every read (esc while one runs; the stop chip): true when there was one. */
 export function stopReads(v: DbView, panel: ReadPanel | null = null): boolean {
-  const list = v.reads.filter((r) => panel === null || r.panel === panel);
+  const list = Arr.filter(v.reads, (r) => panel === null || r.panel === panel);
 
   for (const r of list) r.end("stopped");
 

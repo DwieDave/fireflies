@@ -12,7 +12,7 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { where } from "./kinds.ts";
 import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
@@ -71,12 +71,12 @@ function keyBar(t: Theme, v: DbView): Element {
   const note = v.note;
   const place = v.place();
   const list = v.help ? [["esc", "close keys"] as const] : barHints(place);
-  const word = place === "rows" ? "ROWS" : place === "results" ? "RESULT" : place === "editor" ? "QUERY" : PANEL_NAME[v.panel].toUpperCase();
+  const word = place === "rows" ? "ROWS" : place === "results" ? "RESULT" : place === "editor" ? "QUERY" : Str.toUpperCase(PANEL_NAME[v.panel]);
 
   return h_flex().id("db-keys").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
     .child(div().relative().flex_none().text_color(t.dim).child(word))
-    .children(list.map(([k, what], i) => hint(t, `db-hint-${i}`, k, what).relative()))
+    .children(Arr.map(list, ([k, what], i) => hint(t, `db-hint-${i}`, k, what).relative()))
     .child(div().flex_1())
     .when(note !== null, (el) => el.child(div().relative().flex_shrink(1).min_w(0).truncate().text_color(toneColor(t, note?.tone ?? "working")).child(note?.text ?? "")))
     .when(v.size.width >= NARROW, (el) => el.child(hint(t, "db-hint-panels", "1-4 0", "panels").relative()))
@@ -88,7 +88,7 @@ function keyBar(t: Theme, v: DbView): Element {
 /** The narrow view's row of panels: each its number and name, the shown one bright. */
 function panelTabs(t: Theme, v: DbView): Element {
   return h_flex().id("db-panel-tabs").relative().h(24).flex_none().px(6).gap(2).items_center()
-    .children(NARROW_ORDER.map((p) => chip(t, `db-ptab-${p}`, `${PANEL_KEY[p]} ${PANEL_NAME[p]}`, v.panel === p, () => v.setPanel(p))));
+    .children(Arr.map(NARROW_ORDER, (p) => chip(t, `db-ptab-${p}`, `${PANEL_KEY[p]} ${PANEL_NAME[p]}`, v.panel === p, () => v.setPanel(p))));
 }
 
 /** One panel by its id. */

@@ -3,6 +3,7 @@
 // exactly, NULL as null) or SQL inserts for the same kind of database (one
 // INSERT per row, names and texts quoted for it).
 
+import { Array as Arr, Record as Rec, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import { quoteName, quoteText } from "./catalog.ts";
@@ -19,22 +20,22 @@ export const FORMAT_NAME = { csv: "CSV", json: "JSON", sql: "SQL inserts" } as c
 export const EXTENSION = { csv: "csv", json: "json", sql: "sql" } as const satisfies { readonly [F in Format]: string };
 
 /** A CSV field: quoted when it holds a comma, quote or line break. */
-const csvField = (v: Cell): string => (v === null ? "" : /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const csvField = (v: Cell): string => (v === null ? "" : /[",\r\n]/.test(v) ? `"${Str.replace(/"/g, '""')(v)}"` : v);
 
 /** A result as CSV with a header row. */
 export function toCsv(set: ResultSet): string {
-  return [set.columns, ...set.rows].map((r) => r.map(csvField).join(",")).join("\n") + "\n";
+  return Arr.join(Arr.map([set.columns, ...set.rows], (r) => Arr.join(Arr.map(r, csvField), ",")), "\n") + "\n";
 }
 
 /** Whether a text is exactly a number's own spelling ("12", "-3.5"; not "012", "1e3", "1 000"). */
-export const exactNumber = (v: string): boolean => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(v) && String(Number(v)) === v.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+export const exactNumber = (v: string): boolean => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(v) && String(Number(v)) === Str.replace(/\.$/, "")(Str.replace(/(\.\d*?)0+$/, "$1")(v));
 
 /** Which columns are numbers: every non-null cell an exact number, at least one of them. */
 function numberColumns(set: ResultSet): boolean[] {
-  return set.columns.map((_c, i) => {
-    const cells = set.rows.map((r) => r[i] ?? null).filter((v): v is string => v !== null);
+  return Arr.map(set.columns, (_c, i) => {
+    const cells = Arr.filter(Arr.map(set.rows, (r) => r[i] ?? null), (v): v is string => v !== null);
 
-    return cells.length > 0 && cells.every(exactNumber);
+    return cells.length > 0 && Arr.every(cells, exactNumber);
   });
 }
 
@@ -42,7 +43,7 @@ function numberColumns(set: ResultSet): boolean[] {
 export function toJson(set: ResultSet): string {
   const nums = numberColumns(set);
 
-  const rows = set.rows.map((r) => Object.fromEntries(set.columns.map((c, i) => {
+  const rows = Arr.map(set.rows, (r) => Rec.fromEntries(Arr.map(set.columns, (c, i) => {
     const v = r[i] ?? null;
 
     return [c, v === null ? null : nums[i] === true ? Number(v) : v];
@@ -54,17 +55,17 @@ export function toJson(set: ResultSet): string {
 /** A result as INSERT statements into `table` (a name as the kind writes it, already quoted). */
 export function toInserts(set: ResultSet, kind: Kind, table: string): string {
   const nums = numberColumns(set);
-  const cols = set.columns.map((c) => quoteName(kind, c)).join(", ");
+  const cols = Arr.join(Arr.map(set.columns, (c) => quoteName(kind, c)), ", ");
 
-  return set.rows.map((r) => {
-    const values = set.columns.map((_c, i) => {
+  return Arr.join(Arr.map(set.rows, (r) => {
+    const values = Arr.map(set.columns, (_c, i) => {
       const v = r[i] ?? null;
 
       return v === null ? "NULL" : nums[i] === true ? v : quoteText(kind, v);
     });
 
-    return `INSERT INTO ${table} (${cols}) VALUES (${values.join(", ")});`;
-  }).join("\n") + "\n";
+    return `INSERT INTO ${table} (${cols}) VALUES (${Arr.join(values, ", ")});`;
+  }), "\n") + "\n";
 }
 
 /** A result in a format. */
@@ -74,9 +75,9 @@ export function exportText(set: ResultSet, format: Format, kind: Kind, table: st
 
 /** A file name for an export: the table's (or "result") and the date, safe in a path. */
 export function exportName(base: string, format: Format, now = new Date()): string {
-  const day = now.toISOString().slice(0, 10);
+  const day = Str.slice(0, 10)(now.toISOString());
 
-  return `${base.replace(/[^A-Za-z0-9._-]+/g, "_") || "result"}-${day}.${EXTENSION[format]}`;
+  return `${Str.replace(/[^A-Za-z0-9._-]+/g, "_")(base) || "result"}-${day}.${EXTENSION[format]}`;
 }
 
 /** writeTextFile takes at most 1 MiB: a bigger export is written in parts this many characters (3 bytes each at most). */
@@ -90,9 +91,9 @@ export async function writeOut(io: RunIo, dir: string, dest: string, text: strin
 
   try {
     for (let i = 0; i * PART < text.length || i === 0; i++) {
-      const part = `${dir}/x-${n}-${String(i).padStart(5, "0")}`;
+      const part = `${dir}/x-${n}-${Str.padStart(5, "0")(String(i))}`;
 
-      await io.writeTextFile(part, text.slice(i * PART, (i + 1) * PART), null);
+      await io.writeTextFile(part, Str.slice(i * PART, (i + 1) * PART)(text), null);
       parts.push(part);
     }
   } catch (error) {

@@ -83,7 +83,7 @@ export function stateColor(t: Theme, s: ConnState): Color {
 export const breathes = (s: ConnState): boolean => s.kind === "connecting" || s.kind === "reading";
 
 /** A clock time, "14:02:09". */
-const clock = (at: number): string => new Date(at).toTimeString().slice(0, 8);
+const clock = (at: number): string => Str.slice(0, 8)(new Date(at).toTimeString());
 
 /** Seconds or minutes ago, in words. */
 function ago(at: number, now: number): string {

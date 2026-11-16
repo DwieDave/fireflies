@@ -10,7 +10,7 @@
 
 import type { Context, KeyEvent } from "gpui-kit";
 import { InputState } from "gpui-base";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Editability, GridFacts } from "./edits.ts";
 import { cellRefusal, changeAt, changesWord, counted, editability, noEdits, shownCell, stage, unstage } from "./edits.ts";
 import { refusal, typeOf } from "./quote.ts";
@@ -28,7 +28,7 @@ import type { default as DbView } from "./main.ts";
 export function gridFacts(v: DbView): GridFacts {
   const c = v.active;
   const b = v.rows.browse;
-  const t = b !== null ? v.catalog.tables.find((x) => x.name === b.table.name && x.schema === b.table.schema) ?? null : null;
+  const t = b !== null ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === b.table.name && x.schema === b.table.schema)) ?? null : null;
   const columns = b !== null && v.struct.data !== null && v.struct.table?.name === b.table.name && v.struct.table.schema === b.table.schema ? v.struct.data.columns : null;
 
   return {
@@ -274,7 +274,7 @@ export function openReview(v: DbView, then: (() => void) | null = null): void {
     return;
   }
 
-  const types = new Map((v.struct.table?.name === e.table.name ? v.struct.data?.columns ?? [] : []).map((x) => [x.name, x.type] as const));
+  const types = new Map(Arr.map((v.struct.table?.name === e.table.name ? v.struct.data?.columns ?? [] : []), (x) => [x.name, x.type] as const));
   const built = saveStatements({ kind: c.kind, bind: c.kind === "libsql" && Boolean(c.url), types }, e);
 
   if ("refused" in built) {
@@ -316,7 +316,7 @@ async function save(v: DbView, statements: readonly SaveStatement[], cx: Context
 
   r.busy = false;
 
-  for (const s of statements.filter((x) => x.role === "update")) v.logLine({ sql: s.text, ok: (failed === null || Str.isEmpty(failed)), ms: o.ms, said: failed !== null && Str.isNonEmpty(failed) ? "rolled back" : "saved", conn: c.name });
+  for (const s of Arr.filter(statements, (x) => x.role === "update")) v.logLine({ sql: s.text, ok: (failed === null || Str.isEmpty(failed)), ms: o.ms, said: failed !== null && Str.isNonEmpty(failed) ? "rolled back" : "saved", conn: c.name });
 
   if (failed !== null && Str.isNonEmpty(failed)) {
     r.error = { index: o.error?.index ?? null, message: failed };

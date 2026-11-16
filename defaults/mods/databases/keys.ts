@@ -5,6 +5,7 @@
 
 import type { KeyEvent } from "gpui-kit";
 import type { KeySection } from "@fireflies/keyhelp";
+import { Array as Arr, Option, String as Str } from "effect";
 
 /** Where a key is read: the window (always), or what has the keyboard. */
 export type Place = "window" | "conns" | "tables" | "structure" | "rows" | "results" | "editor" | "log";
@@ -89,19 +90,19 @@ export const BINDINGS = { window: WINDOW, conns: CONNS, tables: TABLES, structur
 export function keyName(e: KeyEvent): string {
   const m = e.modifiers;
   const c = e.key_char;
-  const printable = c && c.length === 1 && c.trim() && !m.platform && !m.control && !m.alt;
+  const printable = c && c.length === 1 && Str.trim(c) && !m.platform && !m.control && !m.alt;
 
   if (printable) return c;
 
-  const mods = [m.control ? "ctrl" : "", m.platform ? "cmd" : "", m.alt ? "alt" : "", m.shift ? "shift" : ""].filter(Boolean);
+  const mods = Arr.filter([m.control ? "ctrl" : "", m.platform ? "cmd" : "", m.alt ? "alt" : "", m.shift ? "shift" : ""], Boolean);
 
-  return [...mods, e.key].join("-");
+  return Arr.join([...mods, e.key], "-");
 }
 
 /** The first key of an action in a place (its own table, then the window's), as the menus and the
  *  key bar show it; undefined when no key does it. */
 export function keyOf(place: Place, action: string): string | undefined {
-  const b = BINDINGS[place].find(([, , a]) => a === action) ?? BINDINGS.window.find(([, , a]) => a === action);
+  const b = Option.getOrUndefined(Arr.findFirst(BINDINGS[place], ([, , a]) => a === action)) ?? Option.getOrUndefined(Arr.findFirst(BINDINGS.window, ([, , a]) => a === action));
 
   return b !== undefined ? shown(b[0][0] ?? "") : undefined;
 }
@@ -114,7 +115,7 @@ export function actionFor(place: Place, key: string): string | null {
 /** Every action a key names in a place, in the order they're tried (esc in a result: drop the
  *  selection, else back to the editor). */
 export function actionsFor(place: Place, key: string): string[] {
-  return [...BINDINGS[place], ...BINDINGS.window].flatMap(([keys, , a]) => (keys.includes(key) ? [a] : []));
+  return Arr.flatMap([...BINDINGS[place], ...BINDINGS.window], ([keys, , a]) => (keys.includes(key) ? [a] : []));
 }
 
 const PLACE_NAME = {
@@ -124,11 +125,11 @@ const PLACE_NAME = {
 /** A key as the overview writes it (escape as esc, arrows as arrows). */
 const ARROWS: readonly (readonly [string, string])[] = [["left", "←"], ["right", "→"], ["up", "↑"], ["down", "↓"]];
 
-export const shown = (k: string): string => (k === "escape" ? "esc" : k.replace(/\b(left|right|up|down)$/, (m) => ARROWS.find(([n]) => n === m)?.[1] ?? m));
+export const shown = (k: string): string => (k === "escape" ? "esc" : k.replace(/\b(left|right|up|down)$/, (m) => Option.getOrUndefined(Arr.findFirst(ARROWS, ([n]) => n === m))?.[1] ?? m));
 
 /** The ? overview: the place's keys, then the window's. */
 export function helpSections(place: Place): KeySection[] {
-  const rows = (list: readonly Binding[]) => list.map(([keys, what]) => [keys.map(shown).join(" "), what] as const);
+  const rows = (list: readonly Binding[]) => Arr.map(list, ([keys, what]) => [Arr.join(Arr.map(keys, shown), " "), what] as const);
 
   return [{ title: PLACE_NAME[place], keys: rows(BINDINGS[place]) }, { title: "window", keys: rows(BINDINGS.window) }];
 }
@@ -142,9 +143,9 @@ const BAR = {
 
 /** The key bar's few entries for a place. */
 export function barHints(place: Place): (readonly [string, string])[] {
-  return BAR[place].flatMap((a) => {
-    const b = BINDINGS[place].find(([, , x]) => x === a);
+  return Arr.flatMap(BAR[place], (a) => {
+    const b = Option.getOrUndefined(Arr.findFirst(BINDINGS[place], ([, , x]) => x === a));
 
-    return b !== undefined ? [[shown(b[0][0] ?? ""), b[1].split(" (")[0] ?? b[1]] as const] : [];
+    return b !== undefined ? [[shown(b[0][0] ?? ""), Str.split(b[1], " (")[0] ?? b[1]] as const] : [];
   });
 }

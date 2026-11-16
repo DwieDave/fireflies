@@ -8,7 +8,7 @@
 // database says instead of a bare 0.
 
 import type { Context } from "gpui-kit";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import type { KubeSource } from "./kube.ts";
 import type { Here } from "./catalog.ts";
@@ -112,7 +112,7 @@ export const dbsNow = (v: DbView): ServerDbs | null => (v.dbs !== null && v.acti
 /** The Databases tab's rows: MySQL's first is "every database" (none named: every database's
  *  tables listed), then the server's databases. */
 export function dbRows(v: DbView): (string | null)[] {
-  const names = (dbsNow(v)?.list ?? []).map((d) => d.name);
+  const names = Arr.map((dbsNow(v)?.list ?? []), (d) => d.name);
 
   return v.active?.kind === "mysql" ? [null, ...names] : names;
 }
@@ -155,13 +155,13 @@ export function useDatabase(v: DbView, name: string | null, cx: Context): void {
   }
 
   const next = withDatabase(c, name);
-  const swap = (list: Conn[]): Conn[] => list.map((x) => (x.id === c.id ? next : x));
+  const swap = (list: Conn[]): Conn[] => Arr.map(list, (x) => (x.id === c.id ? next : x));
 
   v.saved = swap(v.saved);
   v.sent = swap(v.sent);
-  v.found = v.found.map((f) => (f.conn.id === c.id ? { ...f, conn: next } : f));
+  v.found = Arr.map(v.found, (f) => (f.conn.id === c.id ? { ...f, conn: next } : f));
 
-  if (c.origin === "saved") void changePinned(v, (now) => now.map((x) => (x.id === c.id ? withDatabase(x, name) : x)), cx);
+  if (c.origin === "saved") void changePinned(v, (now) => Arr.map(now, (x) => (x.id === c.id ? withDatabase(x, name) : x)), cx);
   else v.picked.set(c.id, name);
 
   v.schema = null;
@@ -205,13 +205,13 @@ export function emptyWords(v: DbView): EmptyWords | null {
 
   if ((d.error !== null && Str.isNonEmpty(d.error)) && d.list.length === 0) return { title, note: `the server's databases couldn't be read: ${d.error}${grants}`, others: [], enter: null };
 
-  const others = d.list.map((x) => x.name).filter((n) => n !== w.database);
+  const others = Arr.filter(Arr.map(d.list, (x) => x.name), (n) => n !== w.database);
 
   if (others.length === 0) return { title, note: `and the server has no other database ${who} may connect to${grants}`, others: [], enter: null };
 
   if (others.length === 1) return { title, note: `1 other database on this server: ${others[0]} · enter connects to it${grants}`, others, enter: { use: others[0] ?? "" } };
 
-  const shown = others.slice(0, 4).join(", ");
+  const shown = Arr.join(others.slice(0, 4), ", ");
 
   return { title, note: `${others.length} other databases on this server: ${shown}${others.length > 4 ? ", …" : ""} · enter opens the list${grants}`, others: others.slice(0, 6), enter: "list" };
 }

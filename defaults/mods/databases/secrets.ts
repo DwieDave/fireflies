@@ -10,7 +10,7 @@ import type { RunIo } from "./runner.ts";
 import { KEYCHAIN_SERVICE, nonce } from "./runner.ts";
 
 /** A value inside "double quotes" for `security -i`'s command line. */
-const quoted = (s: string): string => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const quoted = (s: string): string => `"${Str.replace(/"/g, '\\"')(Str.replace(/\\/g, "\\\\")(s))}"`;
 
 /** The `security -i` line that stores (or replaces) a connection's secret. */
 export function addLine(account: string, label: string, secret: string): string {
@@ -34,7 +34,7 @@ export async function saveSecret(io: RunIo, dir: string, account: string, label:
   if (r === null) return "couldn't run security";
 
   // security -i reports a failed command on its output and still exits 0.
-  const said = r.stdout.trim();
+  const said = Str.trim(r.stdout);
 
   return r.code === 0 && !/error|failed|denied/i.test(said) ? null : (Str.isNonEmpty(said) ? said : `security exited with ${r.code}`);
 }
@@ -50,7 +50,7 @@ export async function hasSecret(io: RunIo, account: string): Promise<boolean> {
 export async function readSecret(io: RunIo, account: string): Promise<string | null> {
   const r = await io.exec("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"]).catch(() => null);
 
-  return r?.code === 0 ? r.stdout.replace(/\n$/, "") : null;
+  return r?.code === 0 ? Str.replace(/\n$/, "")(r.stdout) : null;
 }
 
 /** Removes the connection's secret from the keychain (its connection is removed). */
@@ -63,5 +63,5 @@ const SECRET_LITERALS = /((?:password|identified\s+(?:with\s+\S+\s+)?by|secret|t
 
 /** A statement as the history keeps it: a password or token literal blanked. */
 export function redact(sql: string): string {
-  return sql.replace(SECRET_LITERALS, (_m, lead: string) => `${lead}'•••'`).replace(/(:\/\/[^:/@\s]*:)[^@\s]*@/g, "$1•••@");
+  return Str.replace(/(:\/\/[^:/@\s]*:)[^@\s]*@/g, "$1•••@")(sql.replace(SECRET_LITERALS, (_m, lead: string) => `${lead}'•••'`));
 }

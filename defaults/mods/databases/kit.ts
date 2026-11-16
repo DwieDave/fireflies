@@ -9,7 +9,7 @@ import type { Color, Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import { KIND_MARK } from "./kinds.ts";
 import { edge as edgeTone } from "@fireflies/tones";
@@ -75,7 +75,7 @@ export interface PanelOptions {
 export function panel(t: Theme, id: string, title: readonly Element[], active: boolean, body: Element, options: PanelOptions = {}): Element {
   const { right = null, foot = null, onPress = null } = options;
   const edge = active ? t.accent : edgeTone(t);
-  const titled = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(title.map((el) => el.min_w(0).truncate()));
+  const titled = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(Arr.map(title, (el) => el.min_w(0).truncate()));
 
   return div().id(id).relative().flex().flex_col().min_h(0).min_w(0).border_l(1).border_r(1).border_color(edge)
     .on_mouse_down("left", (_e, cx) => {
@@ -102,7 +102,7 @@ export function titleTabs(t: Theme, id: string, num: string | null, tabs: readon
 
   if (num !== null) parts.push(div().flex_none().text_color(active ? t.accent : t.dim).child(`[${num}]`));
 
-  tabs.forEach(([key, label], i) => {
+  Arr.forEach(tabs, ([key, label], i) => {
     if (i > 0) parts.push(div().flex_none().text_color(t.dim).child("·"));
 
     const tip = more.tip?.(key) ?? null;
@@ -200,4 +200,4 @@ export function syntaxColors(t: Theme) {
 }
 
 /** The editor's selection colour: moonfly blue, see-through (editor/kinds.ts). */
-export const selectionColor = (t: Theme): string => `${t.ansi4.slice(0, 7)}66`;
+export const selectionColor = (t: Theme): string => `${Str.slice(0, 7)(t.ansi4)}66`;

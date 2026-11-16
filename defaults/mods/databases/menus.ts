@@ -9,7 +9,7 @@
 import type { Context } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { inView } from "@fireflies/menu-place";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
@@ -167,7 +167,7 @@ export function schemaMenu(v: DbView, schema: string | null, cx: Context): void 
 export function structMenu(v: DbView, r: StructRow, cx: Context): void {
   const kind = v.active?.kind ?? "sqlite";
   const rows: MenuRow[] = [];
-  const other = r.table !== null && Str.isNonEmpty(r.table) ? v.catalog.tables.find((t) => t.name === r.table) : undefined;
+  const other = r.table !== null && Str.isNonEmpty(r.table) ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (t) => t.name === r.table)) : undefined;
 
   if (other !== undefined) rows.push(entry("structure", "open", `Open ${other.name}`, () => openTable(v, other, cx)));
 
@@ -381,7 +381,7 @@ export function keepRename(v: DbView): void {
 
   if (r === null) return;
 
-  const name = r.input.value().trim().slice(0, 60);
+  const name = Str.slice(0, 60)(Str.trim(r.input.value()));
 
   if (Str.isNonEmpty(name)) {
     r.tab.name = name;
@@ -399,7 +399,7 @@ export function logMenu(v: DbView, i: number, cx: Context): void {
 
   if (line === undefined) return;
 
-  openMenu(v, line.sql.replace(/\s+/g, " ").slice(0, 80), [
+  openMenu(v, Str.slice(0, 80)(Str.replace(/\s+/g, " ")(line.sql)), [
     entry("log", "open", "Into a query tab", () => void v.addQuery(`${line.sql};`, cx), { sub: "not run" }),
     entry("log", "copy", "Copy the statement", () => copy(v, line.sql, cx)),
     ...(line.ok ? [] : [entry("log", null, "Copy what it said", () => copy(v, line.said, cx), { sub: line.said })]),
@@ -427,9 +427,9 @@ export function historyMenu(v: DbView, cx: Context): void {
     return;
   }
 
-  openMenu(v, `history · ${v.active.name}`, v.history.slice(0, 60).map((h) => ({
-    label: h.sql.replace(/\s+/g, " ").slice(0, 160),
+  openMenu(v, `history · ${v.active.name}`, Arr.map(v.history.slice(0, 60), (h) => ({
+    label: Str.slice(0, 160)(Str.replace(/\s+/g, " ")(h.sql)),
     sub: `${ago(h.at)} ago${h.ok === false ? " · failed" : ""}${h.rows !== undefined ? ` · ${h.rows} rows` : ""}${h.ms !== undefined ? ` · ${h.ms} ms` : ""}`,
-    go: () => void v.addQuery(`${h.sql}${h.sql.trimEnd().endsWith(";") ? "" : ";"}`, cx),
+    go: () => void v.addQuery(`${h.sql}${Str.endsWith(";")(Str.trimEnd(h.sql)) ? "" : ";"}`, cx),
   })));
 }

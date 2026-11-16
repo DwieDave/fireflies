@@ -12,7 +12,7 @@
 //   "secret": { "from": "kubernetes", "context": …, "namespace": …, "name": …, "key": …,
 //               "userKey"?: …, "databaseKey"?: …, "kubectl"?: "kubectl" | "/abs/…/kubectl" }
 
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, object } from "./guard.ts";
 import type { ExecResult } from "herdr";
@@ -32,7 +32,7 @@ const KUBECTL = /^(kubectl|\/[^\0\n\r]*\/kubectl)$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 /** A kubeconfig context's name: anything printable, not too long. */
-const contextOk = (c: string): boolean => Boolean(c) && c.length <= 253 && ![...c].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+const contextOk = (c: string): boolean => Boolean(c) && c.length <= 253 && !Arr.some([...c], (ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
 
 /** Why the window won't read this source for a connection to `host`, or null. */
 export function kubeProblem(s: KubeSource, kind: string, host: string | undefined): string | null {
@@ -58,7 +58,7 @@ const keysOf = (s: KubeSource): string[] => [s.key, ...(s.userKey !== undefined 
 
 /** The template: each key's base64 on a line of its own (an absent key: an empty line). */
 export function kubeTemplate(s: KubeSource): string {
-  return `{{with .data}}${keysOf(s).map((k) => `{{with index . "${k}"}}{{.}}{{end}}{{"\\n"}}`).join("")}{{end}}`;
+  return `{{with .data}}${Arr.join(Arr.map(keysOf(s), (k) => `{{with index . "${k}"}}{{.}}{{end}}{{"\\n"}}`), "")}{{end}}`;
 }
 
 /** A program and its arguments. */
@@ -93,7 +93,7 @@ const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /** base64's bytes, or null when it isn't base64 (the engine has no atob). */
 export function base64Bytes(b64: string): number[] | null {
-  const clean = b64.replace(/\s+/g, "").replace(/=+$/, "");
+  const clean = Str.replace(/=+$/, "")(Str.replace(/\s+/g, "")(b64));
   const out: number[] = [];
   let acc = 0;
   let bits = 0;
@@ -154,21 +154,21 @@ function decoded(line: string | undefined): string | null {
 /** kubectl's answer to the read: the values, or why there are none (never the value in the words). */
 export function parseKubeRead(s: KubeSource, r: ExecResult): KubeRead | { readonly error: string } {
   if (r.code !== 0) {
-    const said = r.stderr.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+    const said = Option.getOrUndefined(Arr.findFirst(Arr.map(Str.split(r.stderr, "\n"), (l) => Str.trim(l)), Boolean)) ?? "";
 
     if (r.code === 127 || (/not found|no such file/i.test(said) && !/secrets? "/.test(said))) return { error: "kubectl isn't there (not on the app's PATH)" };
 
-    return { error: said.replace(/^error:\s*/i, "") || `kubectl exited ${r.code}` };
+    return { error: Str.replace(/^error:\s*/i, "")(said) || `kubectl exited ${r.code}` };
   }
 
-  const lines = r.stdout.split("\n");
+  const lines = Str.split(r.stdout, "\n");
   const keys = keysOf(s);
-  const values = keys.map((_k, i) => decoded(lines[i]));
-  const bad = keys.find((_k, i) => values[i] === null);
+  const values = Arr.map(keys, (_k, i) => decoded(lines[i]));
+  const bad = Option.getOrUndefined(Arr.findFirst(keys, (_k, i) => values[i] === null));
 
   if (bad !== undefined && Str.isNonEmpty(bad)) return { error: `the secret's ${bad} isn't text` };
 
-  const [password = "", ...rest] = values.map((x) => x ?? "");
+  const [password = "", ...rest] = Arr.map(values, (x) => x ?? "");
 
   if (Str.isEmpty(password)) return { error: `the secret ${s.name} has no ${s.key}` };
 
@@ -249,7 +249,7 @@ export const FORWARD_LABEL = "k8s.forward" as const;
 
 /** The forward's note in its label (the k8s mod's noteFor, key for key and in its order). */
 export function forwardNote(f: KubeForward, kind: "postgres" | "mysql") {
-  return { context: f.context, namespace: f.namespace, target: f.target, local: f.local, remote: f.remote, db: kind, web: null, name: f.target.replace(/^[a-z]+\//, "") };
+  return { context: f.context, namespace: f.namespace, target: f.target, local: f.local, remote: f.remote, db: kind, web: null, name: Str.replace(/^[a-z]+\//, "")(f.target) };
 }
 
 /** kubectl port-forward's argv (the program first). */
@@ -271,4 +271,4 @@ export function forwardStartArgs(f: KubeForward, kind: "postgres" | "mysql"): st
 }
 
 /** The command in words, as the ask shows it. */
-export const forwardCommand = (f: KubeForward): string => forwardArgv(f).join(" ");
+export const forwardCommand = (f: KubeForward): string => Arr.join(forwardArgv(f), " ");

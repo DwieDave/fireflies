@@ -3,7 +3,7 @@
 // it, ever) and each connection's query history (history/<id>.json: the
 // statements run, newest first, a password literal blanked by redact()).
 
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNumber, isString, nullable, object, parseJson, sharedKey } from "./guard.ts";
 import type { Conn } from "./kinds.ts";
@@ -19,7 +19,7 @@ export interface FileIo {
 /** The data folder's files. */
 export const connectionsFile = (appHome: string): string => `${appHome}/data/databases/connections.json`;
 
-export const historyFile = (appHome: string, id: string): string => `${appHome}/data/databases/history/${id.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+export const historyFile = (appHome: string, id: string): string => `${appHome}/data/databases/history/${Str.replace(/[^A-Za-z0-9_-]/g, "_")(id)}.json`;
 
 const isConnectionsDoc = object({ connections: arrayOf(isConnJson) });
 
@@ -28,7 +28,7 @@ export async function readConnections(io: FileIo, appHome: string): Promise<Conn
   const text = await io.readTextFile(connectionsFile(appHome)).catch(() => null);
   const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isConnectionsDoc) : undefined;
 
-  return doc !== undefined ? doc.connections.map(connOf) : [];
+  return doc !== undefined ? Arr.map(doc.connections, connOf) : [];
 }
 
 /** The pinned (saved) connections changed, in some window: when, so every other window reads the
@@ -47,8 +47,8 @@ export async function changeConnections(io: FileIo, appHome: string, change: (li
 
     if ((was !== null && Str.isNonEmpty(was)) && doc === undefined) throw new Error(`${path} isn't a list of connections: left as it is`);
 
-    const next = change(doc !== undefined ? doc.connections.map(connOf) : []);
-    const text = `${JSON.stringify({ connections: next.flatMap((c) => (c.origin === "saved" ? [connJson(c)] : [])) }, null, 2)}\n`;
+    const next = change(doc !== undefined ? Arr.map(doc.connections, connOf) : []);
+    const text = `${JSON.stringify({ connections: Arr.flatMap(next, (c) => (c.origin === "saved" ? [connJson(c)] : [])) }, null, 2)}\n`;
 
     try {
       await io.writeTextFile(path, text, was);
@@ -66,7 +66,7 @@ export async function changeConnections(io: FileIo, appHome: string, change: (li
 export async function writeConnections(io: FileIo, appHome: string, list: readonly Conn[]): Promise<void> {
   const path = connectionsFile(appHome);
   const was = await io.readTextFile(path).catch(() => null);
-  const doc = { connections: list.flatMap((c) => (c.origin === "saved" ? [connJson(c)] : [])) };
+  const doc = { connections: Arr.flatMap(list, (c) => (c.origin === "saved" ? [connJson(c)] : [])) };
 
   await io.writeTextFile(path, `${JSON.stringify(doc, null, 2)}\n`, was);
 }
@@ -91,9 +91,9 @@ export async function readHistory(io: FileIo, appHome: string, id: string): Prom
 
 /** The history with `entry` first (redacted; the same statement run again moves up, not twice). */
 export function withEntry(list: readonly HistoryEntry[], entry: HistoryEntry): HistoryEntry[] {
-  const kept: HistoryEntry = { ...entry, sql: redact(entry.sql.trim()) };
+  const kept: HistoryEntry = { ...entry, sql: redact(Str.trim(entry.sql)) };
 
-  return [kept, ...list.filter((e) => e.sql !== kept.sql)].slice(0, HISTORY_MAX);
+  return [kept, ...Arr.filter(list, (e) => e.sql !== kept.sql)].slice(0, HISTORY_MAX);
 }
 
 /** Adds a statement to a connection's history on disk; resolves with the history now. */

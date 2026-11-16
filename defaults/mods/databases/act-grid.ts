@@ -10,7 +10,7 @@
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import type { Column } from "@fireflies/viewer/table";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt, QueryTab } from "./state.ts";
 import { cellAt, colWidth, columnsOf, measuredWidth, moveGrid, rowsIn, sortedWidth } from "./grid.ts";
@@ -74,7 +74,7 @@ export function rowsLayout(v: DbView): ColumnLayout {
 
 /** The sorted column at least as wide as its name and its mark (" ↓"), however narrow it was made. */
 export function marked(cols: GridColumn[], sort: { readonly column: string } | null): GridColumn[] {
-  return cols.map((c) => {
+  return Arr.map(cols, (c) => {
     const least = sortedWidth(c.name);
 
     return c.name === sort?.column && colWidth(c) < least ? { ...c, px: least } : c;
@@ -164,9 +164,9 @@ export type RowFormat = "tsv" | "json" | "csv" | "insert";
 
 /** Rows (shown indexes; the range's when none are given) in a format. */
 export function rowsText(v: DbView, g: GridNow, format: RowFormat, rows: readonly number[] = rangeRows(g)): string {
-  if (format === "tsv") return rows.map((r) => copied(g.set, { r0: r, r1: r, c0: 0, c1: Math.max(0, g.set.columns.length - 1) })).join("\n");
+  if (format === "tsv") return Arr.join(Arr.map(rows, (r) => copied(g.set, { r0: r, r1: r, c0: 0, c1: Math.max(0, g.set.columns.length - 1) })), "\n");
 
-  const set = rowsOf(g.raw, rows.map((r) => rawRow(g, r)), v.rows.browse?.rowid === true && g.place === "rows" ? ["rowid"] : []);
+  const set = rowsOf(g.raw, Arr.map(rows, (r) => rawRow(g, r)), v.rows.browse?.rowid === true && g.place === "rows" ? ["rowid"] : []);
 
   if (format === "json") return toJson(set);
 
@@ -221,7 +221,7 @@ export function gridAct(v: DbView, place: "rows" | "results", action: string, cx
 export function copy(v: DbView, text: string, cx: Context): void {
   cx.write_to_clipboard(text);
 
-  const lines = text.split("\n").length;
+  const lines = Str.split(text, "\n").length;
 
   v.say(lines > 1 ? `copied ${lines} lines` : "copied", "done");
 }
@@ -302,7 +302,7 @@ export function moveTo(g: GridNow, col: number, to: number | null): void {
 export function exportShown(v: DbView, cx: Context): void {
   const q = v.shownQuery();
   const set = q?.outcome?.results[q.shown]?.set ?? null;
-  const t = v.rows.browse !== null ? v.catalog.tables.find((x) => x.name === v.rows.browse?.table.name && x.schema === v.rows.browse.table.schema) : undefined;
+  const t = v.rows.browse !== null ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === v.rows.browse?.table.name && x.schema === v.rows.browse.table.schema)) : undefined;
 
   if (q !== null && set !== null) openExport(v, { result: set, name: q.name }, cx);
   else if (q === null && t !== undefined) openExport(v, { table: t }, cx);
@@ -421,7 +421,7 @@ export function applyFilter(v: DbView, cx: Context): void {
 
   if (b === null) return;
 
-  v.rows.browse = { ...b, filter: text.trim(), offset: 0 };
+  v.rows.browse = { ...b, filter: Str.trim(text), offset: 0 };
   void loadRows(v, cx);
 }
 
@@ -443,7 +443,7 @@ function resultsAct(v: DbView, action: string, cx: Context): boolean {
 
 /** Closes a query tab (its text goes; the connection keeps the others). */
 export function closeQuery(v: DbView, q: QueryTab, _cx: Context): void {
-  v.queries = v.queries.filter((x) => x !== q);
+  v.queries = Arr.filter(v.queries, (x) => x !== q);
   v.mainTab = Math.min(v.mainTab, v.queries.length);
   v.queriesDirty = true;
   void saveQueries(v);

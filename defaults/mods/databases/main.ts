@@ -42,7 +42,7 @@ import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { props, theme, nextCommand, shared, setShared, closeOverlay, exec } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { readShared, writeShared } from "./guard.ts";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Conn, Kind } from "./kinds.ts";
@@ -239,7 +239,7 @@ export default class Databases extends View {
       // Each listed kind's client looked for once the folder's environment is known: a row whose
       // client is missing says so before it's connected to.
       await env;
-      await Promise.all([...new Set(connList(this).map((c) => c.kind))].map((k) => clientOf(this, k)));
+      await Promise.all(Arr.map([...new Set(Arr.map(connList(this), (c) => c.kind))], (k) => clientOf(this, k)));
       cx.notify();
     });
     cx.timer.every(1000, (cx) => this.tick(cx));
@@ -351,7 +351,7 @@ export default class Databases extends View {
 
   /** A table's rows as last known (its count or the server's estimate). */
   tableRows(t: Pick<TableRef, "schema" | "name">): number | null {
-    return this.catalog.tables.find((x) => x.name === t.name && x.schema === t.schema)?.rows ?? null;
+    return Option.getOrUndefined(Arr.findFirst(this.catalog.tables, (x) => x.name === t.name && x.schema === t.schema))?.rows ?? null;
   }
 
   refreshCatalog(cx: Context): void {
@@ -369,7 +369,7 @@ export default class Databases extends View {
   addQuery(text: string, cx: Context): QueryTab {
     const q = newQuery(this, text);
     // The caret after the text: what's typed or dropped next follows it.
-    const lines = text.split("\n");
+    const lines = Str.split(text, "\n");
 
     q.editor.set_cursor(lines.length - 1, lines.at(-1)?.length ?? 0);
     this.queries.push(q);
@@ -412,7 +412,7 @@ export default class Databases extends View {
   }
 
   setTablesTab(key: string, _cx: Context): void {
-    const tab = TABLES_TABS.find((x) => x === key);
+    const tab = Option.getOrUndefined(Arr.findFirst(TABLES_TABS, (x) => x === key));
 
     if (tab !== undefined) this.tablesTab = tab;
 
@@ -424,7 +424,7 @@ export default class Databases extends View {
   }
 
   setStructTab(key: string, _cx: Context): void {
-    const tab = STRUCT_TABS.find((x) => x === key);
+    const tab = Option.getOrUndefined(Arr.findFirst(STRUCT_TABS, (x) => x === key));
 
     if (tab !== undefined) this.structTab = tab;
 
@@ -446,7 +446,7 @@ export default class Databases extends View {
 
     if (set === null || s === null || this.struct.table?.name !== this.rows.browse?.table.name) return undefined;
 
-    return set.columns.map((c) => s.columns.find((x) => x.name === c)?.type ?? "");
+    return Arr.map(set.columns, (c) => Option.getOrUndefined(Arr.findFirst(s.columns, (x) => x.name === c))?.type ?? "");
   }
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */

@@ -6,6 +6,7 @@ import { div, svg } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr } from "effect";
 import type { Kind } from "./kinds.ts";
 import { ART, chip } from "./kit.ts";
 import { NIX_NOTE, PROGRAMS, installHow, installLine } from "./clients.ts";
@@ -32,7 +33,7 @@ export function missingView(t: Theme, v: DbView, id: string, kind: Kind, where: 
 
   return v_flex().size_full().items_center().justify_center().gap(8).px(16).text_size(11)
     .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.muted).opacity(0.6))
-    .child(div().text_center().text_color(t.muted).child(`${PROGRAMS[kind].join(" or ")} isn't here`))
+    .child(div().text_center().text_color(t.muted).child(`${Arr.join(PROGRAMS[kind], " or ")} isn't here`))
     .child(div().text_center().text_color(t.dim).child(where))
     .when(note !== null, (el) => el.child(div().text_center().text_color(t.dim).child(note ?? "")))
     .child(v_flex().id(`${id}-copy`).w_full().max_w(420).gap(2).px(8).py(4).cursor_pointer().border(1).border_color(edge(t))

@@ -9,6 +9,7 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr, String as Str } from "effect";
 import { chip, dither, pip, popupScrim, stop } from "./kit.ts";
 import { changeAt, changesWord, counted } from "./edits.ts";
 import type { SaveStatement } from "./save-sql.ts";
@@ -65,9 +66,9 @@ function tokenColor(t: Theme, tok: string): Color {
 
   if (/^["`]/.test(tok)) return t.ansi6;
 
-  if (/^-?\d/.test(tok) || tok.startsWith(":")) return t.ansi3;
+  if (/^-?\d/.test(tok) || Str.startsWith(":")(tok)) return t.ansi3;
 
-  if (KEYWORDS.has(tok.toLowerCase())) return t.ansi5;
+  if (KEYWORDS.has(Str.toLowerCase(tok))) return t.ansi5;
 
   return t.foreground;
 }
@@ -77,7 +78,7 @@ export function statementLines(sql: string): string[][] {
   const lines: string[][] = [[]];
 
   for (const tok of sql.match(TOKENS) ?? []) {
-    const word = tok.toUpperCase();
+    const word = Str.toUpperCase(tok);
     const breaks = word === "SET" || word === "WHERE" || word === "AND";
     const line = lines.at(-1) ?? [];
 
@@ -92,8 +93,8 @@ export function statementLines(sql: string): string[][] {
 }
 
 function sqlBlock(t: Theme, id: string, sql: string, dim: boolean): Element {
-  return v_flex().id(id).children(statementLines(sql).map((toks, i) => h_flex().id(`${id}-${i}`)
-    .children(toks.map((tok) => div().flex_none().text_color(dim ? t.dim : tokenColor(t, tok)).child(tok.replace(/ /g, " "))))));
+  return v_flex().id(id).children(Arr.map(statementLines(sql), (toks, i) => h_flex().id(`${id}-${i}`)
+    .children(Arr.map(toks, (tok) => div().flex_none().text_color(dim ? t.dim : tokenColor(t, tok)).child(Str.replace(/ /g, " ")(tok))))));
 }
 
 /** One statement of the review: its key above an UPDATE, the guard under it, BEGIN and COMMIT plain. */
@@ -122,7 +123,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
 
   if (r === null) return div();
 
-  const rowsChanged = new Set(r.statements.filter((s) => s.role === "update").map((s) => s.row)).size;
+  const rowsChanged = new Set(Arr.map(Arr.filter(r.statements, (s) => s.role === "update"), (s) => s.row)).size;
   const err = r.error;
   const where = v.active?.name ?? "the database";
 
@@ -141,7 +142,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
     .child(div().text_size(10).text_color(t.dim).child("Each UPDATE finds its row by its key and checks it still holds what was read. If one changes no row or fails, nothing is saved."))
     .child(div().relative().h(2).flex_none().child(dither(edge(t), 1)))
     .child(v_flex().id("db-review-list").flex_1().min_h(0).overflow_y_scroll().gap(2).py(4)
-      .children(r.statements.map((s, i) => reviewRow(t, s, i, err?.index === i, err?.message ?? ""))))
+      .children(Arr.map(r.statements, (s, i) => reviewRow(t, s, i, err?.index === i, err?.message ?? ""))))
     .when(err !== null && (err.index === null || r.statements[err.index] === undefined), (el) => el.child(div().text_color(t.ansi1).child(`✕ ${err?.message ?? ""}`)))
     .child(foot);
 

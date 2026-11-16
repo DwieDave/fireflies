@@ -9,7 +9,7 @@
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { exec, readTextFile } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { isSslMode, newId, speaksTls, sslProblem, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
@@ -33,7 +33,7 @@ import type { default as DbView } from "./main.ts";
 
 /** The list the Connections panel shows, in order. */
 export function connList(v: DbView): Conn[] {
-  return [...v.saved, ...v.sent, ...v.found.map((f) => f.conn)];
+  return [...v.saved, ...v.sent, ...Arr.map(v.found, (f) => f.conn)];
 }
 
 /** The connection under the cursor. */
@@ -58,7 +58,7 @@ export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = 
 
   const files = await exec("sh", ["-c", FIND_SCRIPT, "ff-find", folder]).catch(() => null);
 
-  lists.push((files?.stdout ?? "").split("\n").filter(Boolean).map((p) => foundFile(p, folder)));
+  lists.push(Arr.map(Arr.filter(Str.split((files?.stdout ?? ""), "\n"), Boolean), (p) => foundFile(p, folder)));
   setFound(v, mergeFound(lists));
   cx.notify();
 
@@ -78,11 +78,11 @@ export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = 
 function setFound(v: DbView, list: readonly Found[]): void {
   const at = connAtCursor(v)?.id;
 
-  v.found = list.filter((f) => !v.saved.some((s) => where(s) === where(f.conn) && s.kind === f.conn.kind));
+  v.found = Arr.filter(list, (f) => !Arr.some(v.saved, (s) => where(s) === where(f.conn) && s.kind === f.conn.kind));
 
   for (const f of v.found) if (f.secret !== null && Str.isNonEmpty(f.secret)) v.secrets.set(f.conn.id, f.secret);
 
-  const again = connList(v).findIndex((c) => c.id === at);
+  const again = Option.getOrElse(Arr.findFirstIndex(connList(v), (c) => c.id === at), () => -1);
 
   if (again >= 0) v.connAt = again;
 }
@@ -112,7 +112,7 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
   const picked = v.picked.get(conn.id);
   const kept = picked === undefined ? conn : withDatabase(conn, picked);
 
-  v.sent = [kept, ...v.sent.filter((c) => c.id !== conn.id)];
+  v.sent = [kept, ...Arr.filter(v.sent, (c) => c.id !== conn.id)];
   v.connAt = v.saved.length;
   v.panel = "conns";
   void connect(v, kept, cx);
@@ -186,7 +186,7 @@ function placed(v: DbView, c: Conn, user: string | undefined, database: string |
 
   if (database !== undefined) next.database = database;
 
-  const swap = (list: Conn[]): Conn[] => list.map((x) => (x.id === c.id ? next : x));
+  const swap = (list: Conn[]): Conn[] => Arr.map(list, (x) => (x.id === c.id ? next : x));
 
   v.saved = swap(v.saved);
   v.sent = swap(v.sent);
@@ -281,7 +281,7 @@ export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<st
 
   const said = `${f.missing} (${clientFrom(v, f)})`;
 
-  v.logLine({ sql: `looking for ${PROGRAMS[c.kind].join(" / ")}`, ok: false, ms: 0, said, conn: c.name, run: runLine(v, c.kind, f, []) });
+  v.logLine({ sql: `looking for ${Arr.join(PROGRAMS[c.kind], " / ")}`, ok: false, ms: 0, said, conn: c.name, run: runLine(v, c.kind, f, []) });
 
   return said;
 }
@@ -421,13 +421,13 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
   if (v.active?.id === c.id) v.active = kept;
 
-  const list = await changePinned(v, (now) => [...now.filter((x) => x.id !== id), kept], cx);
+  const list = await changePinned(v, (now) => [...Arr.filter(now, (x) => x.id !== id), kept], cx);
 
   if (list === null) return;
 
-  v.found = v.found.filter((f) => f.conn.id !== c.id);
-  v.sent = v.sent.filter((s) => s.id !== c.id);
-  v.connAt = Math.max(0, v.saved.findIndex((x) => x.id === id));
+  v.found = Arr.filter(v.found, (f) => f.conn.id !== c.id);
+  v.sent = Arr.filter(v.sent, (s) => s.id !== c.id);
+  v.connAt = Math.max(0, Option.getOrElse(Arr.findFirstIndex(v.saved, (x) => x.id === id), () => -1));
   v.say(`pinned ${c.name}: every Databases window lists it${kube !== null ? ` · its password is read from secret ${kube.name} at each connect` : secret !== null && Str.isNonEmpty(secret) ? " · its password is in the keychain" : ""}${c.forward !== undefined ? ` · its forward (${c.forward.target}) is offered when its port is down` : ""}`, "done");
   cx.notify();
 }
@@ -437,13 +437,13 @@ export async function remove(v: DbView, c: Conn, cx: Context): Promise<void> {
   cx = v.held(cx);
 
   if (c.origin !== "saved") {
-    v.sent = v.sent.filter((s) => s.id !== c.id);
+    v.sent = Arr.filter(v.sent, (s) => s.id !== c.id);
     cx.notify();
 
     return;
   }
 
-  if ((await changePinned(v, (now) => now.filter((s) => s.id !== c.id), cx)) === null) return;
+  if ((await changePinned(v, (now) => Arr.filter(now, (s) => s.id !== c.id), cx)) === null) return;
 
   await deleteSecret(IO, c.id);
   await clearHistory(IO, dataHome(), c.id);

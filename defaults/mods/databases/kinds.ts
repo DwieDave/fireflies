@@ -3,7 +3,7 @@
 // or in memory while the window is open: secrets.ts), and how one is named and
 // placed in words. Pure, so scripts/databases-*.test.ts check it.
 
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, object } from "./guard.ts";
 import type { KubeForward, KubeSource } from "./kube.ts";
@@ -42,7 +42,7 @@ export const speaksTls = (kind: Kind): boolean => kind === "postgres" || kind ==
 
 /** Why `value` (a connect request's, any text) can't be an sslmode, or null. */
 export function sslProblem(value: string): string | null {
-  return isSslMode(value) ? null : `sslmode ${JSON.stringify(value)} isn't one of ${SSL_MODES.join(", ")}`;
+  return isSslMode(value) ? null : `sslmode ${JSON.stringify(value)} isn't one of ${Arr.join(SSL_MODES, ", ")}`;
 }
 
 /** Where a connection came from: saved by the person, found in the shown
@@ -115,14 +115,14 @@ export const DEFAULT_PORT = { postgres: 5432, mysql: 3306, sqlite: 0, libsql: 0 
 export const onFile = (c: Pick<Conn, "kind" | "url">): boolean => c.kind === "sqlite" || (c.kind === "libsql" && (c.url === undefined || Str.isEmpty(c.url)));
 
 /** The last part of a path. */
-export const baseName = (path: string): string => path.split("/").filter(Boolean).at(-1) ?? path;
+export const baseName = (path: string): string => Arr.filter(Str.split(path, "/"), Boolean).at(-1) ?? path;
 
 /** `~/…` for a path under home. */
-export const tilde = (path: string, home: string): string => (Str.isNonEmpty(home) && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
+export const tilde = (path: string, home: string): string => (Str.isNonEmpty(home) && Str.startsWith(`${home}/`)(path) ? `~${Str.slice(home.length)(path)}` : path);
 
 /** Where a connection points, in a few words: "localhost:5432/lantern", "~/code/x/data.db", "edge.turso.io". */
 export function where(c: Conn, home = ""): string {
-  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return c.url.replace(/^[a-z]+:\/\//, "").replace(/\/$/, "");
+  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return Str.replace(/\/$/, "")(Str.replace(/^[a-z]+:\/\//, "")(c.url));
 
   if (onFile(c)) return tilde(c.path ?? "", home);
 
@@ -134,7 +134,7 @@ export function where(c: Conn, home = ""): string {
 
 /** A new connection's id: its kind and a few random letters (also the keychain item's account). */
 export function newId(kind: Kind, random: () => number = Math.random): string {
-  const letters = Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)] ?? "x").join("");
+  const letters = Arr.join(Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)] ?? "x"), "");
 
   return `${KIND_MARK[kind]}-${letters}`;
 }
