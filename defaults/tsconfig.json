@@ -3,7 +3,8 @@
     "The type check of the shipped mods (`just typecheck`, and tests/mods_typecheck.rs",
     "inside `cargo test`). Not shipped: build.rs embeds defaults/mods, not this file.",
     "",
-    "`include` lists the TypeScript the check covers: every .ts file of the mods,",
+    "`include` lists the TypeScript the check covers: every .ts file of the mods",
+    "and of lib/ (@fireflies/kit, the mods' Effect kit: docs/effect-mods.md),",
     "checked strictly (win98/art holds Bun scripts that draw its pictures, not mod",
     "code, so it is left out). The .js files are not checked (checkJs off) until their mod",
     "is converted; a .ts file importing one still sees its inferred types.",
@@ -42,6 +43,6 @@
     "verbatimModuleSyntax": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["mods/**/*.ts", "frame/**/*.ts", "../target/mod-types/gpui-kit.d.ts"],
+  "include": ["mods/**/*.ts", "frame/**/*.ts", "lib/**/*.ts", "../target/mod-types/gpui-kit.d.ts"],
   "exclude": ["mods/**/gpui-kit.d.ts", "frame/**/gpui-kit.d.ts", "mods/win98/art"]
 }

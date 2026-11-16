@@ -2,10 +2,17 @@
   "name": "fireflies-tools",
   "private": true,
   "type": "module",
-  "description": "Developer tools for the mods' TypeScript: the type check and the lint (not shipped).",
+  "description": "Developer tools for the mods' TypeScript: the type check, the lint, and the Effect the mods' kit is built on (not shipped from here: the app embeds its bundle).",
   "devDependencies": {
+    "@effect/tsgo": "0.69.0",
+    "@fireflies/kit": "workspace:*",
     "@oxlint/plugins": "1.93.0",
+    "effect": "4.1.4",
     "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "typescript": "7.0.2"
-  }
+  },
+  "workspaces": [
+    "defaults/lib/@fireflies/*"
+  ]
 }
