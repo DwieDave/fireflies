@@ -17,7 +17,7 @@ import { lookHints } from "./drawn-tabs.ts";
 import { renderedView } from "./md-pane.ts";
 import { answerClose } from "./pane-tabs.ts";
 import { previewView } from "./preview-pane.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const DRAWER = 132;
 

@@ -18,7 +18,7 @@ import { poll, startFollowing } from "./reading.ts";
 import { askAgent, pickNode } from "./navigate.ts";
 import type { default as Agents } from "./main.ts";
 import { statsBody, tokens } from "./stats-view.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 export function drawToolbar(v: Agents, t: Theme, list: readonly ClaudePane[], pane: ClaudePane | null): Element {
   const counts = v.data ? [...v.data.agents.values()].filter((a) => a.status === "working").length : 0;

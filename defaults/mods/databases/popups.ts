@@ -28,7 +28,7 @@ import type { default as DbView } from "./main.ts";
 import type { Box, Rect } from "./menu-place.ts";
 import { placeMenu } from "./menu-place.ts";
 import { keyedAnchor, rowAnchor, tabAnchor } from "./menu-anchor.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
 function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {

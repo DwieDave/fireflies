@@ -63,7 +63,7 @@ import { watchPrompts } from "./prompt.ts";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
 import type { Gap, StakeAt } from "./tabdrag.ts";
 import { readLaunchers } from "./launchers.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
 

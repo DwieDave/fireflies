@@ -14,7 +14,7 @@ import { COLS, NUM_W, numCols } from "./state.ts";
 import { isFlat } from "./listing.ts";
 import { sortPortsBy, sortProcsBy, toggleFlat } from "./actions.ts";
 import type { default as ProcsDeck } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A head that sorts on a click: its label, lit with its arrow while it sorts. */
 function sortHead(v: ProcsDeck, t: Theme, id: string, label: string, on: Dir | null, go: () => void): Element {

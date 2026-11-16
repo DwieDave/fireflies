@@ -23,7 +23,7 @@ import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import type { Question, QuestionRequest } from "./request.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The dialog's props: the terminal whose questions it answers, its overlay. */
 const isAskProps = object({}, { terminal: isString, overlay: isString });

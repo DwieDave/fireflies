@@ -22,7 +22,7 @@ import type { Guarded } from "./guard.ts";
 import { argsOf, commandOf, isStoredCommand, storedCommand } from "./guards.ts";
 import type { Command } from "./guards.ts";
 import { ART, dither } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // The level's theme color: the same words the fireflies use for status.
 const COLOR: ReadonlyMap<string, "blocked" | "working" | "done" | "accent"> = new Map([["error", "blocked"], ["warning", "working"], ["success", "done"], ["info", "accent"]]);

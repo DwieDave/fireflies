@@ -15,7 +15,7 @@ import { isString, object } from "./guard.ts";
 import { spaceFolder } from "./kit.ts";
 import { openWorktrees } from "./git.ts";
 import type { WorktreesAsk } from "./git.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A saved worktrees pane's props. */
 const isRoleProps = object({}, { role: isString });

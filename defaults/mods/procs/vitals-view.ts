@@ -16,7 +16,7 @@ import type { Rect } from "./state.ts";
 import { SPARK } from "./state.ts";
 import { dither, dotCell, zoom } from "./paint.ts";
 import type { default as ProcsDeck } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const pc = (v: number): `${number}%` => `${v}%`;
 

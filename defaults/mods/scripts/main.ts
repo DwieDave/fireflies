@@ -55,7 +55,7 @@ import { outputKey, typedKey } from "./input.ts";
 import type { RunMenu } from "./run-menu.ts";
 import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [

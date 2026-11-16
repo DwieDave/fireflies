@@ -17,7 +17,7 @@ import { BAR, dither, focusOn, stop, zoom } from "./pane-kit.ts";
 import { closeCard } from "./card.ts";
 import { focusText } from "./md-pane.ts";
 import { closeTab, moveTab, otherEditor, popIn, popOut, select } from "./pane-tabs.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Opens the menu of tab `index` (the shown one by default): a right-click
  *  on it (at the press `near`, pane px), space b m, the tab-menu command. */

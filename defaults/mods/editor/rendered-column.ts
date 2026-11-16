@@ -11,7 +11,7 @@ import type { Unit } from "./live.ts";
 import { rowStarts } from "./live.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addView, emptyView, kindsView, unitView, ADD_H, KINDS_H } from "./rendered-units.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const PAD_TOP = 18;
 const PAD_BOTTOM = 60;

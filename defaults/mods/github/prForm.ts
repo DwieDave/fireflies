@@ -24,7 +24,7 @@ import type { Choice, Command, Field, FormHost, Outcome, Values } from "./form-f
 import { flagIn, listIn, textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import { panel, empty, dither } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const CHOICES = `query($owner: String!, $name: String!) { viewer { login }
   repository(owner: $owner, name: $name) {

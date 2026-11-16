@@ -9,7 +9,7 @@ import { place, canvas, sky, dims, ZOOM } from "./graph.ts";
 import { stop, PLACEHOLDER } from "./state.ts";
 import { pickNode, saveState, zoomTo } from "./navigate.ts";
 import type { default as Agents } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Where the graph sits: dragged there, else at the left, the whole graph centred when it fits, else the session node. */
 export function panFor(v: Agents, height: number): Point {

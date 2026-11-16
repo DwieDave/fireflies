@@ -16,7 +16,7 @@ import { dither, eyebrow, toneColor } from "./paint.ts";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { rightPress } from "./run-menu.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A word that acts on a click (‹ back, cancel): dim, lit under the pointer. */
 export function actionChip(t: Theme, id: string, label: string, color: Color | null, go: (cx: Context) => void) {

@@ -18,7 +18,7 @@ import { nativeId } from "./viewer-native.ts";
 import { actual, current, fit, pannable } from "./viewer-pan.ts";
 import { emptyView, oneLineView, standIn } from "./viewer-bars.ts";
 import type { default as Viewer } from "./viewer.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 /** Where the view is when part of the picture is out of it: dithered rails on the
  *  right and bottom edges, as the Markdown viewer's scrollbar. */

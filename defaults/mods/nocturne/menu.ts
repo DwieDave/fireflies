@@ -43,7 +43,7 @@ import { onShelf, tabKey } from "./pins.ts";
 import { tabMove, SPACE_ROWS_KEY } from "./tabmove.ts";
 import { isHelpLine } from "./nav.ts";
 import type { HelpLine } from "./nav.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A menu row's command arguments (the commands these rows run). */
 type MenuArgs = { terminal?: string; pane?: string | null; id?: string; space?: string | null; direction?: "right" | "down"; to?: "menu" | "program"; tab?: string };

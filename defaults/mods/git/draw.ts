@@ -14,7 +14,7 @@ import type { GraphRow } from "./graph.ts";
 import { segments } from "./graph.ts";
 import type { DiffRow } from "./patch.ts";
 import { keysHint } from "./keyhelp.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "./layout-look.ts";
 
 export const ART = "mods/nocturne/art";

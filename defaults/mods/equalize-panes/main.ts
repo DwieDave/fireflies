@@ -24,7 +24,7 @@ import type { Guarded } from "./guard.ts";
 import { isString, object } from "./guard.ts";
 import type { ScopeRow } from "./scopes.ts";
 import { rows, shortcut } from "./scopes.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 import { flat } from "./layout-look.ts";
 
 const ROW = 26;

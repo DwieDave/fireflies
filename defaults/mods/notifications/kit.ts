@@ -12,7 +12,7 @@ import type { ItemType } from "./model.ts";
 
 export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const ART = "mods/nocturne/art";
 export const ICON = (name: string): string => `mods/workspace-chrome/${name}.svg`;

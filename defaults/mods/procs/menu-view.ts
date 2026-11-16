@@ -18,7 +18,7 @@ import { menuEntries, runAct } from "./menu.ts";
 import { dither, unzoom } from "./paint.ts";
 import { moveTo, procOf } from "./listing.ts";
 import type { default as ProcsDeck } from "./main.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 export const MENU_W = 288;
 export const MENU_ROW = 20;

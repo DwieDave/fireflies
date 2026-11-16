@@ -26,7 +26,7 @@ import { prMenu, prRowMenu } from "./pr-menu.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
 const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";

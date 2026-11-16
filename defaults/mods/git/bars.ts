@@ -20,7 +20,7 @@ import type { default as GitView } from "./main.ts";
 import { openPane, quit } from "./panes.ts";
 import { reload } from "./reads.ts";
 import { inPane, movable, move } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A bar label: the first words before "/" or "…". */
 export const shortLabel = (s: string) => (s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0]?.split(",")[0]?.split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0] ?? "").toLowerCase();

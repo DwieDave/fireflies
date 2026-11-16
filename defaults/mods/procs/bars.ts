@@ -18,7 +18,7 @@ import { badge } from "./procs-view.ts";
 import { openMenu } from "./menu-view.ts";
 import { inPane, move } from "./place.ts";
 import type { default as ProcsDeck } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
   const box = v_flex().h(h).flex_none().items_center().justify_center().gap(8).px(24).text_size(11).text_color(t.dim);

@@ -19,7 +19,7 @@ import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { div, svg } from "gpui-kit";
 import type { Theme } from "herdr";
 import { home, notify } from "herdr";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The more button's mark: three dots on the pixel grid. */
 const MORE = "mods/editor/art/more.svg";

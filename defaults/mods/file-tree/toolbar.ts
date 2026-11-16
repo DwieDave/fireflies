@@ -20,7 +20,7 @@ import type { NewKind } from "./fit.ts";
 import { lensLayout, toolbarFit, KEYS, ADDS } from "./fit.ts";
 import { lookSide } from "./split-size.ts";
 import { deleteQuestion } from "./ops.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function toolChip(v: Files, t: Theme, id: string, label: string, action: (cx: Context) => void, on = true): Element {
   return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()

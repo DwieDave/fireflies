@@ -13,7 +13,7 @@ import type { Status, Theme } from "herdr";
 import { ART, dither, pip } from "./kit.ts";
 import type { Agent, Run, Snapshot } from "./claude.ts";
 import { ranFor, span } from "./claude.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // Sizes at zoom 1; dims(z) scales them (zooming lays the graph out again,
 // text and all, so it stays crisp).

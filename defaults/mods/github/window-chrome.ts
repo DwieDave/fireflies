@@ -17,7 +17,7 @@ import Actions from "./actions.ts";
 import Projects from "./projects.ts";
 import type { default as GitHub } from "./main.ts";
 import { inPane, move } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Narrower than this (a pane), the tabs not shown say only their number. */
 export const NARROW = 640;

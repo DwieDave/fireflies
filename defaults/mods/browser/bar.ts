@@ -15,7 +15,7 @@ import { toggleInspector } from "./inspector.ts";
 import { openTabMenu } from "./tab-menu.ts";
 import { ICONS, available } from "./props.ts";
 import type Browser from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** An address split for the bar: host, then the rest. */
 export function parts(href: string | null): readonly [string, string] {

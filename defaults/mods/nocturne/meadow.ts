@@ -20,7 +20,7 @@ import type { Reach, Landing } from "./sky-plan.ts";
 import { flyActs } from "./sky-keys.ts";
 import { shelfView } from "./shelf.ts";
 import type Sky from "./sky.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 /** A 12 px check on a dark plate, set on a done firefly's mark. */
 export function doneBadge(t: Theme): Element {

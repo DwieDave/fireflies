@@ -107,7 +107,7 @@ import { procsView } from "./procs-view.ts";
 import { vitalsStrip } from "./vitals-view.ts";
 import { portsView } from "./ports-view.ts";
 import { footBar, headBar } from "./bars.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export default class ProcsDeck extends View {
   static bound = false;

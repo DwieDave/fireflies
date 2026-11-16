@@ -25,7 +25,7 @@ import { askBar, overBody } from "./popups.ts";
 import { divider } from "./dividers.ts";
 import { GAP_X, GAP_Y, NARROW, wideDividers } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The top bar: where the window drags from (presses on it aren't stopped). First after the
  *  title, the connection's state (connmark.ts); then which connection, where, from where. */

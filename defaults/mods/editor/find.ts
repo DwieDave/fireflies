@@ -12,7 +12,7 @@ import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
 import { dither, FIND, focusOn } from "./pane-kit.ts";
 import { closeCard, showCard } from "./card.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // The find line's stops in tab order (form-keys.ts): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.

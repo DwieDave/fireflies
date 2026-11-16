@@ -30,7 +30,7 @@ import type { KeyEntry, MapRow } from "./keymap.ts";
 import { ART, dither, pip, tracked } from "./kit.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import type { HelpLine } from "./nav.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const W = (name: string) => `mods/workspace-chrome/${name}.svg`;
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();

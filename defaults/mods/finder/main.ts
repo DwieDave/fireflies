@@ -37,7 +37,7 @@ import type { Guarded } from "./guard.ts";
 import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote, isPreviewFile } from "./logic.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 import { flat } from "./layout-look.ts";
 
 const ROW = 28;

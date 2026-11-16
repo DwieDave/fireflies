@@ -15,7 +15,7 @@ import { tabIcon } from "./publish.ts";
 import { openTabMenu } from "./tab-menu.ts";
 import { ICONS, WEB_MARK } from "./props.ts";
 import type Browser from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.ts):
  *  a 2 px accent bar capped top and bottom, at the left edge of its box. */

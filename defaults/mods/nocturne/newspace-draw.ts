@@ -10,7 +10,7 @@ import type { SpaceInfo, Theme } from "herdr";
 import { dither } from "./kit.ts";
 import { tilde, isPath, folderName, tail, parentOf } from "./folderlist.ts";
 import type { RankedRow } from "./folderlist.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A row's height, the head's and the foot's (layout px). */
 export const ROW = 26;

@@ -43,7 +43,7 @@ import { FOLD_W, HANDLES, GAP, DETAIL_W, bar, columnRows, columns, detail, menuP
 import { options, submitValue } from "./projects-menus.ts";
 import { addDraft } from "./projects-edits.ts";
 import { key } from "./projects-keys.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const LIST_EVERY = 10 * 60000; // the picker's list is read again this rarely
 

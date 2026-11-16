@@ -11,7 +11,7 @@ import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Kind } from "./kinds.ts";
 import { KIND_MARK } from "./kinds.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "./layout-look.ts";
 
 export const ART = "mods/nocturne/art";

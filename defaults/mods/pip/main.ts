@@ -68,7 +68,7 @@ import { GLYPH_DROP, lift, mix, seamTone } from "./look.ts";
 import { flat } from "./layout-look.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 const ID = "pip";
 const BAR = 22;

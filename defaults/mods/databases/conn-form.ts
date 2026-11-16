@@ -27,7 +27,7 @@ import { test } from "./conns.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "./keyhelp.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The form's text fields. */
 type Field = "name" | "host" | "port" | "user" | "database" | "path" | "url" | "password";

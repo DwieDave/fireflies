@@ -39,7 +39,7 @@ import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, g
 import type { FolderRow, Near, RankedRow, RowFrom } from "./folderlist.ts";
 import { FOOT, HEAD, ROW, fieldBox, pickRow, pickerFoot, pickerHead, sayNow } from "./newspace-draw.ts";
 import type { PickRow } from "./newspace-draw.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";
