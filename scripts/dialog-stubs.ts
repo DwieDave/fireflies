@@ -65,7 +65,7 @@ class Input { value_ = ""; focused = 0; handlers: Record<string, any> = {}; cons
   static new(o?: any) { return new Input(o); }
   on(ev: string, f: any) { this.handlers[ev] = f; } focus() { this.focused++; } value() { return this.value_; }
   set_value(v: string) { this.value_ = v; } set_selected_range() {} release() {} set_auto_grow() {} }
-class Scroll { items: number[] = []; static new() { return new Scroll(); } scroll_to_item(i: number) { this.items.push(i); } }
+class Scroll { items: number[] = []; y = 0; static new() { return new Scroll(); } scroll_to_item(i: number) { this.items.push(i); } offset() { return { x: 0, y: this.y }; } }
 
 mock.module("gpui-kit", () => ({
   View: class {}, div: el, svg: el, image: el,

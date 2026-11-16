@@ -33,7 +33,7 @@
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { v_flex } from "gpui-base";
+import { ScrollHandle, v_flex } from "gpui-base";
 import { closeOverlay, nextCommand, shared, setShared, theme } from "herdr";
 import type { Theme } from "herdr";
 import { readShared, readSharedMap, writeShared } from "./guard.ts";
@@ -52,6 +52,8 @@ import { enterRow, escapeKey, groups, runAct, showOutput } from "./actions.ts";
 import { emptyView, runRow, scriptRow, section, tally, placeRows } from "./rows-view.ts";
 import { footBar, helpView, outputView, passwordBar, deckHead, filterLine } from "./bars.ts";
 import { outputKey, typedKey } from "./input.ts";
+import type { RunMenu } from "./run-menu.ts";
+import { openRunMenu, rightPress, runMenuKey, runMenuView } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
@@ -74,6 +76,11 @@ export default class ScriptsDeck extends View {
   slot: string | null = null;
   /** A pane's height, as drawn (an overlay is H tall). */
   height = 0;
+  /** The deck's width in a pane (0: the window's, DECK_W). */
+  width = 0;
+  /** A run's menu (run-menu.ts), and the runs' scroll (where a key's menu finds its row). */
+  runMenu: RunMenu | null = null;
+  runsScroll = ScrollHandle.new();
   folder: string | null = null;
   on: string | null = null;
   key = ":";
@@ -211,6 +218,9 @@ export default class ScriptsDeck extends View {
     const move = (d: number) => { if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + d)); };
     const done = () => { cx.stop_propagation(); cx.notify(); };
 
+    // A run's menu has every key while it's open.
+    if (this.runMenu) return runMenuKey(this, this.runMenu, e, cx);
+
     // cmd-k ?: the keys from anywhere, the filter too (where ? types), as the editor's.
     if (cmd && !m.alt && k === "k") {
       this.chord = Date.now();
@@ -299,6 +309,7 @@ export default class ScriptsDeck extends View {
     else if (k === "end" || (k === "g" && m.shift)) move(n);
     else if (k === "home" || k === "g") move(-n);
     else if (k === "w" && cur?.kind === "run") this.act("watch", cur.r, cx);
+    else if (k === "m" && cur?.kind === "run") openRunMenu(this, this.cursor);
     else if (k === "x" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
     else if (k === "r" && m.shift && cur?.kind === "run") this.act("again", cur.r, cx);
     else if (k === "q") {
@@ -398,12 +409,19 @@ export default class ScriptsDeck extends View {
           this.height = h;
           cx.notify();
         }
+
+        if (inPane(this)) this.width = unzoom(drawn.width);
       })
       .child(deckHead(this, t))
       .when(all.length > 0, (el) => el
         .child(section(t, "runs", tally(this, t, all)))
-        .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll()
-          .children(all.map((r, i) => runRow(this, t, r, i, this.cursor === i))))
+        .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll().track_scroll(this.runsScroll)
+          .children(all.map((r, i) => runRow(this, t, r, i, this.cursor === i)
+            .on_mouse_down("right", (e, cx) => {
+              cx.stop_propagation();
+              rightPress(this, i, e);
+              cx.notify();
+            }))))
         .child(div().h(4).flex_none()))
       .when(this.help, (el) => el.child(this.helpView(t, INPUT + 4 + listH)))
       .when(!this.help && o !== null, (el) => (o ? el.child(outputView(this, t, INPUT + 4 + listH, o)) : el))
@@ -423,6 +441,11 @@ export default class ScriptsDeck extends View {
           })
           .children(list)
         : v_flex().h(listH).flex_none().mt(4).child(emptyView(this, t)))
-      .child(this.foot(t, cur));
+      .child(this.foot(t, cur))
+      .map((el) => {
+        const menu = this.runMenu ? runMenuView(this, t, this.runMenu) : null;
+
+        return menu ? el.child(menu) : el;
+      });
   }
 }

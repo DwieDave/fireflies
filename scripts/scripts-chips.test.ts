@@ -162,6 +162,33 @@ test("again: an ended run starts again at once (click, R, cmd-r); a running one 
   expect(jobs()).toEqual(["kill+rm+run"]);
 });
 
+test("a run's menu: m under the cursor's run, a right-click at the press; its entries are the chips', by key or click", () => {
+  const o = open();
+  o.d.cursor = 1; // t2, ended
+  press(o, "m");
+  const { HEAD, SECTION, ROW } = { HEAD: 36, SECTION: 24, ROW: 26 };
+  expect(o.d.runMenu).toMatchObject({ address: "t2", at: { x: 0, y: HEAD + SECTION + ROW, w: 420, h: ROW } });
+  let r: any = o.draw();
+  // Under the row, at the deck's margin.
+  expect(find(r, "rm-menu").calls.top[0]).toBe(HEAD + SECTION + 2 * ROW);
+  expect(find(r, "rm-menu").calls.left[0]).toBe(8);
+  expect(texts(find(r, "rm-menu"))).toEqual(expect.arrayContaining(["Its output", "Run it again", "Remove it from the list"]));
+  // esc closes it; the deck stays.
+  press(o, "escape");
+  expect(o.d.runMenu).toBeNull();
+  expect(st.closed).toEqual([]);
+  // A right press 30 px into the first run's row, 10 down: the menu just past it; x (remove? no: t1 runs: stop asks).
+  find(o.draw(), "run-0").calls.on_mouse_down[1]({ position: { x: 0, y: 0 }, local_position: { x: 27, y: 9 } }, o.c);
+  expect(o.d.cursor).toBe(0);
+  expect(o.d.runMenu.at).toEqual({ x: 30, y: HEAD + SECTION + 10 });
+  r = o.draw();
+  expect(find(r, "rm-menu").calls.left[0]).toBe(32);
+  // Its entry's key runs it: R on a running one asks first, as its chip does.
+  press(o, "R", { shift: true });
+  expect(o.d.runMenu).toBeNull();
+  expect(o.d.asking).toMatchObject({ address: "t1", what: "again" });
+});
+
 test("the ? list and the key bar name the chips' keys: w, x (remove · stop twice), R", () => {
   const list = deck.deckKeys("⌘").map(([a, b]: string[]) => `${a} ${b}`).join("\n");
   expect(list).toMatch(/^w watch/m);
