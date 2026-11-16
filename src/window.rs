@@ -1682,10 +1682,12 @@ impl AppWindow {
                 }
                 TerminalEvent::OpenFile(path, place) => {
                     let Some(viewer) = Viewer::of(path) else { return };
+                    let text = crate::links::preview_text(path);
                     let path = path.to_string_lossy().into_owned();
-                    // Markdown and what the preview shows open as a tab of the editor,
-                    // to be looked at (a picture drawn, Markdown in the editor's view for it).
-                    let (viewer, look) = editor_takes(viewer, this.folders.contains_key(Viewer::Editor.mod_name()));
+                    // Markdown, tables and patches open as a tab of the editor, to be
+                    // looked at (Markdown in the editor's view for it, a table drawn);
+                    // pictures, PDFs and the rest the preview shows in a preview pane.
+                    let (viewer, look) = editor_takes(viewer, text, this.folders.contains_key(Viewer::Editor.mod_name()));
                     // `path:42:7`: the editor goes there.
                     let extra = match place {
                         _ if look => json!({ "look": true }),
@@ -3106,6 +3108,31 @@ impl AppWindow {
             return match r.get("error") {
                 Some(e) => Err(e.to_string()),
                 None => Ok(json!({ "pane": id, "opened": "app", "path": path, "as": "tab" })),
+            };
+        }
+        // A preview pane in the tab shows the file instead of a new one opening
+        // (the one asked from, else the one that last had the keyboard, else
+        // the first): shared `preview.show` { slot, path, n, at } for its slot
+        // (the preview's main.ts). `in: "pane"`: a new preview beside.
+        let reuse = (viewer == Viewer::Preview && shown.is_none() && !tab && place != Some("pane"))
+            .then(|| pane.as_ref().and_then(|p| self.model.tab_of(p)))
+            .flatten()
+            .and_then(|t| {
+                let previews: Vec<(String, Value)> = t.root.panes().into_iter().filter_map(|n| match n.content() {
+                    Some(Content::Mod { name, props }) if name == viewer_mod => Some((n.id.clone(), props.clone())),
+                    _ => None,
+                }).collect();
+                let last = crate::mods::shared("preview.last");
+                tab_preview(&previews, on, pane.as_deref(), last.as_ref().and_then(Value::as_str))
+            });
+        if let Some((id, slot)) = reuse {
+            let n = crate::mods::shared("preview.show").and_then(|r| r.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+            let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+            crate::mods::set_shared("preview.show".into(), json!({ "slot": slot, "path": path, "n": n, "at": at }));
+            let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
+            return match r.get("error") {
+                Some(e) => Err(e.to_string()),
+                None => Ok(json!({ "pane": id, "opened": "app", "path": path, "as": "shown" })),
             };
         }
         if let Some(id) = shown {
@@ -6256,14 +6283,33 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 const WEB_MOD: &str = "browser";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
-/// Where a terminal's link to a file goes: Markdown and what the preview shows
-/// open in the editor (when its mod is there) as a tab to look at (`true`):
-/// Markdown in the editor's view for it, a picture or a PDF drawn by the preview's viewer.
-fn editor_takes(viewer: Viewer, editor: bool) -> (Viewer, bool) {
+/// Where a terminal's link to a file goes: Markdown and the preview's text
+/// kinds (`text`: CSV/TSV, a patch) open in the editor (when its mod is there)
+/// as a tab to look at (`true`): Markdown in the editor's view for it, a table
+/// drawn. Pictures, PDFs, databases, fonts and clips go to the preview pane.
+fn editor_takes(viewer: Viewer, text: bool, editor: bool) -> (Viewer, bool) {
     match viewer {
-        Viewer::Markdown | Viewer::Preview if editor => (Viewer::Editor, true),
+        Viewer::Markdown if editor => (Viewer::Editor, true),
+        Viewer::Preview if editor && text => (Viewer::Editor, true),
         other => (other, false),
     }
+}
+
+/// The preview pane of a tab that shows another file instead of a new one
+/// opening: among `previews` (a preview pane's id and props, in the tab's
+/// order) on machine `on`, the one `pane` is (a preview opening another file),
+/// else the one whose slot is `last` (it last had the keyboard), else the
+/// first. -> (pane, slot).
+fn tab_preview(previews: &[(String, Value)], on: Option<&str>, pane: Option<&str>, last: Option<&str>) -> Option<(String, String)> {
+    let fit: Vec<(String, String)> = previews.iter().filter_map(|(id, props)| {
+        let slot = props.get("slot").and_then(Value::as_str)?;
+        let here = props.get("on").and_then(Value::as_str).filter(|m| !m.is_empty()) == on;
+        here.then(|| (id.clone(), slot.to_owned()))
+    }).collect();
+    fit.iter().find(|(id, _)| Some(id.as_str()) == pane)
+        .or_else(|| fit.iter().find(|(_, slot)| Some(slot.as_str()) == last))
+        .or(fit.first())
+        .cloned()
 }
 
 /// The editor pane of a tab that takes a file as a new tab: among `eds` (an
@@ -8429,16 +8475,36 @@ export default class SystemToast extends View {
     }
 
     #[test]
-    fn a_terminals_markdown_and_preview_links_open_in_the_editor_to_look_at() {
+    fn a_terminals_markdown_and_table_links_open_in_the_editor_to_look_at_pictures_in_the_preview() {
         use super::editor_takes;
         use crate::links::Viewer;
-        assert_eq!(editor_takes(Viewer::Markdown, true), (Viewer::Editor, true));
-        assert_eq!(editor_takes(Viewer::Preview, true), (Viewer::Editor, true));
-        assert_eq!(editor_takes(Viewer::Editor, true), (Viewer::Editor, false));
-        assert_eq!(editor_takes(Viewer::Files, true), (Viewer::Files, false));
+        assert_eq!(editor_takes(Viewer::Markdown, false, true), (Viewer::Editor, true));
+        // A table or a patch: drawn in the editor; a picture, a PDF, a clip: the preview pane.
+        assert_eq!(editor_takes(Viewer::Preview, true, true), (Viewer::Editor, true));
+        assert_eq!(editor_takes(Viewer::Preview, false, true), (Viewer::Preview, false));
+        assert_eq!(editor_takes(Viewer::Editor, false, true), (Viewer::Editor, false));
+        assert_eq!(editor_takes(Viewer::Files, false, true), (Viewer::Files, false));
         // Without the editor's mod: the viewers, as before.
-        assert_eq!(editor_takes(Viewer::Markdown, false), (Viewer::Markdown, false));
-        assert_eq!(editor_takes(Viewer::Preview, false), (Viewer::Preview, false));
+        assert_eq!(editor_takes(Viewer::Markdown, false, false), (Viewer::Markdown, false));
+        assert_eq!(editor_takes(Viewer::Preview, true, false), (Viewer::Preview, false));
+    }
+
+    #[test]
+    fn a_preview_file_goes_to_the_tabs_preview_pane_asked_from_else_the_last_focused_else_its_first() {
+        use super::tab_preview;
+        use serde_json::json;
+        let pv = |id: &str, slot: &str, on: Option<&str>| (id.to_owned(), json!({ "slot": slot, "path": "/r/a.png", "on": on }));
+        let previews = vec![pv("p1", "s1", None), pv("p2", "s2", None), pv("p3", "s3", Some("box"))];
+        assert_eq!(tab_preview(&previews, None, None, None), Some(("p1".into(), "s1".into())));
+        assert_eq!(tab_preview(&previews, None, None, Some("s2")), Some(("p2".into(), "s2".into())));
+        // Opened from a preview pane: that one, over the last.
+        assert_eq!(tab_preview(&previews, None, Some("p1"), Some("s2")), Some(("p1".into(), "s1".into())));
+        // Another machine's preview shows that machine's files only.
+        assert_eq!(tab_preview(&previews, None, None, Some("s3")), Some(("p1".into(), "s1".into())));
+        assert_eq!(tab_preview(&previews, Some("box"), None, None), Some(("p3".into(), "s3".into())));
+        // None in the tab, or none with a slot: none (a new preview opens beside).
+        assert_eq!(tab_preview(&[], None, None, None), None);
+        assert_eq!(tab_preview(&[("p5".to_owned(), json!({ "path": "/r/a.png" }))], None, None, None), None);
     }
 
     #[test]
