@@ -9,13 +9,32 @@ worktrees, you brief, review, merge, and ship.
 
 1. **Worktree** (always on `/Volumes/data`, never inside the repo):
    ```sh
-   W=/Volumes/data/coding/fireflies-wt/<name>
-   git worktree add -b feat/<name> $W integrate
-   git -C $W submodule update --init --reference ~/Documents/personal/coding/fireflies/vendor/ghostty
-   cp -cR /Volumes/data/coding/fireflies-wt/integrate/target $W/target   # APFS clone, seeds the build
+   W=$(.claude/seed-worktree.sh <name>)   # /Volumes/data/coding/fireflies-wt/<name>, branch feat/<name>
    ```
    `integrate` holds what is merged and not shipped yet. An agent that needs
    another's work merges `integrate`; tell it when that work lands.
+
+   The script gives the checkout `integrate`'s file times and an APFS clone of
+   its `target/`, so cargo there rebuilds only what the agent edits. Two things
+   keep that true:
+   - Build scripts print `cargo:rerun-if-changed` paths relative to their
+     crate. An absolute one makes every copied `target/` stale (cargo compares
+     the printed text) and all of GPUI rebuilds:
+     `grep -l "rerun-if-changed=$PWD" target/debug/build/*/output` in
+     `integrate` must list nothing.
+   - `integrate`'s `target/` is current: the test run after each merge builds
+     it. Seed worktrees after that run, not during it.
+
+   Builds come in two tiers, as in the nix flake:
+   - **The binary**: built once, in `integrate`. A branch that changes only
+     mods, scripts and docs compiles nothing: its agent runs scratch apps from
+     `integrate`'s binary with its own mods beside it (the rules block has the
+     commands), and its bar is the bun tests, `just typecheck` and `just lint`.
+     You run the `cargo test` lines on `integrate` after its merge.
+   - **Rust** (`src/`, `native/`, `vendor/`, `crates/`, `defaults/frame`,
+     `defaults/icons`): that agent builds in its worktree, with
+     `CARGO_BUILD_JOBS=4` while others build too. Tell the mod-only agents to
+     copy the binary again once its merge has been built on `integrate`.
 2. **Brief**: write it to your scratchpad (`$SCRATCH`) as `<name>.md`. Start from
    [.claude/agent-brief.md](.claude/agent-brief.md) (the rules block every
    brief carries) and put the task above it: area, exact scope, what's already

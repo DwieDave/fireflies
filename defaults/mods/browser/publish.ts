@@ -37,6 +37,10 @@ export const tabTitlesNow = (key: SharedMapKey<StoredTitles> = TAB_TITLES): Read
 export const writeTabTitles = (all: ReadonlyMap<string, ReadonlyMap<string, string>>, key: SharedMapKey<StoredTitles> = TAB_TITLES) =>
   writeSharedMap(setShared, key, new Map([...all].map(([slot, titles]) => [slot, Object.fromEntries(titles)])));
 
+// The tab each pane shows, for the shelf: { [props.slot]: tab id }. A tab pinned
+// on its own is lit (and wears the focus) only while its pane shows it.
+export const SHOWN_TABS = sharedMapKey("browser.shown-tabs", isString);
+
 // Favicons (favicons.ts), for the shelf: the shown tab's by slot, and every
 // tab's by slot, then by tab, as the titles. A value is the icon's file as
 // image() takes it ("cache/browser-icons/<host>", under the app's folder); a
@@ -81,6 +85,7 @@ export function publishTitle(view: Browser) {
 
   publishTabTitles(view, live);
   publishIcons(view, live);
+  publishShownTab(view, live);
 
   const was = readSharedMap(shared, TITLES);
   const name = view.page.href || view.page.title ? Tabs.label(view.tab) : null;
@@ -110,6 +115,20 @@ export function publishTabTitles(view: Browser, live: ReadonlySet<string>, key: 
   if (mine.size) next.set(view.slot, mine);
 
   writeTabTitles(next, key);
+}
+
+/** The shown tab's id in shared SHOWN_TABS under this pane's slot; gone panes'
+ *  entries go. Written only when something changed. */
+export function publishShownTab(view: Browser, live: ReadonlySet<string>) {
+  const was = readSharedMap(shared, SHOWN_TABS);
+  const stale = [...was.keys()].some((k) => !live.has(k) && k !== view.slot);
+
+  if (was.get(view.slot) === view.tab.id && !stale) return;
+
+  const next = new Map([...was].filter(([k]) => live.has(k) && k !== view.slot));
+
+  next.set(view.slot, view.tab.id);
+  writeSharedMap(setShared, SHOWN_TABS, next);
 }
 
 // ---- favicons (favicons.ts)
