@@ -118,6 +118,10 @@ describe("a menu the app draws over the window (openOverlay)", () => {
       .toEqual({ kind: "popup", at: { over: "sidebar", x: 12, y: 96, w: 181, h: 24 } });
   });
 
+  test("a row's rectangle in window px (no pane to measure it in)", () => {
+    expect(overlayOf({ rect: { x: 300.2, y: 40, w: 90, h: 24.6 } })).toEqual({ kind: "popup", at: { x: 300, y: 40, w: 90, h: 25 } });
+  });
+
   test("nothing positional: a dialog in the middle", () => {
     expect(overlayOf(null)).toEqual({ kind: "dialog" });
   });

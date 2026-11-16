@@ -99,22 +99,29 @@ export function placeMenu(size: Box, room: Box, at: Anchor): Pt {
 }
 
 /** Where an overlay menu stands: at the press (a right click, a click), hung from a thing a key
- *  opened it for (its rectangle in the layout px of `over`, the pane or layout block it is drawn
- *  in, from that one's top left corner), or nothing positional (null: the middle). */
-export type Opened = "pointer" | { readonly over: string; readonly rect: Rect } | null;
+ *  opened it for (its rectangle: in window px, or with `over` in the layout px of that pane or
+ *  layout block, from its top left corner), or nothing positional (null: the middle). */
+export type Opened = "pointer" | { readonly over?: string | null; readonly rect: Rect } | null;
+
+/** An overlay's `at` hung from a rectangle (openOverlay). */
+export interface HungAt {
+  readonly over?: string;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
 
 /** How openOverlay places it: a popup at the pointer (the app flips it left or up near the
  *  window's edges), a popup hung from the rectangle (under it at its left edge, above it near the
  *  foot), else a dialog (in the middle). */
-export function overlayOf(opened: Opened):
-  | { readonly kind: "popup" }
-  | { readonly kind: "popup"; readonly at: { readonly over: string; readonly x: number; readonly y: number; readonly w: number; readonly h: number } }
-  | { readonly kind: "dialog" } {
+export function overlayOf(opened: Opened): { readonly kind: "popup"; readonly at?: HungAt } | { readonly kind: "dialog" } {
   if (opened === "pointer") return { kind: "popup" };
 
   if (!opened) return { kind: "dialog" };
 
   const { over, rect: r } = opened;
+  const box = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
 
-  return { kind: "popup", at: { over, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) } };
+  return { kind: "popup", at: over ? { over, ...box } : box };
 }
