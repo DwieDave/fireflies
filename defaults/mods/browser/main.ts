@@ -57,7 +57,8 @@
 // ({ [slot]: { [tab]: title } }); the tile sends show:<{ slot, tab }> (or leaves
 // browser.show for when this pane comes on screen), its mark the tab's favicon
 // from shared browser.tab-icons ({ [slot]: { [tab]: "cache/browser-icons/<host>" }};
-// browser.icons: { [slot]: the shown tab's }). Closing the tab
+// browser.icons: { [slot]: the shown tab's }); it is lit only while this pane
+// shows it (browser.shown-tabs: { [slot]: the shown tab's id }). Closing the tab
 // drops its pin; it keeps it across restarts (tab ids are kept).
 // A file:// address (an HTML file from the files pane) loads as the file
 // (props path, trust "interactive": its folder readable, scripts on).
@@ -105,7 +106,7 @@ import { parseEvent, onEvent } from "./page-events.ts";
 import type { WebEvent } from "./page-events.ts";
 import { openTab, showTab, shownTab, closeTab, stepTab, keyTab } from "./tab-ops.ts";
 import { barView, errorLine, blankPage, webView } from "./bar.ts";
-import { TITLES, TAB_TITLES, PAGE_ICONS, TAB_ICONS, saveTabs, publishTitle, listIcons, dropSlot } from "./publish.ts";
+import { TITLES, TAB_TITLES, PAGE_ICONS, TAB_ICONS, SHOWN_TABS, saveTabs, publishTitle, listIcons, dropSlot } from "./publish.ts";
 import { tabPinned, togglePin, takeShow, openTabMenu, tabAct, initMenu, renderMenu } from "./tab-menu.ts";
 import { goTo, retry, focusPage, leaveAddress, external, editAddress } from "./address.ts";
 import { stripView } from "./strip.ts";
@@ -351,6 +352,7 @@ export default class Browser extends View {
     dropSlot(this, TAB_TITLES);
     dropSlot(this, PAGE_ICONS);
     dropSlot(this, TAB_ICONS);
+    dropSlot(this, SHOWN_TABS);
   }
 
   /** This copy's pane, as well as a mod can tell (it isn't told its pane id):

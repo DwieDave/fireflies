@@ -469,6 +469,40 @@ test("a web tab's tile is named by that tab's title (browser.tab-titles), the pa
   expect(webName(WEB, "web-9")).toBe("Web");
 });
 
+test("tabs of one web pane pinned: only the shown tab's tile is lit and wears the focus (browser.shown-tabs); the pane's own tile goes by the pane", async () => {
+  const { pinFocus } = await import("../defaults/mods/nocturne/shelf.ts");
+  sharedState[pins.PANES_KEY] = [
+    { pane: "p2", mod: WEB.mod, props: WEB.props, at: 1, tab: "web" },
+    { pane: "p2", mod: WEB.mod, props: WEB.props, at: 2, tab: "web-2" },
+    { pane: "p2", mod: WEB.mod, props: WEB.props, at: 3 },
+  ];
+  sharedState["browser.shown-tabs"] = { w1: "web-2" };
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  s.render(cx);
+  const items = Object.fromEntries(kit.jar().map((x: any) => [x.key, x]));
+  const state = (key: string) => [s.pinLit(items[key]), pinFocus(items[key])];
+  // p2 is on screen and focused: its shown tab (web-2) is lit and focused, web is there but not shown.
+  expect(state("pane:p2#web-2")).toEqual([true, true]);
+  expect(state("pane:p2#web")).toEqual([false, false]);
+  expect(state("pane:p2")).toEqual([true, true]);
+  // Another tab shown: the light moves with it.
+  sharedState["browser.shown-tabs"] = { w1: "web" };
+  expect(state("pane:p2#web")).toEqual([true, true]);
+  expect(state("pane:p2#web-2")).toEqual([false, false]);
+  // The pane off screen (another space): none of its tiles is lit, whichever tab it shows.
+  focusedNow = { ...focusedNow, pane: "p1" };
+  spacesNow = spacesNow.map((sp: any) => ({ ...sp, active: sp.id === "s2" }));
+  s.render(cx);
+  expect([state("pane:p2#web"), state("pane:p2#web-2"), state("pane:p2")]).toEqual([[false, false], [false, false], [false, false]]);
+  // A browser that doesn't say which tab it shows (an older one): the tab tiles go by the pane, as before.
+  delete sharedState["browser.shown-tabs"];
+  spacesNow = spacesNow.map((sp: any) => ({ ...sp, active: sp.id === "s1" }));
+  focusedNow = { ...focusedNow, pane: "p2" };
+  s.render(cx);
+  expect([state("pane:p2#web"), state("pane:p2#web-2")]).toEqual([[true, true], [true, true]]);
+});
+
 test("a web tile wears its page's favicon (browser.icons, browser.tab-icons by tab), else the web mark", async () => {
   const { webIcon } = await import("../defaults/mods/nocturne/shelf.ts");
   delete sharedState["browser.icons"];

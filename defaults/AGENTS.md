@@ -733,7 +733,8 @@ the highlighted line shows where it will land.
   slot in `panes()` (`mod: "browser"`, `props.slot`). Each web pane with a slot
   publishes its shown tab's title (else its host) in shared `browser.titles`
   (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
-  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
+  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`),
+  and which tab it shows in `browser.shown-tabs` (`{ [slot]: tab id }`).
   Each tab on the strip shows its page's favicon before its title (the web
   pane's mark until one is known): the page's own `link[rel~=icon]`, else its
   origin's `/favicon.ico` (no icon service is asked), fetched once per origin
@@ -1659,7 +1660,10 @@ a record with `tab` (the web tab's id, kept across restarts), its own tile named
 by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`)
 and wearing its favicon (`browser.tab-icons`; a whole web pane's tile its
 shown tab's, `browser.icons`), keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
-whole, can each have a tile. Going to it focuses the pane, then
+whole, can each have a tile. A tab's tile is lit (and wears the focus ticks)
+only while its pane is on screen and shows that tab (`browser.shown-tabs`);
+the pane's other tabs' tiles stay unlit, and the whole pane's tile goes by the
+pane. Going to it focuses the pane, then
 `browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
 screen yet takes the same wish from shared `browser.show` when it
 shows). Closing the tab drops its pin. A whole tab of a space (all its panes,

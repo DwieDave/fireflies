@@ -1144,6 +1144,30 @@ test("browser.tab-titles: every tab's name by the pane's slot (blank tabs none);
   expect(tt()).toEqual({});
 });
 
+test("browser.shown-tabs: the tab each pane shows, by its slot (a tab's tile on the shelf is lit by it); it follows the shown tab and goes with the pane", async () => {
+  reset();
+  const shown = () => app.store["browser.shown-tabs"];
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  app.store["browser.shown-tabs"] = { gone: "web-3" };
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/x" });
+  expect(shown()).toEqual({ s1: "web" });
+  // A tab opened behind: the shown one stays; shown by a click, a key or the shelf's show: it follows.
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  expect(shown()).toEqual({ s1: "web" });
+  view.showTab("web-2", cx);
+  expect(shown()).toEqual({ s1: "web-2" });
+  view.command("tab:1", cx);
+  expect(shown()).toEqual({ s1: "web" });
+  const { showCommand } = (await load("browser/tab-menu.ts")).mod;
+  showCommand(view, '{"slot":"s1","tab":"web-2"}', cx);
+  expect(shown()).toEqual({ s1: "web-2" });
+  // The shown tab closed: the one shown after it.
+  view.closeTab("web-2", cx);
+  expect(shown()).toEqual({ s1: "web" });
+  await view.close();
+  expect(shown()).toEqual({});
+});
+
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const favicons = await import("../defaults/mods/browser/favicons.ts");
 

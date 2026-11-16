@@ -127,22 +127,38 @@ export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): 
   return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
 }
 
-/** On screen now: its tab is the shown one of the shown space, not parked. */
+/** The web tab each web pane shows (browser/publish.ts), by slot: { [slot]: tab id }. */
+export const SHOWN_TABS = sharedMapKey("browser.shown-tabs", isString);
+
+/** A web tab's pin whose pane shows another tab now. A browser that doesn't say
+ *  which tab it shows (none noted for its slot): not known, so not hidden. */
+export function tabHidden(it: JarItem): boolean {
+  if (it.kind !== "pane" || !it.tab) return false;
+
+  const slot = isWebProps(it.pane.props) ? it.pane.props.slot : undefined;
+  const shown = slot === undefined ? undefined : readSharedMap(shared, SHOWN_TABS).get(slot);
+
+  return shown !== undefined && shown !== it.tab;
+}
+
+/** On screen now: its tab is the shown one of the shown space, not parked;
+ *  a web tab's pin also needs its pane to show that tab (tabHidden). */
 export function pinLit(sky: Sky, it: JarItem): boolean {
   if (it.kind === "tab") return sky.shownTabs.has(it.tabInfo.id);
 
   const p = paneOf(it);
 
-  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "");
+  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "") && !tabHidden(it);
 }
 
-/** It holds the focus: the focused pane, or the focused terminal. */
+/** It holds the focus: the focused pane (a web tab's pin: while its pane shows
+ *  that tab), or the focused terminal. */
 export function pinFocus(it: JarItem): boolean {
   const f = focused();
 
   if (it.kind === "tab") return Boolean(f?.tab) && f?.tab === it.tabInfo.id;
 
-  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane : Boolean(f?.terminal) && f?.terminal === it.key;
+  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane && !tabHidden(it) : Boolean(f?.terminal) && f?.terminal === it.key;
 }
 
 /** What a tile is called: the pane's name (header.ts paneName), a terminal's given name. */
