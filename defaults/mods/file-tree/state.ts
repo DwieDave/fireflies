@@ -11,6 +11,7 @@ import { arrayOf, isString, nullable, object, sharedKey, sharedListKey, sharedMa
 import type { MenuItem, Row } from "./logic.ts";
 import { isFilters, isFileChange, isClip } from "./logic.ts";
 import type { At, Entry, Side } from "./split-size.ts";
+import type { Anchor } from "./menu-place.ts";
 import type { NewKind } from "./fit.ts";
 import { isLookEntry } from "./split-size.ts";
 
@@ -154,7 +155,8 @@ export type Ask = (AskItem & { readonly trash: string; readonly set?: undefined 
 export interface Menu {
   readonly row: Row;
   readonly items: readonly MenuItem[];
-  readonly at: At;
+  /** The press (pane px), the row a key opened it for, or null (the middle): menu-place.ts. */
+  readonly at: Anchor;
   n: number;
 }
 

@@ -336,7 +336,7 @@ export function withPointer(v: Files, el: Element): Element {
         const row = v.pressed ?? rootRow(v);
 
         v.pressed = null;
-        v.openMenu(row, cx);
+        v.openMenu(row, cx, { ...v.mouse });
       })
       .on_mouse_move((e, cx) => {
         v.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };

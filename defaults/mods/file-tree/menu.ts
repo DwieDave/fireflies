@@ -1,13 +1,17 @@
 // The files pane's right-click menu: its entries for a row or the empty space
-// (the root), run by key or enter, drawn under the pointer.
+// (the root), run by key or enter. A right click draws it at the pointer
+// (flipped left or up near the pane's edges), m under the selected row (above
+// it near the foot), the root's by m in the middle: menu-place.ts.
 
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex, v_flex } from "gpui-base";
 import type { Row, TreeRow, Act } from "./logic.ts";
-import { keyColumn, menuItems, setMenuItems } from "./logic.ts";
+import { ROW_H, keyColumn, menuItems, setMenuItems, treeTop } from "./logic.ts";
 import type { Menu } from "./state.ts";
+import type { Anchor, Rect } from "./menu-place.ts";
+import { placeMenu } from "./menu-place.ts";
 import { viewerFor, tilde, MENU_ROW } from "./state.ts";
 import { stop, dither } from "./paint.ts";
 import { toggleLook } from "./look.ts";
@@ -15,7 +19,7 @@ import { openWeb, reveal } from "./search.ts";
 import { closePane, copyPath, copySet, nvim, openPane, openViewer, terminalEdit } from "./opening.ts";
 import type { default as Files } from "./main.ts";
 import { askDelete, clipNow, cutRow, paste, startDraft, startRename } from "./file-ops.ts";
-import { setOf } from "./drag.ts";
+import { scrolled, setOf, treeBox } from "./drag.ts";
 import { openInDatabases } from "./viewer-table.ts";
 
 /** The empty space's row: the root. */
@@ -23,7 +27,21 @@ export function rootRow(v: Files): TreeRow {
   return { path: "", name: v.root, dir: true, depth: 0, ignored: false };
 }
 
-export function openMenu(v: Files, row: Row, cx: Context | null): void {
+/** A listed row's rectangle in the pane (layout px) while it's drawn in the tree: what a key's
+ *  menu stands at; null for the root (the empty space) or a row out of sight. */
+export function rowRect(v: Files, row: Row): Rect | null {
+  const i = row.path ? v.listed.findIndex((r) => r.path === row.path) : -1;
+
+  if (i < 0) return null;
+
+  const box = treeBox(v);
+  const y = treeTop(v.lensRows) - scrolled(v) + i * ROW_H;
+
+  return y + ROW_H <= box.top || y >= box.bottom ? null : { x: 0, y, w: box.right, h: ROW_H };
+}
+
+/** Opens a row's menu at `at` (a press, pane px), else (a key) at the row: rowRect. */
+export function openMenu(v: Files, row: Row, cx: Context | null, at: Anchor = rowRect(v, row)): void {
   // On a marked row (with others marked): the set's entries first.
   const set = row.path && v.marked.has(row.path) ? setOf(v, row) : [];
   const clip = Boolean(clipNow(v));
@@ -34,7 +52,7 @@ export function openMenu(v: Files, row: Row, cx: Context | null): void {
   const items = row.head ? all.filter((x) => x.act !== "root") : all;
 
   v.sel = row.path || v.sel;
-  v.menu = { row, items, at: { ...v.mouse }, n: 0 };
+  v.menu = { row, items, at, n: 0 };
   v.focus();
   cx?.notify();
 }
@@ -113,8 +131,7 @@ export function menuBox(v: Files, t: Theme, m: Menu): Element {
   const h = m.items.length * MENU_ROW + 20;
   // The key column fits its widest key on one line (7 px a character at size 11, as git's menus).
   const keyW = keyColumn(m.items);
-  const x = Math.max(8, Math.min(m.at.x, v.size.width - w - 8));
-  const y = Math.max(8, Math.min(m.at.y, v.size.height - h - 8));
+  const { x, y } = placeMenu({ width: w, height: h }, v.size, m.at);
 
   const edge = (where: "top" | "bottom"): Element => h_flex().absolute().left(0).right(0).h(13).items_center().text_size(11)
     .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
