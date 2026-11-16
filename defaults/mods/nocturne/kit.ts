@@ -16,9 +16,9 @@ import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned,
 import type { JarItem, PaneRecord, SortedAgents, TabRecord } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
-import { dither } from "./toolground.ts";
+import { dither } from "@fireflies/toolground";
 
-export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
+export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "@fireflies/toolground";
 
 import { edge } from "@fireflies/tones";
 

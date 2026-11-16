@@ -7,10 +7,10 @@ import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import type { Theme } from "herdr";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
-import { dither } from "./toolground.ts";
+import { dither } from "@fireflies/toolground";
 import type { ItemType } from "./model.ts";
 
-export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
+export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "@fireflies/toolground";
 
 import { edge } from "@fireflies/tones";
 

@@ -4,10 +4,10 @@
 // With it the dither fill it is drawn with, so it needs nothing from a kit
 // (the kits import it and pass it on).
 //
-// A mod can't import another mod's files, so this file is in nocturne and in
-// notifications, byte for byte (scripts/nocturne-tab-seam.test.ts checks). Edit
-// one, copy it over the other.
+// A library (docs/effect-mods.md): the app serves this one copy to nocturne
+// and notifications by name (`import { toolGround } from "@fireflies/toolground"`).
 
+import { Option, String as Str } from "effect";
 import { div, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
@@ -23,9 +23,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 export function dither(color: Color, cell = 1): Element {
   const plain = flat(color, cell);
 
-  if (plain) return plain;
+  if (plain !== null) return plain;
 
-  const zoom = settings().zoom || 1;
+  const asked = settings().zoom;
+  const zoom = asked > 0 ? asked : 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
@@ -56,23 +57,27 @@ export function toolGround(t: Theme, look: ToolLook = TOOL_LOOK): Element[] {
   ];
 }
 
-/** A "#rrggbb" color's three channels, or null when it isn't one. */
-function channels(c: Color): readonly [number, number, number] | null {
-  if (!/^#[0-9a-f]{6}$/i.test(c)) return null;
+type Rgb = readonly [number, number, number];
 
-  return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
+/** A "#rrggbb" color's three channels, or none when it isn't one. */
+function channels(c: Color): Option.Option<Rgb> {
+  if (!HEX6.test(c)) return Option.none();
+
+  const at = (i: number) => Number.parseInt(Str.slice(i, i + 2)(c), 16);
+
+  return Option.some([at(1), at(3), at(5)]);
 }
 
-const hex2 = (v: number) => Math.round(v).toString(16).padStart(2, "0");
+const hex2 = (v: number) => Str.padStart(2, "0")(Math.round(v).toString(16));
 
 /** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either isn't one. */
 export function mix(a: Color, b: Color, k: number): Color {
-  const x = channels(a);
-  const y = channels(b);
-
-  if (!x || !y) return a;
-
-  return `#${hex2(x[0] + (y[0] - x[0]) * k)}${hex2(x[1] + (y[1] - x[1]) * k)}${hex2(x[2] + (y[2] - x[2]) * k)}`;
+  return Option.match(Option.all([channels(a), channels(b)]), {
+    onNone: () => a,
+    onSome: ([x, y]): Color => `#${hex2(x[0] + (y[0] - x[0]) * k)}${hex2(x[1] + (y[1] - x[1]) * k)}${hex2(x[2] + (y[2] - x[2]) * k)}`,
+  });
 }
 
 /** A tool's plate under the pointer: on the plate a step brighter than it
