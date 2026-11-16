@@ -6,6 +6,7 @@ import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Tone } from "./runs.ts";
+import { flat } from "./layout-look.ts";
 
 /** A run's state in the theme's colors. */
 export function toneColor(t: Theme, k: Tone): Color {
@@ -21,6 +22,10 @@ export function toneColor(t: Theme, k: Tone): Color {
 export const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
