@@ -142,7 +142,7 @@ export function blankPage(view: Browser, t: Theme, title: string, hint: string |
  *  dialog makes the view step aside. `tabs`: what would open a window
  *  comes as web.newTab. */
 export function webView(view: Browser, t: Theme, tab: Tab, start: string): Element {
-  return herdr.nativeView.new(tab.id, { kind: "web", ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true })
+  return herdr.nativeView.new(tab.id, { kind: view.engine === "chromium" ? "chromium" : "web", ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true })
     .child(view.away && tab === view.tab
       ? blankPage(view, t, "Playing in picture in picture", "↩ in the player brings it back here.")
       : blankPage(view, t, tab.page.loading ? "Loading…" : "", tab.page.href));

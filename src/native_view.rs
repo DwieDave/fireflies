@@ -133,6 +133,8 @@ pub fn register_events(copy: u64, tx: async_channel::Sender<String>) {
     EVENTS.with(|e| e.borrow_mut().insert(copy, tx));
     #[cfg(target_os = "macos")]
     if !SINK_SET.with(|s| s.replace(true)) {
+        // Chromium's framework, helpers and profile: the app's data folder.
+        fireflies_native_view::chromium::set_home(crate::mods::app_dir().join("chromium"));
         fireflies_native_view::macos::set_event_sink(|ev| {
             let Some(copy) = copy_of(&ev.key) else { return };
             if ev.name == "view.press" {

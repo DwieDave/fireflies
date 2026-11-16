@@ -133,6 +133,8 @@ export default class Browser extends View {
 
   // An inspector pane: the web view it inspects, and why there's nothing to.
   inspect: string | null = null;
+  /** The engine new pages open in: WebKit, or Chromium (props `engine`). */
+  engine: "webkit" | "chromium" = "webkit";
   lost: string | null = null;
   // A tab's menu: what it is for, its rows, the one under the cursor.
   menu: TabMenu | null = null;
@@ -180,6 +182,7 @@ export default class Browser extends View {
 
     // An inspector pane: Safari's Web Inspector for another pane's page.
     this.inspect = pr.inspect ? String(pr.inspect) : null;
+    this.engine = pr.engine === "chromium" ? "chromium" : "webkit";
 
     if (this.inspect) {
       initInspector(this, cx);

@@ -7,7 +7,7 @@ import type { Props } from "gpui-shell";
 import * as herdr from "herdr";
 import { props, closeOverlay } from "herdr";
 import type { Guarded } from "./guard.ts";
-import { isBoolean, isNull, isNumber, isString, nullable, object, oneOf, sharedKey } from "./guard.ts";
+import { isBoolean, isNull, isNumber, isString, literal, nullable, object, oneOf, sharedKey } from "./guard.ts";
 
 export const ICONS = "mods/browser/icons";
 
@@ -40,6 +40,7 @@ export const isBrowserProps = object({}, {
   url: nullable(isString),
   slot: oneOf(isString, isNumber, isNull),
   inspect: oneOf(isString, isNumber, isNull),
+  engine: nullable(literal("webkit", "chromium")),
   tabMenu: isTabMenu,
   overlay: isString,
 });

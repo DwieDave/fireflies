@@ -298,6 +298,13 @@ fn inspector_step(key: &str) -> bool {
             Some(Renderer::Inspector { target, .. }) => target.clone(),
             _ => return true,
         };
+        // Chromium's DevTools can't be made a child of this view: CEF's
+        // ShowDevTools allows a parent only in Chrome style, which macOS
+        // refuses for a native parent (a CHECK that ends the app).
+        #[cfg(feature = "chromium")]
+        if let Some(Renderer::Chromium(_)) = v.get(&target).map(|e| &e.renderer) {
+            return true;
+        }
         let web = match v.get(&target).map(|e| &e.renderer) {
             Some(Renderer::Web { view, .. }) => view.clone(),
             _ => return false,
@@ -377,6 +384,11 @@ fn without_zoom(props: &Value) -> Value {
 
 /// A web view's page zoom (`zoom` prop); other kinds have their own zoom actions.
 fn apply_zoom(r: &Renderer, zoom: f64) {
+    #[cfg(feature = "chromium")]
+    if let Renderer::Chromium(c) = r {
+        c.set_zoom(zoom);
+        return;
+    }
     if let Renderer::Web { view, .. } = r
         && unsafe { view.pageZoom() } != zoom
     {
@@ -399,7 +411,7 @@ fn make(
             let Source::Url(url) = &spec.source else {
                 return Err("Chromium views take a `url`".into());
             };
-            let (view, c) = crate::chromium::create(mtm, key, parent, url, generation)?;
+            let (view, c) = crate::chromium::create(mtm, key, parent, url, generation, spec.tabs)?;
             return Ok((view, Renderer::Chromium(c)));
         }
         #[cfg(not(feature = "chromium"))]
@@ -864,12 +876,6 @@ pub fn frame_end(
 pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
     let mtm = MainThreadMarker::new().ok_or("main thread only")?;
     let kind = VIEWS.with(|v| v.borrow().get(key).map(|e| e.kind));
-    // Importing Chrome's cookies doesn't need a page: the browser panel offers it
-    // before the first address too.
-    #[cfg(feature = "chromium")]
-    if kind.is_none() && action == "browser.importChromeCookies" {
-        return crate::chromium::import_chrome_cookies(mtm, key, None);
-    }
     let kind = kind.ok_or_else(|| format!("no native view `{key}`"))?;
     if !kind.allows(action) {
         return Err(format!(
@@ -935,6 +941,8 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                     }
                     c.action("focus", args)
                 }
+                #[cfg(feature = "chromium")]
+                ("web.inspect", Renderer::Chromium(_)) => Ok(json!({ "of": key })),
                 #[cfg(feature = "chromium")]
                 (a, Renderer::Chromium(c)) if a.starts_with("browser.") => c.action(a, args),
                 (a, Renderer::Pip { .. }) if a.starts_with("pip.") => crate::pip::action(mtm, key, a, args),
@@ -1220,6 +1228,14 @@ pub fn dispose(key: &str) {
             }
             Renderer::QuickLook { view } => view.close(),
             Renderer::Pip { .. } => crate::pip::detach(key),
+            #[cfg(feature = "chromium")]
+            Renderer::Inspector { target, window, .. } if window.borrow().is_some() && VIEWS.with(|v| matches!(v.borrow().get(target).map(|t| &t.renderer), Some(Renderer::Chromium(_)))) => {
+                VIEWS.with(|v| {
+                    if let Some(Renderer::Chromium(c)) = v.borrow().get(target).map(|t| &t.renderer) {
+                        crate::chromium::close_dev_tools(c);
+                    }
+                });
+            }
             Renderer::Inspector { inspector, .. } => {
                 // Closes WebKit's inspector, and with it its (hidden) window.
                 if let Some(i) = inspector.borrow().as_ref() {
@@ -1265,7 +1281,11 @@ pub fn debug() -> Value {
             .map(|(k, e)| (k.clone(), entry_state(k, e, &e.renderer)))
             .collect()
     });
-    json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()) })
+    #[cfg(feature = "chromium")]
+    let chromium = json!({ "present": crate::chromium::present(), "started": crate::chromium::started(), "appProtocol": crate::chromium::app_protocol(), "home": crate::chromium::home() });
+    #[cfg(not(feature = "chromium"))]
+    let chromium = Value::Null;
+    json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()), "chromium": chromium })
 }
 
 /// Returns the keyboard to GPUI after Fireflies selects a different pane. AppKit
@@ -1423,7 +1443,7 @@ fn install_key_monitor() {
         let hit = VIEWS.with(|v| {
             v.try_borrow().ok().and_then(|v| {
                 v.iter()
-                    .find(|(_, e)| matches!(e.renderer, Renderer::Web { .. }) && responder_inside(&fr, &e.view))
+                    .find(|(_, e)| matches!(e.kind, Kind::Web | Kind::Chromium) && responder_inside(&fr, &e.view))
                     .map(|(k, e)| (k.clone(), e.generation))
             })
         });

@@ -16,6 +16,10 @@ pub mod macos;
 mod pip;
 #[cfg(target_os = "macos")]
 mod page;
+#[cfg(all(target_os = "macos", feature = "chromium"))]
+pub mod chromium;
+#[cfg(feature = "chromium")]
+pub mod cef_install;
 #[cfg(target_os = "macos")]
 mod tabs;
 // Picture in picture's live resize, its decisions pure (tested everywhere, used on macOS).
@@ -262,12 +266,7 @@ impl Kind {
                 "browser.zoomIn",
                 "browser.zoomOut",
                 "browser.zoomReset",
-                "browser.print",
-                "browser.find",
-                "browser.stopFind",
-                "browser.clearData",
-                "browser.revealDownload",
-                "browser.importChromeCookies",
+                "web.inspect",
             ],
         }
     }
@@ -548,10 +547,19 @@ pub fn redact_url(u: &str) -> String {
     u.split(['?', '#']).next().unwrap_or("").to_owned()
 }
 
+/// Whether Chromium views can be made now: a build with Chromium, on macOS,
+/// with the CEF framework installed (enabled in Settings).
+pub fn chromium_present() -> bool {
+    #[cfg(all(target_os = "macos", feature = "chromium"))]
+    return crate::chromium::present();
+    #[allow(unreachable_code)]
+    false
+}
+
 /// What the host can do, for `nativeViewCapabilities()`.
 pub fn capabilities() -> Value {
     let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::Pip];
-    if cfg!(feature = "chromium") {
+    if chromium_present() {
         all.push(Kind::Chromium);
     }
     let kinds: Vec<Value> = all
