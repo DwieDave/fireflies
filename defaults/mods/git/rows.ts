@@ -54,7 +54,7 @@ export function drawRow(v: GitView, t: Theme, ctx: ListContext, wide: boolean): 
       const done = v.review.marks().has(f.key);
       const [letter, c] = reviewLetter(t, f.status);
       const slash = f.path.lastIndexOf("/");
-      const box = div().id(`rv-box-${i}`).relative().size(10).flex_none().border(1).border_color(done ? t.ansi2 : t.ansi8);
+      const box = div().id(`rv-box-${i}`).relative().size(10).flex_none().border(1).border_color(done ? t.ansi2 : t.muted);
 
       return rowLine(v, [
         (done ? box.child(dither(t.ansi2, 1)) : box)
@@ -199,7 +199,7 @@ export function wideCommit(v: GitView, t: Theme, ctx: ListContext): DrawRow {
           .child(div().flex_none().child(age(c.date)))));
 
     return i === firstOnMain && firstOnMain > 0
-      ? line.child(h_flex().absolute().left(g ? shownWidth(v, ctx, g) * WIDE_LANE + 8 : 8).right(8).top(0).h(1).child(dither(t.ansi8, 1)))
+      ? line.child(h_flex().absolute().left(g ? shownWidth(v, ctx, g) * WIDE_LANE + 8 : 8).right(8).top(0).h(1).child(dither(t.muted, 1)))
         .child(div().absolute().right(10).top(-6).px(4).bg(t.background).text_size(10).text_color(t.ansi4).child(`↑ ${firstOnMain} not on ${v.data.main ?? ""}`))
       : line;
   };
