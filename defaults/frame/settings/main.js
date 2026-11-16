@@ -746,8 +746,11 @@ export default class Settings extends View {
     const bar = (done, total) => h_flex().w(220).h(6).bg(t.hover)
       .child(div().h_full().bg(t.accent).w(Math.max(2, Math.round((220 * Math.min(done, total)) / Math.max(total, 1)))));
     let status, control;
-    if (!c.available || c.built === false) {
+    if (!c.available) {
       status = "Not offered on this computer.";
+      control = div();
+    } else if (c.built === false) {
+      status = "This build of Fireflies has no Chromium: it was built without its \u201cchromium\u201d feature.";
       control = div();
     } else if (busy) {
       status = c.phase === "downloading" ? `Downloading ${mb(c.done)} of ${mb(c.total)}\u2026` : c.phase === "verifying" ? "Checking the download\u2026" : "Unpacking\u2026";

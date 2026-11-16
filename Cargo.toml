@@ -15,6 +15,13 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+
+[features]
+# Chromium web views (macOS): links CEF's small C++ wrapper (cef-dll-sys, built
+# with cmake and ninja from the pinned CEF archive's headers: CEF_PATH); the
+# framework itself is downloaded when the person enables Chromium in Settings.
+# Off by default: a build without it offers WebKit only.
+chromium = ["fireflies-native-view/chromium"]
 [dependencies]
 ghostty-sys = { path = "crates/ghostty-sys" }
 gpui = { package = "gpui-pre", version = "=0.3.8", features = ["render-to-image"] }
@@ -94,8 +101,8 @@ gpui_linux = { package = "gpui-pre-linux", version = "=0.3.8", features = ["rend
 gpui_macos = { package = "gpui-pre-macos", version = "=0.3.8", features = ["render-to-image"] }
 libc = "0.2"
 # Native content views (from herdr-universal-preview), interface native-view/0.
-# Chromium views: the CEF framework is downloaded when enabled in Settings.
-fireflies-native-view = { path = "native/fireflies-native-view", features = ["chromium"] }
+# Native content views (from herdr-universal-preview), interface native-view/0.
+fireflies-native-view = { path = "native/fireflies-native-view" }
 raw-window-handle = "0.6"
 
 [target.'cfg(windows)'.dependencies]

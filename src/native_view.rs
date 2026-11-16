@@ -169,7 +169,7 @@ pub fn ensure_home() {
 
 /// Whether Chromium runs in this app (removing it then waits for a restart).
 pub fn chromium_started() -> bool {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "chromium"))]
     return fireflies_native_view::chromium::started();
     #[allow(unreachable_code)]
     false

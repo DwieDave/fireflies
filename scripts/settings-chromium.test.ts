@@ -88,6 +88,13 @@ test("web: not offered (another platform's build) says so and offers nothing", (
   expect(s.order.map((c: any) => c.id)).not.toContain("st-cr-enable");
 });
 
+test("web: a build without Chromium says so and offers nothing", () => {
+  state.chromium = { ...state.chromium, built: false };
+  const s = web();
+  expect(shown(s)).toContain("This build of Fireflies has no Chromium");
+  expect(s.order.map((c: any) => c.id)).not.toContain("st-cr-enable");
+});
+
 test("web: the rail lists Web after Editor on a Mac", () => {
   const s = web();
   press(s.render(cx()), "up");
