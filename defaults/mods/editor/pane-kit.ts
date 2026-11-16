@@ -16,6 +16,7 @@ import type { Color, Context, Element, FocusHandle, MouseButtonEvent } from "gpu
 import { Background, PathBuilder } from "gpui-kit";
 import type { PaneInfo, Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
+import { flat } from "./layout-look.ts";
 
 export const MOD = "editor";
 
@@ -43,6 +44,10 @@ export const zoom = (): number => Number(settings().zoom) || 1;
 
 /** A 50% checker dither filling the parent (as nocturne/kit.ts). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
