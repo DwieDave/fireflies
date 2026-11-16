@@ -20,7 +20,7 @@ import { closePane, copyPath, copySet, nvim, openPane, openViewer, terminalEdit 
 import type { default as Files } from "./main.ts";
 import { askDelete, clipNow, cutRow, paste, startDraft, startRename } from "./file-ops.ts";
 import { scrolled, setOf, treeBox } from "./drag.ts";
-import { openInDatabases } from "./viewer-table.ts";
+import { openInDatabases } from "@fireflies/viewer";
 import { edge as edgeTone } from "@fireflies/tones";
 
 /** The empty space's row: the root. */

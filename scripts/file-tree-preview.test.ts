@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, importMod, keyhelpWith } from "./mod-source.ts";
+import { asJs, guard, importMod, importLibrary, keyhelpWith } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.ts, logic.ts) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.ts),
@@ -82,22 +82,23 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 const F = "file-tree";
-const kinds = await load(`${F}/kinds.ts`);
-const imageLogic = await load(`${F}/image.ts`, kinds);
-const { parse: parseTable, ...tableRest } = await load(`${F}/table.ts`);
-const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
+const kinds = await import("../defaults/lib/@fireflies/viewer/kinds.ts");
+const imageLogic = await import("../defaults/lib/@fireflies/viewer/image.ts");
+const { parse: parseTable, ...tableRest } = await import("../defaults/lib/@fireflies/viewer/table.ts");
+const { parse: parsePatch, ...diffRest } = await import("../defaults/lib/@fireflies/viewer/diff.ts");
 const keyhelp = await keyhelpWith({ ...kit, ...base, ...herdr });
-const fileIcons = await load(`${F}/file-icons.ts`, kinds);
-const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
+const fileIcons = await import("../defaults/lib/@fireflies/viewer/file-icons.ts");
+const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await import("../defaults/lib/@fireflies/viewer/keys.ts")), ...keyhelp };
 // The viewer imported for real (the shared files it imports as the app loads them).
 (globalThis as any).window = { paint_path: () => new Element() };
-const { default: Viewer } = await importMod(`${F}/viewer.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+const viewerLib = await importLibrary("@fireflies/viewer", { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+const { default: Viewer } = viewerLib;
 // The pure parts (logic.ts and the modules it was split into), as the pane imports them.
 const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`${F}/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const route = await import("@fireflies/editor-route");
 // The pane imported for real (its split modules as the app loads them), the viewer as loaded above.
 (globalThis as any).window = { paint_path: () => new Element() };
-const { default: Files } = await importMod(`${F}/main.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} }, { "./viewer.ts": { default: Viewer } });
+const { default: Files } = await importMod(`${F}/main.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {}, "@fireflies/viewer": viewerLib });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 
 // ---- a context: tasks run, timers wait until `tick()`, nested views record their props
@@ -112,7 +113,13 @@ const cx: any = {
   write_to_clipboard() {},
   new: (Class: any, props: any) => { const e = { Class, props, sets: [] as any[], set_props(p: any) { this.props = p; this.sets.push(p); } }; entities.push(e); return e; },
 };
-const settle = async () => { while (pending.length) await pending.shift(); };
+/** Lets the viewer's effects (its reads run on its runtime, not as spawned tasks) and the spawned tasks finish. */
+const settle = async () => {
+  for (let i = 0; i < 50; i++) {
+    while (pending.length) await pending.shift();
+    await new Promise((r) => setImmediate(r));
+  }
+};
 /** Runs the timers due so far (and the ones they start, once). */
 const tick = async () => { const due = timers; timers = []; for (const t of due) t.f(cx); await settle(); };
 

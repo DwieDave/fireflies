@@ -888,7 +888,7 @@ the highlighted line shows where it will land.
   **Every kind of file can be a tab**: a picture, PDF, table, patch, database,
   font or clip opens as a drawn tab of the editor (`editor.open {path, look:
   true}`, a link in its Markdown preview), shown by the preview's own
-  viewer (`viewer.ts`, the files pane's split's: fitted pictures, PDFs, tables,
+  viewer (`@fireflies/viewer`, the files pane's split's: fitted pictures, PDFs, tables,
   patches; its slim bar says kind, name and facts; clips never play by
   themselves). Its keys: H / L, gt / gT, ]b / [b tabs, ]B / [B move it, j k
   J K scroll, `e` its text (a table, patch or SVG: they switch between drawn
@@ -1318,8 +1318,7 @@ the highlighted line shows where it will land.
   last file), and the keyboard stays in the tree: `J` / `K` scroll the preview
   (half a view; a PDF a page), `<` / `>` make it smaller / bigger, or drag the
   divider; both parts keep a usable least. It is the preview pane's own viewer
-  (`preview/viewer.ts`; file-tree ships identical copies of it
-  and its files), so every kind the preview shows looks the same here, and it
+  (the `@fireflies/viewer` library both import), so every kind the preview shows looks the same here, and it
   adds text: code in the editor's colors, Markdown rendered, other text plain,
   the first 256 KB. A binary without a viewer or a file it can't read says why
   in one line; a folder shows what it holds. On another machine only text is

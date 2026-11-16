@@ -15,8 +15,8 @@ import type { EditorView } from "@fireflies/editor-route";
 import { HANDOVER, isEditorView } from "@fireflies/editor-route";
 import { isList } from "./guards.ts";
 import type { KeyRow } from "@fireflies/keyhelp";
-import { ICON_SIZE } from "./file-icons.ts";
-import { kindOf } from "./kinds.ts";
+import { ICON_SIZE } from "@fireflies/viewer/file-icons";
+import { kindOf } from "@fireflies/viewer/kinds";
 import { basename, dirname } from "./logic.ts";
 
 /** Where a file goes among the tabs: its index, and whether it's a new tab. */

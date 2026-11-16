@@ -38,8 +38,8 @@ mock.module("gpui-base", () => ({
 (globalThis as any).window = { paint_path: () => el };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const { hasDatabases, openInDatabases } = await import("../defaults/mods/preview/viewer-table.ts");
-const { drawStrip } = await import("../defaults/mods/preview/viewer-bars.ts");
+const { hasDatabases, openInDatabases } = await import("@fireflies/viewer");
+const { drawStrip } = await import("../defaults/lib/@fireflies/viewer/viewer-bars.ts");
 const { menuItems, isDatabaseFile } = await import("../defaults/mods/file-tree/logic.ts");
 
 test("the files pane's menu: Open in Databases (b) on a database file, only with the mod installed", () => {

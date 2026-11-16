@@ -605,6 +605,49 @@ What a read of them showed, and what closed each:
 | Six test files each carried a loader that evaluated keyhelp's text with its imports dropped | scripts | `keyhelpFor` / `importLibrary` (scripts/mod-source.ts): the library loaded with the test's stand-ins |
 | The render tests (cargo) registered the libraries only when another test happened to first | src/mods/render_tests.rs | `Staged::new()` registers them; `every_fireflies_library_resolves_from_a_mod_by_its_name` |
 
+**Wave 0b, done (2026-11-16).** Two libraries: `@fireflies/viewer` (the
+viewer and its parts, `kinds`, `image`, `table`, `diff`, `keys`,
+`file-icons`) and `@fireflies/markdown` (`markdown`, `markdown-parse`,
+`paths`, `follow`); 61 files gone from preview, editor, file-tree, nocturne,
+databases, github and markdown. Importers changed only their import lines.
+The viewer is a View on Effect: one runtime for the library
+(viewer-fx.ts: `Exec`, `Files`, `Commands`), each viewer attaching in `init`
+(`attach(cx)`), its reads (`runRead`), its folder watch, the remote poll, its
+commands and its native views' events as runs, `close()` interrupting them.
+A read still checks the view's `gen` after each wait (a newer file took its
+place), as before: keyed runs alone wouldn't cover a page drawn for the file
+before. Two entries stay promises for the mods not on Effect yet, each over
+its Effect and the kit's live layer: `cacheImage` (`imageCopy`) and
+`hasDatabases` (`databasesInstalled`). The kit gained `replaceWith(pattern,
+f)` (a replace with a function, which `Str.replace` doesn't take).
+What a read of them showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| Sixty-one copies of twenty files in seven mods, a drift test per family | viewer, markdown families | two libraries; `preview-shared.test.ts`, `markdown.test.ts`, `editor-follow.test.ts`, `editor-tabs.test.ts`, `databases-data.test.ts` check no mod carries one |
+| `sh` turned a program that couldn't run into a fake exit `-1` whose message then read as the file's own error | viewer-state `sh` / `failure` | `Exec`'s `ExecError`, handled by tag in `runRead`: "Can't show it: …", only while that file is still the one shown |
+| A fetched copy's write (`writeTextFile` in `try {} catch {}`) passed any failure as "left over, same bytes": a full disk showed as "Not a picture, or a damaged one" | viewer-load `fetchCopy` | only `StaleFile` (the file is there: same name, same bytes) passes; a `FileError` is the reason shown |
+| A turned picture's wrapper SVG, the same: a failed write left `src` naming a file that isn't there (a blank picture) | viewer-load `drawCopy` | as above (`writeOnce`) |
+| A program's answer in another form (no size and count lines) surfaced only as a thrown `TypeError` | viewer-text `loadText` / `loadLook` | `headLines` fails with a `DecodeError` naming what came back (test: "a file whose reading breaks says so") |
+| A bug's throw in a read was reported whatever file it was for | viewer-load | `runRead` catches defects with the same `gen` check |
+| The native views' answers and events, the props a host passes, the titles and paths in `shared()`: guards from each mod's own guard.ts | viewer-state | `PdfFactsSchema`, `MediaFactsSchema`, `NativeEventSchema`, `ViewerPropsSchema`; the slot maps read entry by entry (`readSharedMap`), one in another shape left out, not the map |
+| The commands loop, the native events loop, the remote file's 4 s poll and the folder watch were `cx.spawn` / `cx.timer.every`: nothing stopped them when the preview pane closed | viewer.ts `init` | runs on the view's runtime; `close()` interrupts them (the poll's sleeps are cancelled with it) |
+| The PDF view's re-ask counted its own asks (`pdfAsk`); the player's length polled itself through 20 nested timers | viewer-native | a keyed run (`pdf-later`, latest wins) and one fiber that asks, then every 250 ms, 21 times at most |
+| A converter or a page renderer that couldn't run was `catch(() => null)` beside a separate file check | viewer-load `convertCopy`, `rasterPageOf` | `runTool`: whether it ran (`Effect.option`), the file it should have written the measure, said in one place |
+| The images cache copy swallowed every failure (`.catch(() => null)`) | markdown `cacheImage` | `imageCopy`: `ExecError` / `ExitError` (exit 3 not there, 4 not copied); its promise for unconverted mods returns null on purpose (the picture shows as its link) |
+| The Databases hand-off built its command's JSON by hand (`JSON.stringify`) | viewer-table `openInDatabases` | `DatabasesConnect`, the contract as a Schema, encoded |
+| "Is Databases installed" swallowed any failure in a `try` | viewer-table `hasDatabases` | `databasesInstalled` on `Files`; a `FileError` counts as not installed, said beside it |
+| The files pane's moves read with the importing mod's guard.ts | markdown `follow` | `FileChangeSchema`, entry by entry |
+| The "copied" flash's token was `Date.now()` (two copies within a millisecond shared one) | viewer-pan `copyPath` | a counter |
+| Tests loaded the viewer's pure files by evaluating their text with imports dropped, and `@fireflies/kit/live` (it imports `herdr`) couldn't load beside a test's stand-ins | scripts | the library files imported for real; `importMod` / `importLibrary` copy `kit/live` with the stand-ins (the rest of the kit loads as it is) |
+
+Not closed, for wave 1 (they need the app or a mod's own design):
+several viewers in one mod copy (the editor's drawn tabs) each read that
+copy's `nextNativeViewEvent()`, so an event one takes for another is dropped
+(the `id` check), as before; a nested viewer (the files pane's split, a drawn
+tab) gets no `close()` from the app (only an application root does), so its
+loops end when its context refuses, as its tasks did.
+
 **Wave 1 (six fireflies, in parallel, once wave 0 has merged).**
 
 | firefly | mods | lines | findings |

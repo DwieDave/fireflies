@@ -1,24 +1,32 @@
 import { test, expect } from "bun:test";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
+import { copiesOf } from "./mod-source.ts";
 
-// The preview's viewer is shared: file-tree' preview split and the
-// editor's drawn tabs (a picture, a PDF, a table as a tab) mount the same view
-// the preview pane is (viewer.ts). A mod can import only its own files, so
-// file-tree and editor ship copies of it and of what it imports.
-// Edit preview's and copy them over: these fail when a copy drifts.
-const VIEWER_PARTS = ["state", "load", "text", "table", "native", "pan", "keys", "bars", "views"].map((p) => `viewer-${p}.ts`);
-const SHARED = ["viewer.ts", ...VIEWER_PARTS, "kinds.ts", "image.ts", "table.ts", "diff.ts", "keys.ts", "guard.ts", "file-icons.ts"];
-const read = (mod: string, file: string) => readFileSync(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
+// The preview's viewer is a library, @fireflies/viewer: the preview pane, the
+// files pane's preview split and the editor's drawn tabs (a picture, a PDF, a
+// table as a tab) import the same view by name, and the app serves one copy.
+// No mod carries a file of it; the mods that keep a kinds.ts or keys.ts of
+// their own (other contents, other jobs) are named here.
+const LIB = new URL("../defaults/lib/@fireflies/viewer/", import.meta.url).pathname;
+const FILES = readdirSync(LIB).filter((f) => f.endsWith(".ts"));
+const OWN: Record<string, string[]> = { "kinds.ts": ["mods/databases", "mods/git"], "keys.ts": ["mods/databases", "mods/git", "mods/procs"] };
 
-for (const host of ["file-tree", "editor"]) {
-  for (const file of SHARED) {
-    test(`${host}/${file} is preview's, unchanged`, () => {
-      expect(read(host, file) === read("preview", file)).toBe(true);
-    });
-  }
+for (const file of FILES) {
+  test(`no mod carries a copy of the viewer's ${file}`, () => {
+    expect(copiesOf(file).sort()).toEqual(OWN[file] ?? []);
+  });
 }
 
-test("the viewer imports only files that are shared", () => {
-  const imports = [...read("preview", "viewer.ts").matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1]);
-  expect(imports.filter((f) => !SHARED.includes(f))).toEqual([]);
+test("the viewer's own files import nothing of a mod's: their neighbours, and libraries by name", () => {
+  for (const file of FILES) {
+    const imports = [...readFileSync(`${LIB}${file}`, "utf8").matchAll(/from "(\.[^"]+)"/g)].map((m) => m[1] ?? "");
+    expect([file, imports.filter((f) => !FILES.includes(f.replace(/^\.\//, "")))]).toEqual([file, []]);
+  }
+});
+
+test("the preview pane, the files pane and the editor import @fireflies/viewer", () => {
+  const read = (path: string) => readFileSync(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  expect(read("preview/main.ts")).toContain('import Viewer from "@fireflies/viewer";');
+  expect(read("file-tree/look.ts")).toContain('import Viewer from "@fireflies/viewer";');
+  expect(read("editor/drawn-tabs.ts")).toContain('import Viewer from "@fireflies/viewer";');
 });

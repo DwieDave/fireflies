@@ -11,7 +11,7 @@ import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
 import { cursorMark, dither, givenName, goToPin, cornerTicks, LOGO, shownWebTab, statusColor } from "./kit.ts";
-import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
+import { fileIcon, iconColor, iconSvg } from "@fireflies/viewer/file-icons";
 import { openMenu, tabTileMenu } from "./menu.ts";
 import { tabLead } from "./pins.ts";
 import type { JarItem } from "./pins.ts";

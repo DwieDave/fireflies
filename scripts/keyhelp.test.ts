@@ -53,10 +53,12 @@ mock.module("gpui-base", () => ({
 
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
-test("no mod carries a copy of keyhelp.ts: every mod with a ? overview imports @fireflies/keyhelp", () => {
+test("no mod carries a copy of keyhelp.ts: every mod with a ? overview imports @fireflies/keyhelp (preview through @fireflies/viewer)", () => {
   expect(["nocturne", ...NOCTURNE_MODS].filter((m) => existsSync(`${MODS}/${m}/keyhelp.ts`))).toEqual([]);
   const users = ["nocturne", ...NOCTURNE_MODS].filter((m) => readdirSync(`${MODS}/${m}`).some((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts")
-    && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "@fireflies/keyhelp"')));
+    && /from "@fireflies\/(keyhelp|viewer)"/.test(readFileSync(`${MODS}/${m}/${f}`, "utf8"))));
+  // The viewer's ? overview (preview's, the files pane's, the editor's drawn tabs') is keyhelp's.
+  expect(readFileSync(`${MODS}/../lib/@fireflies/viewer/viewer-bars.ts`, "utf8")).toContain('from "@fireflies/keyhelp"');
   expect(users.sort()).toEqual(["agent-graph", "browser", "databases", "editor", "file-tree", "git", "github",
     "markdown", "nocturne", "notifications", "pip", "preview", "procs", "scripts", "usage"]);
 });

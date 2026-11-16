@@ -141,10 +141,10 @@ import { drawFolderView, drawRow, drawSplit, selectRow, settleSelection, listOf,
 import { keyDown } from "./input.ts";
 import type { Adds, Cut, Stop } from "./fit.ts";
 import type { At, Entry, LookState, Side } from "./split-size.ts";
-import type { Size } from "./image.ts";
+import type { Size } from "@fireflies/viewer";
 import { newLook, DIVIDER } from "./split-size.ts";
-import type { ViewerProps } from "./viewer-state.ts";
-import { hasDatabases } from "./viewer-table.ts";
+import type { ViewerProps } from "@fireflies/viewer";
+import { hasDatabases } from "@fireflies/viewer";
 
 export default class Files extends View {
   on: string | null = null;

@@ -4,7 +4,7 @@
 // (line and column when the client says). mysql's XML is parse-mysql.ts's,
 // libSQL's JSON hrana.ts's; all of them answer with an Outcome.
 
-import { parse as parseCsv } from "./table.ts";
+import { parse as parseCsv } from "@fireflies/viewer/table";
 import { MARK, NULL_MARK } from "./script.ts";
 import { lineCol } from "./split.ts";
 

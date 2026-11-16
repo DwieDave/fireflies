@@ -66,7 +66,7 @@ import type { AsyncContext, Context, Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { shared, setShared } from "herdr";
 import { isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import Viewer from "./viewer.ts";
+import Viewer from "@fireflies/viewer";
 
 /** A file for the preview pane whose slot it names. */
 export const SHOW_KEY = sharedKey("preview.show", nullable(object({ slot: isString, path: isString, n: isNumber }, { at: isNumber })));

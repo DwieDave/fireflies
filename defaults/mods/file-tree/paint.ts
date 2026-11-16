@@ -5,7 +5,7 @@ import { div, svg, PathBuilder, Background } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
-import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
+import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "@fireflies/viewer/file-icons";
 import { MOD } from "./state.ts";
 import { flat } from "@fireflies/layout-look";
 

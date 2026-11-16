@@ -69,7 +69,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`file-tree/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const keyhelp = await keyhelpWith({ ...kit, ...base, ...herdr });
 const route = await import("@fireflies/editor-route");
-const fileIcons = await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"));
+const fileIcons = await import("../defaults/lib/@fireflies/viewer/file-icons.ts");
 // The pane itself is imported for real (its modules as the app loads them),
 // with the stand-ins above for the app's modules and none for the viewer.
 (globalThis as any).window = { paint_path: () => new Element() };

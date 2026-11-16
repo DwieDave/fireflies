@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, tones, tonesFor, importMod, keyhelpFor } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod, importLibrary, keyhelpFor } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked (as markdown.test.ts).
 class Element {
@@ -58,22 +58,22 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const kinds = await load("preview/kinds.ts");
-const imageLogic = await load("preview/image.ts", kinds);
-const tableLogic = await load("preview/table.ts");
-const diffLogic = await load("preview/diff.ts");
+const kinds = await import("../defaults/lib/@fireflies/viewer/kinds.ts");
+const imageLogic = await import("../defaults/lib/@fireflies/viewer/image.ts");
+const tableLogic = await import("../defaults/lib/@fireflies/viewer/table.ts");
+const diffLogic = await import("../defaults/lib/@fireflies/viewer/diff.ts");
 const { parse: parseTable, ...tableRest } = tableLogic;
 const { parse: parsePatch, ...diffRest } = diffLogic;
 /** Everything main.js imports, as its imports name it. */
-const keyLogic = await load("preview/keys.ts");
-const fileIcons = await load("preview/file-icons.ts", kinds);
+const keyLogic = await import("../defaults/lib/@fireflies/viewer/keys.ts");
+const fileIcons = await import("../defaults/lib/@fireflies/viewer/file-icons.ts");
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...fileIcons, herdr: { ...herdr } };
 /** viewer.ts imported for real (the shared files it imports as the app loads
  *  them), with the stand-ins above for the app's modules. */
 const viewerMod = (): Promise<any> => {
   (globalThis as any).window = { paint_path: () => new Element() };
   const named: any = logic;
-  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+  return importLibrary("@fireflies/viewer", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
 };
 const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
 const { extension, siblings, stepIn, fileSize } = kinds;
