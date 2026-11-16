@@ -133,6 +133,12 @@ export function fit(view: Viewer, cx: Context): void {
 }
 
 export function actual(view: Viewer, cx: Context, point?: Point | null): void {
+  if (view.how?.how === "native" && view.kind === "pdf") {
+    pdfDo(view, "pdf.actualSize");
+
+    return;
+  }
+
   const v = current(view);
 
   if (v) setView(view, zoomTo(v, 1, view.img(), view.port, point), cx);

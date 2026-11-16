@@ -163,7 +163,8 @@ test("a PDF on macOS: the system's PDF view on the cached copy; pages and zoom i
   view.key({ key: "+", modifiers: {} }, cx);
   view.key({ key: "0", modifiers: {} }, cx);
   view.key({ key: "G", modifiers: { shift: true } }, cx);
-  expect(calls.map(([, a, args]) => [a, args])).toEqual([["pdf.next", {}], ["pdf.zoomIn", {}], ["pdf.fitWidth", {}], ["pdf.goToPage", { page: 9 }]]);
+  view.key({ key: "1", modifiers: {} }, cx);
+  expect(calls.map(([, a, args]) => [a, args])).toEqual([["pdf.next", {}], ["pdf.zoomIn", {}], ["pdf.fitWidth", {}], ["pdf.goToPage", { page: 9 }], ["pdf.actualSize", {}]]);
   expect(view.pdf).toEqual({ page: 2, pageCount: 9, scale: 1.5, autoScales: false });
   // Page events from the view keep the bar current.
   view.nativeEvent({ id: "preview-pdf", event: "pdf.page", data: { page: 5, pageCount: 9 } }, cx);
