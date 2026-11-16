@@ -14,6 +14,7 @@ import { retry, external, editAddress } from "./address.ts";
 import { toggleInspector } from "./inspector.ts";
 import { ICONS, available } from "./props.ts";
 import type Browser from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** An address split for the bar: host, then the rest. */
 export function parts(href: string | null): readonly [string, string] {
@@ -28,9 +29,9 @@ export function barIcon(view: Browser, t: Theme, id: string, name: string, enabl
   const ringed = view.control(id, enabled, action);
 
   return div().id(id).relative().size(24).flex_none().flex().items_center().justify_center()
-    .text_color(ringed ? t.foreground : enabled ? t.muted : t.ansi0)
+    .text_color(ringed ? t.foreground : enabled ? t.muted : edge(t))
     .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
-    .when(enabled, (el) => el.hover((s) => s.text_color(t.foreground).bg(t.ansi0)))
+    .when(enabled, (el) => el.hover((s) => s.text_color(t.foreground).bg(edge(t))))
     .on_mouse_down("left", (e, cx) => (focus ? view.claim() : view.stop(e, cx)))
     .on_click((_e, cx) => {
       if (enabled) {
@@ -53,7 +54,7 @@ export function addressField(view: Browser, t: Theme): Element {
   const ringed = view.control("address", true, () => editAddress(view));
 
   return h_flex().id("address").relative().flex_1().min_w(0).h(22).px(6).items_center().gap(0).text_size(11)
-    .hover((s) => s.bg(`${t.ansi0}66`))
+    .hover((s) => s.bg(`${edge(t)}66`))
     .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
     .on_mouse_down("left", (e, cx) => view.stop(e, cx))
     .on_click((_e, cx) => {
@@ -96,7 +97,7 @@ export function barView(view: Browser, t: Theme): Element {
     .child(barIcon(view, t, "external", "external-link", Boolean(view.start && p.href), () => external(view)))
     .child(keysButton(view, t))
     // Loading: a dithered line along the bar's foot, as far as the page has come.
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)))
     .when(loading, (el) => el.child(div().absolute().left(0).bottom(0).h(2)
       .w(Math.max(8, view.barW * Math.min(1, p.progress || 0.05))).transition("width", 180)
       .child(dither(t.accent, 1))));
@@ -109,7 +110,7 @@ export function errorLine(view: Browser, t: Theme): Element {
   return h_flex().id("error").flex_none().px(10).py(4).gap(10).items_center().text_size(11)
     .child(div().flex_1().min_w(0).text_color(t.blocked).child(view.error ?? ""))
     .when(page, (el) => el.child(div().id("retry").flex_none().px(4).text_color(t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", (e, cx) => view.stop(e, cx))
       .on_click((_e, cx) => {
         retry(view);
@@ -132,9 +133,9 @@ export function keysButton(view: Browser, t: Theme): Element {
 
 export function blankPage(view: Browser, t: Theme, title: string, hint: string | null): Element {
   return v_flex().flex_1().items_center().justify_center().gap(10).px(16).text_size(11)
-    .child(svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.ansi8).opacity(0.6))
+    .child(svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.muted).opacity(0.6))
     .child(div().text_color(t.foreground).child(title))
-    .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint ?? "")));
+    .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.muted).child(hint ?? "")));
 }
 
 /** Tab `tab`'s page: a WebKit view of its own (id: the tab's), on `start`. The mod's
