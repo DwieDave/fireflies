@@ -245,7 +245,7 @@ export function connsPanel(t: Theme, v: DbView): Element {
 }
 
 /** The group rules drawn before row `i` (the list's children count them). */
-function rowsBefore(all: readonly Conn[], i: number): number {
+export function rowsBefore(all: readonly Conn[], i: number): number {
   let n = 0;
 
   for (let k = 0; k <= i && k < all.length; k++) {
