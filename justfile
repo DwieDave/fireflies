@@ -155,6 +155,8 @@ test:
     bun test scripts/editor-rendered.test.ts
     # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
+    # A file changed on disk read again: the line at the top of the text, the preview and the rendered view (a scratchpad's too), the caret and selection kept on their text, moved by lines added above; the keyboard not taken.
+    bun test scripts/editor-reload.test.ts
     # The scratchpad edited as one document, by keys on a note like Developer's: the caret across blocks (wrapped rows, marks), enter in a list and a task list, enter at a block's start, backspace / delete joins, an untouched new block leaves no blank lines, a long paragraph's box, untouched bytes; its quiet bar (format, more and its menu); the keyboard kept from copies out of sight and stale editor.open records.
     bun test scripts/editor-scratchpad-edit.test.ts
     # Pictures in Markdown: image blocks drawn (broken and web ones too), a pasted screenshot or copied image file saved beside the file once and put in as a block, vim's p, undo, round trip (fake clipboard, a real PNG).
