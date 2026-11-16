@@ -49,15 +49,17 @@
 // tab_menu, tab:<n>, tab_act:<{ slot, tab, act }> (the tab menu's picks), and
 // open:<{ url, slot? } as JSON, or a URL> (the editor's links): the copy
 // whose slot it names opens it in front and its pane takes the keyboard.
-// A tab's menu (a right-click on it; m in the bar, for the ringed tab else the
-// shown one): pin it to the shelf or unpin it, move it left / right, close it.
+// A tab's menu (a right-click on it; a right-click on the bar, for the shown
+// tab: a pane with one tab has no strip; m in the bar, for the ringed tab else
+// the shown one): pin it to the shelf or unpin it, move it left / right, close it.
 // It is this mod as a popup (props { tabMenu }); its picks come back as tab_act.
 // A pinned tab (nocturne's PANES_KEY record with `tab`, tabs.ts has the rules)
 // is its own tile on the shelf, named from shared browser.tab-titles
 // ({ [slot]: { [tab]: title } }); the tile sends show:<{ slot, tab }> (or leaves
 // browser.show for when this pane comes on screen), its mark the tab's favicon
 // from shared browser.tab-icons ({ [slot]: { [tab]: "cache/browser-icons/<host>" }};
-// browser.icons: { [slot]: the shown tab's }). Closing the tab
+// browser.icons: { [slot]: the shown tab's }); it is lit only while this pane
+// shows it (browser.shown-tabs: { [slot]: the shown tab's id }). Closing the tab
 // drops its pin; it keeps it across restarts (tab ids are kept).
 // A file:// address (an HTML file from the files pane) loads as the file
 // (props path, trust "interactive": its folder readable, scripts on).
@@ -105,7 +107,7 @@ import { parseEvent, onEvent } from "./page-events.ts";
 import type { WebEvent } from "./page-events.ts";
 import { openTab, showTab, shownTab, closeTab, stepTab, keyTab } from "./tab-ops.ts";
 import { barView, errorLine, blankPage, webView } from "./bar.ts";
-import { TITLES, TAB_TITLES, PAGE_ICONS, TAB_ICONS, saveTabs, publishTitle, listIcons, dropSlot } from "./publish.ts";
+import { TITLES, TAB_TITLES, PAGE_ICONS, TAB_ICONS, SHOWN_TABS, saveTabs, publishTitle, listIcons, dropSlot } from "./publish.ts";
 import { tabPinned, togglePin, takeShow, openTabMenu, tabAct, initMenu, renderMenu } from "./tab-menu.ts";
 import { goTo, retry, focusPage, leaveAddress, external, editAddress } from "./address.ts";
 import { stripView } from "./strip.ts";
@@ -351,6 +353,7 @@ export default class Browser extends View {
     dropSlot(this, TAB_TITLES);
     dropSlot(this, PAGE_ICONS);
     dropSlot(this, TAB_ICONS);
+    dropSlot(this, SHOWN_TABS);
   }
 
   /** This copy's pane, as well as a mod can tell (it isn't told its pane id):

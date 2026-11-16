@@ -64,7 +64,7 @@ import { toggleGit, openWorktrees } from "./git.ts";
 import { UsageSection } from "./usage.ts";
 import { focusFiles } from "./files.ts";
 import { togglePicker } from "./picker.ts";
-import { openScratchpad } from "./scratchpad.ts";
+import { copyScratchpadPath, openScratchpad } from "./scratchpad.ts";
 import { toggleGithub, githubForm } from "./github.ts";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.ts";
 import { databasesCommand, openAsCommand } from "./inpane.ts";
@@ -179,8 +179,9 @@ export default class Sky {
     // the shown tab's panes into an even grid (gridify.ts), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.ts);
     // nocturne.scratchpad the repository's note in the editor (scratchpad.ts;
-    // nocturne.scratchpad-tab in a tab of its own; the palette and the "+ new"
-    // menu run these: this copy outlives their overlays while git answers);
+    // nocturne.scratchpad-tab in a tab of its own, nocturne.scratchpad-copy-path
+    // its path to the clipboard; the palette and the "+ new" menu run these:
+    // this copy outlives their overlays while git answers);
     // nocturne.dock moves the focused pane (any kind) into the dock and pins it,
     // nocturne.dock-web / dock-shell / dock-files open a web pane, a shell or a
     // files pane there (dock.ts);
@@ -208,6 +209,7 @@ export default class Sky {
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
         else if (c === "scratchpad" || c === "scratchpad-tab") openScratchpad(c === "scratchpad-tab");
+        else if (c === "scratchpad-copy-path") copyScratchpadPath(later);
         else if (c === "github") toggleGithub();
         else if (c === "github-pr") githubForm("pr");
         else if (c === "github-run") githubForm("run");

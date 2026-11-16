@@ -54,7 +54,7 @@ mock.module("gpui-base", () => ({
 
 const { default: Palette } = await import("../defaults/mods/nocturne/palette.ts");
 const { default: NewMenu } = await import("../defaults/mods/nocturne/newmenu.ts");
-const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.ts");
+const { openScratchpad, askScratchpad, copyScratchpadPath } = await import("../defaults/mods/nocturne/scratchpad.ts");
 const cx: any = { notify() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, stop_propagation() {}, bind_keys() {} };
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 
@@ -173,4 +173,34 @@ test("askScratchpad runs the command, nothing more", () => {
   askScratchpad(true);
   expect(ran).toEqual([["nocturne.scratchpad", undefined], ["nocturne.scratchpad-tab", undefined]]);
   expect(execCalls).toEqual([]);
+});
+
+// Developer, 2026-11-16: "Scratchpad copy path action" (to hand the note to an agent).
+test("copy its path: the note's path to the clipboard, a toast saying what was copied; from the palette through the sidebar's loop", async () => {
+  const clip: string[] = [];
+  const path = await copyScratchpadPath({ write_to_clipboard: (t: string) => { clip.push(t); } });
+  expect(path).toMatch(/^\/Users\/dev\/\.config\/herdr-app\/scratchpad\/app-[0-9a-f]{8}\.md$/);
+  expect(clip).toEqual([path]);
+  // The same note opening it finds; nothing opened.
+  expect(ran).toEqual([]);
+  expect(await openScratchpad()).toBe(path);
+  expect(notes).toEqual([{ title: "copied the scratchpad's path", body: path!.replace("/Users/dev", "~"), level: "success" }]);
+  // Nothing found: a toast says why, nothing copied.
+  notes = []; clip.length = 0;
+  appHomeImpl = () => { throw new Error("no app folder"); };
+  try {
+    expect(await copyScratchpadPath({ write_to_clipboard: (t: string) => { clip.push(t); } })).toBeNull();
+  } finally { appHomeImpl = () => "/Users/dev/.config/herdr-app"; }
+  expect(clip).toEqual([]);
+  expect(notes[0]).toMatchObject({ level: "error", title: "couldn't find the scratchpad" });
+  // The palette's entry runs the command; the sidebar's loop copies.
+  ran = [];
+  const p: any = new Palette();
+  p.init({}, cx);
+  p.query = "scratchpad copy path";
+  const e = p.rows().find((r: any) => r.e.title === "Scratchpad: copy its path").e;
+  expect(e.bind).toBe("nocturne.scratchpad-copy-path");
+  p.go(e);
+  expect(ran).toEqual([["nocturne.scratchpad-copy-path", undefined]]);
+  expect(readFileSync("defaults/mods/nocturne/sky.ts", "utf8")).toMatch(/c === "scratchpad-copy-path"\) copyScratchpadPath\(later\)/);
 });

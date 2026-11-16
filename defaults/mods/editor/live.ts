@@ -475,3 +475,62 @@ export function step(text: string | null | undefined, list: readonly Unit[], ran
 
   return { unit: u, line, col: Math.min(col, (ls[line] ?? "").length) };
 }
+
+/** How many characters of a line its block's mark takes: a heading's #s and the space after,
+ *  a list item's marker (a task's box too), a quote's >; 0 for a line without one. */
+export function leadOf(line: string | null | undefined): number {
+  const l = line ?? "";
+  const h = /^ {0,3}#{1,6}(?:[ \t]+|$)/.exec(l);
+
+  if (h) return h[0].length;
+
+  const t = TASK.exec(l);
+
+  if (t) return t[0].length;
+
+  const i = ITEM.exec(l);
+
+  if (i) return i[0].length;
+
+  return /^ {0,3}>[ \t]?/.exec(l)?.[0].length ?? 0;
+}
+
+/** The lead of a unit's line (leadOf): a heading's or item's first line, every line of a quote; 0 elsewhere. */
+export function leadAt(u: Unit, line: number, text: string | null | undefined): number {
+  if (u.kind === "quote") return leadOf(text);
+
+  return line === u.from && (u.kind === "heading" || u.kind === "item") ? leadOf(text) : 0;
+}
+
+/** Where a line's drawn rows start when it's wrapped at `cols` characters: words wrap whole
+ *  (a space at a row's end hangs there), a word longer than a row is cut. -> [0, …]. */
+export function rowStarts(line: string, cols: number): number[] {
+  const n = Math.max(1, Math.floor(cols));
+  const t = line;
+  const out = [0];
+  let s = 0;
+
+  while (t.length - s > n) {
+    const sp = t.lastIndexOf(" ", s + n);
+
+    s = sp > s ? sp + 1 : s + n;
+
+    // Spaces hang at the row's end.
+    while (t[s] === " " && s < t.length) s++;
+
+    if (s >= t.length) break;
+
+    out.push(s);
+  }
+
+  return out;
+}
+
+/** The row of `starts` (rowStarts) a column is drawn on. */
+export function rowAt(starts: readonly number[], col: number): number {
+  let k = 0;
+
+  while (k + 1 < starts.length && (starts[k + 1] ?? Infinity) <= col) k++;
+
+  return k;
+}
