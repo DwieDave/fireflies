@@ -34,7 +34,8 @@ fetch URLs, keep state per mod or shared between mods, animate natively.
 
 You can't: use HTML, CSS, a web view, Node APIs or `setTimeout`
 (`cx.timer`; `atob`, `btoa`, `URL`, `URLSearchParams`, `crypto`, `Buffer`,
-`fetch` and `queueMicrotask` are there, `TextDecoder` isn't); draw
+`fetch`, `queueMicrotask` and UTF-8 `TextEncoder` / `TextDecoder` are there,
+`structuredClone` isn't); draw
 outside your block except through overlays; change how a terminal itself
 draws text; read or change other mods' code at run time.
 
@@ -2818,6 +2819,37 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   phase") and the view shows "could not be re-rendered". Note it in render and
   act from a task: `cx.timer.after(0, (cx) => { …; cx.notify(); })`, once per
   request. Nocturne's sidebar and pane header answer their menus' asks so.
+
+### Effect: `effect`, `effect/http`, `@fireflies/kit`
+
+Every mod may import [Effect](https://effect.website) (v4, the version the app
+ships) by name: `import { Effect, Schema } from "effect"`, `import {
+HttpClient } from "effect/http"`. The app serves them, and its kit for mods,
+`@fireflies/kit`, to every mod from one copy (a copy per mod would cost each
+some 12 MB). Fireflies' own mods are moving onto it (docs/effect-mods.md in
+the source); a mod of yours may use it or not.
+
+- `@fireflies/kit`: `modRuntime(Live)` once per mod (`Live` from
+  `@fireflies/kit/live`), then in `init` `fx = runtime.attach(cx, report)`:
+  `fx.run(effect)` from any callback (failures go to `report`, the copy
+  redraws when it ends, `{ key }` makes runs replace each other), and
+  `fx.close()` in `close()` interrupts everything it started.
+  `runtime.now(effect)` reads in a render. `Effect.sleep` and schedules run
+  on `cx.timer` (there is no `setTimeout`).
+- Its services stand for the app: `Exec` (`execOk`, `execJson(schema)`),
+  `Files`, `Shared` with `sharedKey(name, schema)`, `Commands`, `Workspace`,
+  `Notify`; tests provide `@fireflies/kit/testing`'s layers instead.
+- Decode what comes from outside with Schema: `decodeJson(schema, what)`,
+  `decode(schema, what)`; a value of another shape is a `DecodeError` naming
+  `what`.
+- HTTP: Effect's `HttpClient` over the engine's `fetch` (`Live`), or
+  `curlClient(exec.run, { headersFrom })` for a request whose secret a shell
+  reads (it reaches curl on stdin, never a command line). Wrap it in
+  `policy({ timeout, retries })`: a timeout per attempt, retries of
+  idempotent requests only, Retry-After honored.
+- Not in the engine: `Intl` (Effect's `DateTime` can't name the local zone:
+  `localTime(ms)` from the kit), `AbortController` (don't take the `signal`
+  argument of `Effect.tryPromise`).
 
 ### UI
 

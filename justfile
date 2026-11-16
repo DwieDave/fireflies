@@ -57,11 +57,18 @@ typecheck:
 types:
     HERDR_APP_WRITE_TYPES=1 cargo test --locked -q --test mods_typescript -- committed_mod_typings_are_current
 
-# oxlint with anti-slop (oxlint.config.ts) on the same files (mods and frame); `just lint --fix`
-# adds the blank lines require-readable-spacing asks for.
+# The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
+# converted mod joins this list in its conversion's commit.
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/usage/limits.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/limits.ts defaults/mods/nocturne/usage.ts"
+
+# oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
+# adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
+# Effect's language-service diagnostics as type-aware rules (@effect/tsgo) and anti-slop's Effect rules,
+# on `effect_sources`.
 lint *args:
     bun install --frozen-lockfile
-    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods defaults/frame
+    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods defaults/frame defaults/lib
+    node_modules/.bin/effect-tsgo oxlint --type-aware --deny-warnings -c oxlint.effect.config.ts {{args}} {{effect_sources}}
 
 test:
     bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/github.test.ts scripts/github-graph.test.ts scripts/github-cache.test.ts scripts/github-remotes.test.ts scripts/github-create.test.ts scripts/equalize-panes.test.ts scripts/scripts.test.ts scripts/scripts-runs.test.ts scripts/scripts-nix.test.ts scripts/markdown.test.ts scripts/notifications.test.ts scripts/preview.test.ts scripts/preview-table.test.ts scripts/preview-diff.test.ts scripts/preview-native.test.ts scripts/github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/git.test.ts scripts/editor.test.ts scripts/finder.test.ts scripts/nocturne-vim.test.ts scripts/file-tree.test.ts scripts/browser.test.ts
@@ -177,6 +184,10 @@ test:
     bun test scripts/usage-limits.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/usage-poll.test.ts
+    # The mods' Effect kit (@fireflies/kit): decoding, exec, shared keys, the HTTP policy (fake server; curl against a local one), a view's runs and close.
+    bun test scripts/effect-kit.test.ts
+    # The Effect the app serves the mods (defaults/lib/effect) is a fresh build of the pinned package.
+    bun test scripts/effect-bundle.test.ts
     # TypeScript mods: guard.ts and keyhelp.d.ts are one file each in every mod that has them; guard.ts proves or refuses data.
     bun test scripts/mods-typescript.test.ts
     # The mods' TypeScript in the editor: its TypeScript server (the dev shell's), with the editor's root and initialize, finds every module of a mod file and a bun test and still reports a real type error.

@@ -10,7 +10,7 @@ the conversion settled on.
 `nocturne` and all seventeen of its mods (listed in `scripts/nocturne-mods.ts`,
 once `nocturne-<name>`) are TypeScript, with the files they share (below). The stock mods (agents, files, picker, pane, tabs,
 spaces, win98, …) and the frame's older pages are JavaScript and stay as
-they are. Read `pip` and `usage` as small patterns, preview's `viewer.ts`
+they are. Read `pip` as a small pattern (`usage` is on Effect now: docs/effect-mods.md), preview's `viewer.ts`
 for a whole view, github's `gh.ts` and `cache.ts` for outside data read and
 kept.
 
@@ -360,7 +360,7 @@ the mods build on (read the file's top and its `export type`s):
 
 | file | copies | test | what it types |
 |---|---|---|---|
-| `guard.ts` | nocturne and all 17 mods | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
+| `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
 | `keyhelp.ts` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
 | `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
 | `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |

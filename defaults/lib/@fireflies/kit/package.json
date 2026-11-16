@@ -1,0 +1,11 @@
+{
+  "name": "@fireflies/kit",
+  "private": true,
+  "type": "module",
+  "description": "The Effect foundation of Fireflies' mods (docs/effect-mods.md). Served by the app as a built-in module; this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts",
+    "./live": "./live.ts",
+    "./testing": "./testing.ts"
+  }
+}

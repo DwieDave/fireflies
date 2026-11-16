@@ -138,10 +138,10 @@ interface ShellFetchOptions {
 }
 declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellFetchResponse>;
 declare const process: typeof import("process").default;
-// HERDR: the web globals the engine installs (LLRT's Buffer, URL and crypto),
-// which `lib: ["ES2022"]` leaves out. Not declared, because the engine has
-// none of them: setTimeout and setInterval (stubs that throw: use cx.timer),
-// TextDecoder, TextEncoder, structuredClone.
+// HERDR: the web globals the engine installs (LLRT's Buffer, URL and crypto;
+// its own UTF-8 TextEncoder and TextDecoder), which `lib: ["ES2022"]` leaves
+// out. Not declared, because the engine has none of them: setTimeout and
+// setInterval (stubs that throw: use cx.timer), structuredClone.
 declare function atob(data: string): string;
 declare function btoa(data: string): string;
 declare function queueMicrotask(callback: () => void): void;
@@ -189,7 +189,22 @@ interface Crypto {
   randomUUID(): string;
   readonly subtle: unknown;
 }
-declare const crypto: Crypto;
+// HERDR: a `var`, as lib.dom has it, so `globalThis.crypto` types (Effect's declarations read it).
+declare var crypto: Crypto;
+// HERDR: UTF-8 only (the engine's own, over Buffer); another label throws a RangeError.
+interface TextEncoder {
+  readonly encoding: "utf-8";
+  encode(input?: string): Uint8Array;
+  encodeInto(input: string, destination: Uint8Array): { read: number; written: number };
+}
+declare var TextEncoder: { prototype: TextEncoder; new (): TextEncoder };
+interface TextDecoder {
+  readonly encoding: "utf-8";
+  readonly fatal: boolean;
+  readonly ignoreBOM: boolean;
+  decode(input?: ArrayBuffer | ArrayBufferView): string;
+}
+declare var TextDecoder: { prototype: TextDecoder; new (label?: "utf-8" | "utf8", options?: { fatal?: boolean; ignoreBOM?: boolean }): TextDecoder };
 
 
 /**

@@ -1,11 +1,17 @@
 // How many usage requests leave this machine (nocturne/limits.ts, the same
 // file as usage/limits.ts): one reading per machine, at the pace of
-// what's happening, backing off after a 429. A simulated hour: each "app" is
-// its own module instance with its own shared() store (as each Fireflies app is),
-// all on one fake file store (the machine's ~/.cache/herdr-app) and one fake
-// endpoint that counts. Every copy (the sidebar, each usage pane) ticks every
-// 30 s as the real timers do, all at once. No real request, no real file.
-import { test, expect, mock, setSystemTime, afterAll } from "bun:test";
+// what's happening, backing off after a 429. A simulated hour: each "app" has
+// its own shared() store (as each Fireflies app does), all on one fake file
+// store (the machine's ~/.cache/herdr-app) and one fake endpoint that counts.
+// Every copy (the sidebar, each usage pane) ticks every 30 s as the real
+// timers do, all at once. No real request, no real file: the app's services
+// are @fireflies/kit's test layers, the endpoint a fake server (httpTest).
+import { test, expect, setSystemTime, afterAll } from "bun:test";
+import { Effect, Layer } from "effect";
+import { execTest, httpTest, sharedTest, workspaceTest } from "@fireflies/kit/testing";
+import { HttpClient } from "effect/http";
+import { UsageEndpoint, backoff, BACKOFF, CAP, refreshUsage } from "../defaults/mods/nocturne/limits.ts";
+import type { UsageServices } from "../defaults/mods/nocturne/limits.ts";
 
 type Answer = { code: number; retry?: number };
 let files = new Map<string, string>();
@@ -16,53 +22,55 @@ const T0 = Date.parse("2026-11-12T10:00:00Z");
 
 const BODY = JSON.stringify({ five_hour: { utilization: 10, resets_at: null }, seven_day: { utilization: 20, resets_at: null }, rate_limit: { primary_window: { used_percent: 5 }, secondary_window: { used_percent: 6 } } });
 const tick = () => new Promise((r) => setImmediate(r));
+const ok = (stdout = "") => ({ code: 0, stdout, stderr: "" });
 
-/** The machine: the record file's ops, and the endpoint (a request takes a few turns, so copies interleave). */
-async function machine(_cmd: string, args: string[]) {
-  const script = args[1];
+/** The machine: the record file's ops, the scratch and login checks (a request takes a few turns, so copies interleave). */
+const machine = execTest(async (_cmd, args) => {
+  const script = String(args[1]);
   await tick();
   if (script.includes("usage-$2.json")) {
-    const [op, p, arg] = args.slice(3);
-    if (op === "read") return { code: 0, stdout: files.get(p) ?? "", stderr: "" };
-    if (op === "write") { files.set(p, arg); return { code: 0, stdout: "", stderr: "" }; }
-    if (op === "lock") { if (locks.has(p)) return { code: 1, stdout: "", stderr: "" }; locks.add(p); return { code: 0, stdout: "", stderr: "" }; }
-    if (op === "unlock") { locks.delete(p); return { code: 0, stdout: "", stderr: "" }; }
+    const [op, p = "", arg = ""] = args.slice(3);
+    if (op === "read") return ok(files.get(p) ?? "");
+    if (op === "write") { files.set(p, arg); return ok(); }
+    if (op === "lock") { if (locks.has(p)) return { code: 1, stdout: "", stderr: "" }; locks.add(p); return ok(); }
+    if (op === "unlock") { locks.delete(p); return ok(); }
   }
-  // The scratch check alone (limits.ts scratchApp): no request, and this isn't a scratch app.
-  if (!script.includes("https://")) return { code: 0, stdout: "", stderr: "" };
-  const p = script.includes("anthropic.com") ? "claude" : "codex";
+  // The scratch check, the login check: this isn't a scratch app, and there is a login.
+  return ok("@plan\tmax\tdefault_claude_max_5x\n");
+});
+
+/** The endpoint: counts each request, answers as `respond` says. */
+const endpoint = httpTest(async (req) => {
+  const p = req.url.includes("anthropic.com") ? "claude" : "codex";
   requests.push({ p, t: Date.now() - T0 });
   await tick(); await tick();
   const a = respond(p);
-  return { code: 0, stdout: `${a.code === 200 ? BODY : '{"error":"rate_limited"}'}\n@code\t${a.code}\n@retry\t${a.retry ?? 0}`, stderr: "" };
-}
-
-mock.module("herdr", () => ({
-  exec: machine, shared: () => null, setShared: () => null,
-  window: () => ({ active: true }), terminals: () => [], panes: () => [], spaces: () => [],
-}));
+  return a.code === 200 ? { status: 200, body: BODY } : { status: a.code, body: '{"error":"rate_limited"}', headers: a.retry ? [["retry-after", String(a.retry)]] : [] };
+});
+const Endpoint = Layer.effect(UsageEndpoint, HttpClient.HttpClient.use((client) => Effect.succeed(UsageEndpoint.of({ client: () => client })))).pipe(Layer.provide(endpoint.layer));
 
 type Look = { active: boolean; working?: boolean; panes?: number };
-/** An app: its own limits.ts instance and shared() store, and what its window shows. */
-async function app(name: string, look: Look) {
-  const m: any = await import(`../defaults/mods/nocturne/limits.ts?app=${name}-${Math.random()}`);
-  const store: Record<string, unknown> = {};
+/** An app: its own shared() store and what its window shows, on the one machine and endpoint. */
+function app(_name: string, look: Look) {
+  const shared = sharedTest();
   const tab = "tb1";
-  m.setHost({
-    shared: (k: string) => store[k] ?? null,
-    setShared: (k: string, v: unknown) => { store[k] = v; return null; },
-    appWindow: () => ({ active: look.active }),
+  const workspace = workspaceTest({
+    window: () => ({ platform: "macos", titlebar: "none", buttons: false, maximized: false, fullscreen: false, active: look.active }),
     terminals: () => (look.working ? [{ status: "working" }] : [{ status: "idle" }]),
-    spaces: () => [{ active: true, tabs: [{ id: tab, active: true }] }],
-    panes: () => Array.from({ length: look.panes ?? 0 }, () => ({ mod: "usage", tab, parked: false })),
+    // SAFETY: the pace reads only these fields of a space, a tab and a pane.
+    spaces: () => [{ active: true, tabs: [{ id: tab, active: true }] }] as never,
+    panes: () => Array.from({ length: look.panes ?? 0 }, () => ({ mod: "usage", tab, parked: false })) as never,
   });
+  const layer = Layer.mergeAll(machine.layer, shared.layer, workspace.layer, Endpoint);
+  const run = (e: Effect.Effect<void, never, UsageServices>) => Effect.runPromise(Effect.provide(e, layer));
+  const store = new Proxy({} as Record<string, unknown>, { get: (_t, k: string) => shared.store.get(k) ?? null });
   // The sidebar and each pane: one copy each, all ticking.
   const copies = 1 + (look.panes ?? 0);
-  return { m, store, copies, look };
+  return { m: { refreshUsage: (why?: "tick" | "open" | "force") => run(refreshUsage(why ?? "tick")) }, store, copies, look };
 }
 
 /** Runs `apps` for `minutes`, every copy ticking every 30 s (panes opened at the start read with "open"). */
-async function hour(apps: Awaited<ReturnType<typeof app>>[], minutes = 60) {
+async function hour(apps: ReturnType<typeof app>[], minutes = 60) {
   for (const a of apps) for (let c = 1; c < a.copies; c++) await a.m.refreshUsage("open");
   for (let s = 0; s < minutes * 60; s += 30) {
     setSystemTime(new Date(T0 + s * 1000));
@@ -77,18 +85,18 @@ function fresh() {
 afterAll(() => setSystemTime());
 
 test("the paces: 3 min looking at a usage pane, 10 min with the window active or an agent working, 30 min otherwise", async () => {
-  fresh(); await hour([await app("a", { active: true, panes: 1 })]);
+  fresh(); await hour([app("a", { active: true, panes: 1 })]);
   expect(requests.length).toBe(20);
-  fresh(); await hour([await app("a", { active: true })]);
+  fresh(); await hour([app("a", { active: true })]);
   expect(requests.length).toBe(6);
-  fresh(); await hour([await app("a", { active: false, working: true })]);
+  fresh(); await hour([app("a", { active: false, working: true })]);
   expect(requests.length).toBe(6);
-  fresh(); await hour([await app("a", { active: false })]);
+  fresh(); await hour([app("a", { active: false })]);
   expect(requests.length).toBe(2);
 });
 
 test("one reading for the sidebar and any number of panes", async () => {
-  fresh(); await hour([await app("a", { active: true, panes: 4 })]);
+  fresh(); await hour([app("a", { active: true, panes: 4 })]);
   expect(requests.length).toBe(20);
   // Never two at once: each request at least the pace apart.
   const gaps = requests.slice(1).map((r, i) => r.t - requests[i].t);
@@ -96,27 +104,27 @@ test("one reading for the sidebar and any number of panes", async () => {
 });
 
 test("one reading per machine: two apps (or two windows' apps) never double it", async () => {
-  fresh(); await hour([await app("a", { active: true }), await app("b", { active: false, working: true })]);
+  fresh(); await hour([app("a", { active: true }), app("b", { active: false, working: true })]);
   expect(requests.length).toBe(6);
   // One looking at a pane, the other idle: the eager one's pace, still one reading.
-  fresh(); await hour([await app("a", { active: true, panes: 2 }), await app("b", { active: false }), await app("c", { active: false })]);
+  fresh(); await hour([app("a", { active: true, panes: 2 }), app("b", { active: false }), app("c", { active: false })]);
   expect(requests.length).toBe(20);
   // Every app shows the same answer, read once.
   fresh();
-  const apps = [await app("a", { active: true }), await app("b", { active: false })];
+  const apps = [app("a", { active: true }), app("b", { active: false })];
   await hour(apps, 1);
   expect(requests.length).toBe(1);
   expect((apps[1].store["usage.last"] as any)?.state).toBe("ok");
 });
 
 test("only the picked provider is asked", async () => {
-  fresh(); await hour([await app("a", { active: true, panes: 1 })]);
+  fresh(); await hour([app("a", { active: true, panes: 1 })]);
   expect(new Set(requests.map((r) => r.p))).toEqual(new Set(["claude"]));
 });
 
 test("a 429 backs off (5, 10, 20, 40 min without Retry-After), keeps the last answer, and refresh waits too", async () => {
   fresh();
-  const a = await app("a", { active: true, panes: 1 });
+  const a = app("a", { active: true, panes: 1 });
   await hour([a], 1); // a good answer first
   const good = a.store["usage.last"];
   respond = () => ({ code: 429 });
@@ -134,7 +142,7 @@ test("a 429 backs off (5, 10, 20, 40 min without Retry-After), keeps the last an
 
 test("a 429 with Retry-After waits that long; the next good answer clears the back-off", async () => {
   fresh();
-  const a = await app("a", { active: true, panes: 1 });
+  const a = app("a", { active: true, panes: 1 });
   respond = () => ({ code: 429, retry: 900 });
   await hour([a], 30);
   expect(requests.map((r) => Math.round(r.t / 60_000))).toEqual([0, 15]);
@@ -147,7 +155,7 @@ test("a 429 with Retry-After waits that long; the next good answer clears the ba
 
 test("refresh: at once, then at most every 10 s, however often it's pressed", async () => {
   fresh();
-  const a = await app("a", { active: true });
+  const a = app("a", { active: true });
   await a.m.refreshUsage();
   requests = [];
   for (let s = 1; s <= 30; s++) { setSystemTime(new Date(T0 + s * 1000)); await Promise.all([a.m.refreshUsage("force"), a.m.refreshUsage("force")]); }
@@ -155,7 +163,6 @@ test("refresh: at once, then at most every 10 s, however often it's pressed", as
 });
 
 test("the back-off grows to its cap and Retry-After 0 means none given", async () => {
-  const { backoff, BACKOFF, CAP } = await import("../defaults/mods/nocturne/limits.ts");
   expect([1, 2, 3, 4, 5, 6, 7].map((n) => backoff(n) / 60_000)).toEqual([5, 10, 20, 40, 80, 120, 120]);
   expect(backoff(1, 0)).toBe(BACKOFF);
   expect(backoff(9, 30)).toBe(30_000);

@@ -67,7 +67,16 @@ function importedNames(clause: string): string[] {
  * view, say). Each call loads a fresh copy (in a temp folder), so tests that
  * set up different stand-ins don't share a module. Unlike `load()`-style
  * loaders it needs no list of what each file imports.
+ *
+ * The mods' libraries (`effect`, `effect/http`, `@fireflies/…`: what the app
+ * serves every mod by name, docs/effect-mods.md) load for real from the
+ * repo's node_modules, unless `standins` names one.
  */
+/** A library the app serves every mod by name (defaults/lib). */
+const isLibrary = (spec: string) => spec === "effect" || spec.startsWith("effect/") || spec.startsWith("@fireflies/");
+
+const repo = new URL("..", import.meta.url).pathname;
+
 export async function importMod(entry: string, standins: Record<string, Standin>, replace: Record<string, Standin> = {}): Promise<any> {
   const [mod, ...rest] = entry.split("/");
   const src = new URL(`../defaults/mods/${mod}/`, import.meta.url).pathname;
@@ -82,6 +91,7 @@ export async function importMod(entry: string, standins: Record<string, Standin>
     const text = readFileSync(join(src, file), "utf8").replace(
       /(import\s+(type\s+)?([\s\S]*?)\s+from\s+)"([^"]+)"/g,
       (whole, head: string, isType: string | undefined, clause: string, spec: string) => {
+        if (isLibrary(spec) && !(spec in standins)) return `${head}"${Bun.resolveSync(spec, repo)}"`;
         const stood = spec.startsWith(".") ? (spec in replace ? spec : null) : spec;
         if (!stood || isType) return whole;
         const names = wanted.get(stood) ?? new Set<string>();
