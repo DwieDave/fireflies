@@ -16,7 +16,7 @@ import { keysHint, keysView } from "./keyhelp.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { edge as edgeTone } from "@fireflies/tones";
 import type { default as Markdown } from "./main.ts";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 const ART = "mods/nocturne/art";
 

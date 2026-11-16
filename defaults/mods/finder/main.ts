@@ -38,7 +38,7 @@ import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, wr
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote, isPreviewFile } from "./logic.ts";
 import { edge } from "@fireflies/tones";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 const ROW = 28;
 const LINE = 24;

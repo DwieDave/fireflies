@@ -6,7 +6,7 @@ import { div, svg, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Status, Theme } from "herdr";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 export const ART = "mods/nocturne/art";
 

@@ -65,7 +65,7 @@ import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, pars
 import type { Command, ControlId } from "./commands.ts";
 import { KEYS, SKIP, keyControl, menuMove, parseCommand } from "./commands.ts";
 import { GLYPH_DROP, lift, mix, seamTone } from "./look.ts";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
 import { edge as edgeTone } from "@fireflies/tones";

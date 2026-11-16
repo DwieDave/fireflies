@@ -11,7 +11,7 @@ import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import type { Tone } from "./model.ts";
 import { edge as edgeTone } from "@fireflies/tones";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 export const ART = "mods/nocturne/art";
 

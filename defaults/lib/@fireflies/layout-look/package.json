@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/layout-look",
+  "private": true,
+  "type": "module",
+  "description": "The look the shown layout asks for beyond its colors (dithered, square, flat, radius). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

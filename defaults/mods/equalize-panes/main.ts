@@ -25,7 +25,7 @@ import { isString, object } from "./guard.ts";
 import type { ScopeRow } from "./scopes.ts";
 import { rows, shortcut } from "./scopes.ts";
 import { edge } from "@fireflies/tones";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 const ROW = 26;
 const HERE = "mods/equalize-panes";

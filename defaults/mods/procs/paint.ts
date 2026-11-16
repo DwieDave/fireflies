@@ -5,7 +5,7 @@ import { PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 // The dither fill, copied from ../nocturne/kit.ts (a mod can't import another mod's files).
 export const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();

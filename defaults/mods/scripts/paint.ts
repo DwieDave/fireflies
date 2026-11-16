@@ -6,7 +6,7 @@ import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Tone } from "./runs.ts";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 /** A run's state in the theme's colors. */
 export function toneColor(t: Theme, k: Tone): Color {

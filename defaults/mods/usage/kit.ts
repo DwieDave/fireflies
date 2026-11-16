@@ -4,7 +4,7 @@
 import { PathBuilder, Background } from "gpui-kit";
 import type { Color } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 /** Nocturne's sky art (moon, stars, hills, glow, pip). */
 export const ART = "mods/nocturne/art";
