@@ -21,6 +21,10 @@ impl Staged {
         ));
         std::fs::create_dir_all(&path).unwrap();
         let staged = Self(path);
+        // The shipped mods import the libraries (`@fireflies/keyhelp`, …) by
+        // name, as the app serves them: registered here, not left to whichever
+        // test happened to register them first.
+        export_libraries();
         for (folder, files) in [("mods", DEFAULT_MODS), ("frame", FRAME_MODS)] {
             for (name, bytes) in files {
                 let path = staged.0.join(folder).join(name);
