@@ -15,3 +15,7 @@ export * from "./layout-look.ts";
 export * from "./tones.ts";
 
 export * from "./paint.ts";
+
+export * from "./icons.ts";
+
+export * from "./text.ts";
