@@ -96,15 +96,19 @@ Cmd/Ctrl-click a `.md` path in terminal output.
 To show them a file to look at (a screenshot you took, a chart you drew, a
 PDF or CSV you generated, a patch, a SQLite database), `herdr-app do
 preview.open --path /abs/path/shot.png` opens it beside the focused pane in the
-preview: pictures fitted, PDFs paged, CSV/TSV and database tables as tables,
-patches colored (on macOS fonts and audio/video too; `image.open` is the same).
-It shows the file again when you overwrite it, so open it once and keep saving
-to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
-terminal output opens it as a tab of their editor instead, drawn the same way
-(Markdown in the editor's view for it); `herdr-app do editor.open --path … --look true`
-does that too. Their files pane opens a picture or PDF in a preview pane of its
-own until they open a text file from it, which turns that preview pane into an
-editor (the picture its first tab); later pictures from it go to that editor.
+preview: pictures fitted (zoom with + - 0 1, the mouse wheel, pinch or
+Cmd-scroll; the bar shows the zoom), PDFs paged, CSV/TSV and database tables as tables, patches
+colored (on macOS fonts and audio/video too; `image.open` is the same). A
+preview pane already in that tab shows it instead of a new pane opening (the
+one they last looked at; `--in pane` opens another), so opening several files
+one after another doesn't fill the tab. It shows the file again when you
+overwrite it, so open it once and keep saving to the same path. Cmd/Ctrl-click
+on a picture, PDF, database, font or clip path in terminal output, their file
+picker and their files pane open it in that preview pane too; a table, a patch
+or a Markdown file goes to their editor as a tab, drawn (Markdown in the
+editor's view for it), and so does `herdr-app do editor.open --path … --look
+true` for any of these. A text file opened after a picture goes to the editor;
+the preview pane stays.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens

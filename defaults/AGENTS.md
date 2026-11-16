@@ -802,34 +802,39 @@ the highlighted line shows where it will land.
   SQLite databases (`.sqlite`, `.sqlite3`, `.db`, `.db3`), patches (`.diff`,
   `.patch`) and, on macOS, fonts (`.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`),
   audio (`.mp3`, `.m4a`, `.aac`, `.wav`, `.aif` / `.aiff`, `.flac`, `.caf`) and
-  video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
-  above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
-  opens it as a tab of the editor, drawn by the preview's viewer (Editing
-  files: a drawn tab), or shows that tab; so do the file picker, and such
-  links and drawn images in the editor's Markdown preview. Nocturne's files
-  pane (a double click, enter, the menu's Open) opens a picture, PDF, font,
-  clip or database in a preview pane of its own (one: the next one shows
-  there), unless an editor it opened files in is in the tab: then as a drawn
-  tab of that editor (a table or patch is a drawn tab either way;
-  alt-double-click or `e`: the system's app, a table's or patch's text). A
-  text or Markdown file opened from it while its preview pane shows a picture
-  and it has no editor: the editor takes the preview pane's place, the
-  picture its first tab, the file the second. The preview pane (`preview`,
-  called `nocturne-image` and `nocturne-preview` before: panes and keys
-  saved with those names keep working) is for whoever opens it on purpose: the files pane's `p`, a drawn
-  tab's `p`, links and drawn images in the Markdown viewer, another machine's
-  file, and `preview.open {path, in?, pane?, on?}` from a mod or an agent
-  (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
+  video (`.mp4`, `.m4v`, `.mov`). Pictures, PDFs, databases, fonts, audio and
+  video open in a **preview pane**: a link to one in a terminal (any of the
+  forms above, a bare `shot.png` in the terminal's folder too; `path:42` is
+  ignored), the file picker's pick, Nocturne's files pane (a double click,
+  enter, the menu's Open), the Markdown viewer's links and drawn images, and
+  `preview.open {path, in?, pane?, on?}` from a mod or an agent (`image.open`
+  is the same). A preview pane already in the tab shows the next file instead
+  of a new pane opening each time (the one showing it; else the one the
+  request comes from, the one that last had the keyboard, shared
+  `preview.last`, or the tab's first; `in: "pane"` opens a new one beside);
+  a files pane's own preview pane first (Files panes). Tables and patches are
+  text: their links, the picker and the files pane open them as a drawn tab of
+  the editor (Editing files), Markdown in the editor's view for it; text
+  opened after a picture goes to the editor and the preview pane stays a
+  preview. Alt-double-click or `e` in the files pane: the system's app, a
+  table's or patch's text. The preview pane (`preview`, called
+  `nocturne-image` and `nocturne-preview` before: panes and keys saved with
+  those names keep working) is also for whoever opens it on purpose: the
+  files pane's `p`, a drawn tab's `p`, another machine's file. Web URLs stay
+  web pages. JSON, YAML, TOML, source
   code and other text you edit open in the editor (Editing files). Per kind:
   - pictures fit the pane; `+` / `-` zoom, `0` fit, `1` 100%, `h j k l` /
-    arrows / drag pan (scroll pans, Cmd/Ctrl-scroll zooms at the pointer), `r` /
-    `R` turn, `b` checker / dark background. Animated GIF and WebP play. HEIC
+    arrows / drag / a trackpad's two-finger scroll pan when zoomed in (fitted,
+    ← → step through the folder); a mouse wheel, Cmd/Ctrl-scroll and a
+    trackpad pinch zoom at the pointer (a wheel counts lines, a trackpad
+    pixels: that tells them apart), `r` /
+    `R` turn, `b` checker / dark background; the bar shows the zoom. Animated GIF and WebP play. HEIC
     and AVIF are converted to a PNG copy in `cache/preview` (macOS:
     sips, qlmanage; Linux: heif-convert, avifdec, ImageMagick or ffmpeg, else it
     says what to install).
-  - PDFs: on macOS the system's PDF view (scroll, `+` / `-` zoom, `0` fit
-    width, ← → / PageUp PageDown pages, `g` / `G` first / last; the bar shows
-    the page and page count); elsewhere one page at a time drawn by `pdftoppm`
+  - PDFs: on macOS the system's PDF view (scroll, pinch, `+` / `-` zoom, `0`
+    fit width, `1` 100%, ← → / PageUp PageDown pages, `g` / `G` first / last;
+    the bar shows the page, page count and zoom); elsewhere one page at a time drawn by `pdftoppm`
     when it's installed, zoomed and panned as a picture.
   - tables: the header row and row numbers stay put, numbers align right;
     `j k` / arrows rows, `J K` / PageUp PageDown pages, `g` / `G` top / bottom,
@@ -863,8 +868,9 @@ the highlighted line shows where it will land.
   (Nocturne's: double click or `e`; `E` and folders: $EDITOR in a terminal beside), the
   Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
-  **Every kind of file is a tab**: a picture, PDF, table, patch, database,
-  font or clip opens as a drawn tab of the editor, shown by the preview's own
+  **Every kind of file can be a tab**: a picture, PDF, table, patch, database,
+  font or clip opens as a drawn tab of the editor (`editor.open {path, look:
+  true}`, a link in its Markdown preview), shown by the preview's own
   viewer (`viewer.ts`, the files pane's split's: fitted pictures, PDFs, tables,
   patches; its slim bar says kind, name and facts; clips never play by
   themselves). Its keys: H / L, gt / gT, ]b / [b tabs, ]B / [B move it, j k
@@ -874,9 +880,10 @@ the highlighted line shows where it will land.
   line along the bottom is clickable. A file opened to be looked at (a
   terminal's link, the files pane's double click or enter, the picker's pick:
   `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
-  hit, definitions) opens its text. Another machine's pictures open in the
-  preview pane, as before; the files pane's pictures too while it has no
-  editor in the tab (Files panes).
+  hit, definitions) opens its text. Pictures, PDFs, databases, fonts and
+  clips from a terminal's link, the picker and the files pane go to a preview
+  pane instead (Previews); `editor.open --look true` still makes them a drawn
+  tab.
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the file's type mark (a pixel mark tinted
   by kind: Markdown, code, settings, a picture, a PDF, a table, video or
@@ -1183,16 +1190,14 @@ the highlighted line shows where it will land.
   files pane has its own editor and preview pane in the shown tab (shared
   `file-tree.opened` by its slot: `{ editor, preview }`, each `{ slot }`, or
   `{ path }` till the app's new pane is seen):
-  - a picture, PDF, font, clip or database: a tab of an editor already
-    holding it; else a drawn tab of the files pane's editor; else its preview
-    pane, which shows it (one file at a time; shared `preview.show`
-    `{ slot, path, n, at }` asks the preview pane with that slot to show
-    another file); else a new preview pane beside;
+  - a picture, PDF, font, clip or database: its preview pane, which shows it
+    (one file at a time; shared `preview.show` `{ slot, path, n, at }` asks
+    the preview pane with that slot to show another file); else
+    `preview.open` beside: a preview pane already in the tab shows it, else a
+    new one opens (Previews); never a tab of the editor;
   - any other file: a tab of the editor (the files pane's, else the shown
-    tab's: Markdown in the editor's view for it, a table drawn). With no
-    editor of its own but its preview pane there, the editor takes the
-    preview pane's place: the preview's file its first tab (drawn), this one
-    the second, shown; the preview pane closes.
+    tab's: Markdown in the editor's view for it, a table drawn), beside; the
+    preview pane stays a preview.
   An editor or preview pane closed (or in another tab) is no longer the files
   pane's: the rules start over. A tab popped out of the editor keeps its file
   (opening that file again shows it) and takes no others.
@@ -2275,7 +2280,9 @@ The main ones:
   heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
   machine the file is on; the reply says `opened` and the absolute `path`),
   `preview.open {path, in?, pane?, on?}` (the same for a picture, PDF, table, SQLite database,
-  patch, font or clip, in the preview; `image.open` is the same command),
+  patch, font or clip, in the preview; a preview pane already in `pane`'s tab shows it instead of
+  a new one (the reply says `as: "shown"`; `in: "pane"`: a new one beside); `image.open` is the
+  same command),
   `files.open {path, in?, pane?, on?}` (a folder in a new files pane beside `pane`, or the one
   there already rooted at it; `in: "tab"` a tab of its own, `"system"` the system's file manager;
   see Files panes),
@@ -2726,7 +2733,7 @@ Chained builders with GPUI's snake_case names: `div()`, `h_flex()`,
 `.overflow_y_scrollbar()`; `.child("text")`, `.text_size(n)`, `.font_semibold()`,
 `.truncate()`, `.text_color(c)`; `.bg(c)`, `.border(1)`, `.border_color(c)`,
 `.rounded(n)`; `.id("unique")` then `.on_click(...)`, `.on_mouse_down("right", ...)`,
-`.hover((s) => s.bg(c))`, `.on_scroll_wheel(...)`; keyboard: `this.h = cx.focus_handle()`
+`.hover((s) => s.bg(c))`, `.on_scroll_wheel(...)`, `.on_pinch(...)` (a trackpad pinch: `delta` 0.1 is ten percent larger, `local_position`); keyboard: `this.h = cx.focus_handle()`
 in init, `.track_focus(this.h).on_key_down((e, cx) => …)`, `this.h.focus()`.
 `ScrollHandle` from `gpui-base` scrolls a plain `overflow_*_scroll()` or
 `overflow_*_scrollbar()` area from code. Create `this.scroll = ScrollHandle.new()`
