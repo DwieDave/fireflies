@@ -199,6 +199,10 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 "hc" if first == json!(["machine", "add", "host", "--json"]) => {
                     Some(json!({"code":1,"stdout":"{\"error\":{\"kind\":\"host_key\",\"message\":\"unknown host key\"}}","stderr":""}))
                 }
+                // machine-add asks where the app's hc is, to name it by its full path.
+                "exec" if first == "sh" && a.get(1).map(from_host) == Some(json!(["-c", "command -v hc"])) => {
+                    Some(json!({"code":0,"stdout":"/fixture/bin/hc\n","stderr":""}))
+                }
                 // The files panel lists a folder with sh: kind and name pairs.
                 "exec" if first == "sh" && a.get(1).map(from_host).and_then(|v| v.get(2).cloned()) == Some(json!("files")) => {
                     Some(json!({"code":0,"stdout":"d\u{0}src\u{0}f\u{0}README.md\u{0}","stderr":""}))
@@ -742,7 +746,8 @@ fn machine_add_needing_input_keeps_the_picker_and_shows_instructions(cx: &mut Te
         let tree = session.describe(window, cx).unwrap();
         assert!(tree.contains("machine-add"), "{tree}");
         assert!(tree.contains("ma-message-host"), "{tree}");
-        assert!(tree.contains("hc machine add host"), "{tree}");
+        assert!(tree.contains("/fixture/bin/hc machine add host"), "{tree}");
+        assert!(tree.contains("ma-tab-host"), "{tree}");
         window.remove_window();
     }).unwrap();
     let calls = calls.borrow();
