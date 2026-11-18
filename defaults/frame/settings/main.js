@@ -9,7 +9,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup, ScrollHandle } from "gpui-base";
-import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window, nativeViewCapabilities } from "herdr";
+import { hc, exec, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window, nativeViewCapabilities } from "herdr";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 
 const I = (name) => `frame/settings/${name}.svg`;
@@ -79,6 +79,7 @@ export default class Settings extends View {
     this.previews = {}; // layout name -> its "preview" picture
     this.previewsOf = "";
     this.machineList = null;
+    this.core = null; // the hc the app runs, by its full path (corePath())
     this.machineLoading = false;
     this.machineError = null;
     this.machineBusy = {};
@@ -814,11 +815,24 @@ export default class Settings extends View {
       if (!Array.isArray(list)) throw new Error("Couldn't read machines.");
       this.machineList = list.filter((m) => !m.temporary);
       this.machineError = null;
+      if (this.machineList.some((m) => m.state === "needs_login")) await this.corePath();
     } catch (e) {
       this.machineError = String(e);
     } finally {
       this.machineLoading = false;
     }
+  }
+
+  // The hc the app runs, named by its full path in what the person runs in
+  // a terminal: the app puts the core's folder first on its own PATH
+  // (src/core_bin.rs), a shell may not have it (Developer's has no
+  // ~/.local/bin). Plain "hc" where sh can't say (Windows).
+  async corePath() {
+    if (this.core) return this.core;
+    const r = window?.()?.platform === "windows" ? null : await exec("sh", ["-c", "command -v hc"]).catch(() => null);
+    const path = r?.code === 0 ? r.stdout.trim().split("\n")[0] ?? "" : "";
+    this.core = path.startsWith("/") ? path : "hc";
+    return this.core;
   }
 
   machineAction(machine, action, cx, name) {
@@ -903,7 +917,8 @@ export default class Settings extends View {
           .child(div().text_size(12.5).text_color(t.dim).child(`${m.target ?? ""} · ${state} · ${m.version ? `hc ${m.version}` : "hc version unknown"}`)))
         .child(controls.flex_none()));
     if (m.state === "needs_login") {
-      const command = `hc machine login ${m.name}`;
+      const core = this.core ?? "hc";
+      const command = `${/^[a-z0-9_@%+=:,./-]+$/i.test(core) ? core : "'" + core.replace(/'/g, "'\\''") + "'"} machine login ${m.name}`;
       row.child(v_flex().gap(5)
         .child(div().text_size(12.5).text_color(t.blocked).child("needs a login: run"))
         .child(h_flex().gap(8).items_center()

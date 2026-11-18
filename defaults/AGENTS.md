@@ -2412,9 +2412,13 @@ The main ones:
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).
   Add machine lists all named ssh-config hosts in a scrollable list. Machines
-  that need a password, a new host key or herdr-core installed show what to run
-  in your own terminal; the picker updates once it is added. Other machines are
-  added quietly. Login guidance includes Copy. A machine that needs a login shows
+  that need a password, a new host key or herdr-core installed offer Run in a
+  tab (the add in a terminal tab on this computer, where you answer it; the
+  dialog closes) and the command to copy; the picker updates once it is added.
+  Other machines are added quietly. The command names the hc the app runs by its
+  full path (`command -v hc` through `exec`, whose PATH has the core's folder
+  first), since a shell's PATH may have none; Settings > Machines' login line
+  does the same. A machine that needs a login shows
   `hc machine login <name>` with Copy in Settings > Machines, its sidebar group,
   the welcome screen and the failed New space toast. If a remote machine was rebuilt
   or replaced and a different core answers there, its sidebar offers Connect:

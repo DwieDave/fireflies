@@ -61,6 +61,8 @@ export const state = {
   settings: { zoom: 1, font_family: "Mono", ui_font_family: "Geist", font_size: 13, theme_light: "a", theme_dark: "b" } as any,
   /** nativeViewCapabilities().chromium: Chromium's download (Settings → Web). */
   chromium: { available: true, built: true, installed: false, phase: "idle", done: 0, total: 134874408 } as any,
+  /** herdr's exec, when a test answers it (else every program fails). */
+  exec: null as null | ((cmd: string, args: string[], options?: any) => Promise<any>),
 };
 
 class Input { value_ = ""; focused = 0; handlers: Record<string, any> = {}; constructor(o: any = {}) { this.value_ = o.value ?? ""; }
@@ -91,7 +93,7 @@ mock.module("herdr", () => ({
   focused: () => null, commands: () => [], hc: async () => ({ code: 1, stdout: "", stderr: "" }),
   updates: () => ({ app: { version: "1.0", updates: true }, core: { version: "1.0" }, checks: true, checked: 1, notes: [] }),
   appHome: () => "/tmp/none", home: () => "/tmp", readTextFile: async () => null, writeTextFile: async () => {}, playSound: () => {},
-  presentUpdateNotes: () => {}, knownAgents: async () => [], nextCommand: () => new Promise(() => {}), exec: async () => ({ code: 1 }),
+  presentUpdateNotes: () => {}, knownAgents: async () => [], nextCommand: () => new Promise(() => {}), exec: async (cmd: string, args: string[], options?: any) => state.exec ? state.exec(cmd, args, options) : { code: 1 },
   feedbackIssue: (title: string, message: string) => ({ title: title || message.split("\n")[0], body: message, url: `https://github.com/DwieDave/fireflies/issues/new?title=${encodeURIComponent(title || message.split("\n")[0])}` }),
   pickFolder: async () => null, watchFolder: () => {}, languageOf: () => null, highlight: () => [], lspStart: async () => null, lspRequest: async () => null,
   lspNotify: () => {}, lspNextMessage: () => new Promise(() => {}), lspRelease: () => {}, setUnsaved: () => {}, notify: () => {},
