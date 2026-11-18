@@ -4,7 +4,9 @@
 // of scripts/fixtures/github (a failed run: step that GitHub shows with its
 // script folded and its output under it). herdr and gpui are stand-ins: every
 // element records the text it was given and the mouse handlers it got, in
-// order. Its own process: it stands in for "herdr".
+// order. As in the engine, a handler registered (or cx.notify() called) while a
+// virtual list's item renderer runs throws, and clicks on rows go through the
+// list's one on_item_click. Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
 
 mock.module("herdr", () => ({
@@ -17,14 +19,18 @@ mock.module("herdr", () => ({
   settings: () => ({ zoom: 1 }), shared: () => null, setShared: () => null,
   spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "linux" }),
 }));
-/** What was drawn, in order: a child's text, or a left-button handler. */
-type Mark = { text: string } | { click: (e: unknown, cx: unknown) => void };
+/** What was drawn, in order: a child's text, or a list's row click handler (key, cx). */
+type Mark = { text: string } | { itemClick: (key: string, cx: unknown) => void };
 const drawn: Mark[] = [];
+/** A virtual list's item renderer is running: no handlers, no notify (gpui-kit.d.ts, on_item_click). */
+let inRenderer = false;
 const el: any = new Proxy(function () {}, {
   get: (_t, k) => (k === "then" ? undefined
     : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => (on ? add(el) : el)
     : (...args: any[]) => {
-      if (k === "on_mouse_down" && args[0] === "left" && typeof args[1] === "function") drawn.push({ click: args[1] });
+      if (inRenderer && /^on_/.test(String(k))) throw new Error(`${String(k)} inside an item renderer`);
+
+      if (k === "on_item_click") drawn.push({ itemClick: args[0] });
 
       for (const a of args) if (typeof a === "string") drawn.push({ text: a });
 
@@ -43,13 +49,20 @@ const handle = (): Handle => {
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_auto_grow() {} }
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el, TextView: { markdown: () => el },
-  v_virtual_list: (_id: string, n: number, _s: unknown, key: (i: number) => string, render: Function) => { for (let i = 0; i < n; i++) key(i); render({ start: 0, end: n }, cx); return el; },
+  v_virtual_list: (_id: string, n: number, _s: unknown, key: (i: number) => string, render: Function) => {
+    keys = Array.from({ length: n }, (_, i) => key(i));
+    inRenderer = true;
+    try { render({ start: 0, end: n }, cx); } finally { inRenderer = false; }
+    return el;
+  },
   ScrollHandle: { new: handle }, VirtualListScrollHandle: { new: handle },
   InputState: { new: () => new Input() }, Input: { new: () => el }, TextareaState: { new: () => new Input() }, Textarea: { new: () => el },
 }));
 (globalThis as any).window = { paint_path: () => el };
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }), timer: { after() {}, every() {} }, bind_keys() {} };
+/** The last list's keys, by row. */
+let keys: string[] = [];
+const cx: any = { spawn() {}, notify() { if (inRenderer) throw new Error("cx.notify() inside an item renderer"); }, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }), timer: { after() {}, every() {} }, bind_keys() {} };
 
 const { default: Actions } = await import("../defaults/mods/github/actions.ts");
 const { logPanel } = await import("../defaults/mods/github/actions-panels.ts");
@@ -140,15 +153,19 @@ test("the drawn log: a shut group says how many lines it holds, a click on its t
   expect(shown).toContain("2 lines");
   expect(shown).toContain("11 lines"); // the header: every line of the step
   expect(shown).toContain("Preview images:");
-  // The title's own handler: the last one drawn before its text (the body's comes first).
-  const at = marks.findIndex((m) => "text" in m && m.text === "▸ Run set -euo pipefail");
-  const click = marks.slice(0, at).findLast((m) => "click" in m) as { click: Function };
+  // A click on a row comes through the list's one handler with that row's key.
+  const click = (row: number) => {
+    const m = draw().find((x) => "itemClick" in x) as { itemClick: (key: string, cx: unknown) => void };
+    m.itemClick(keys[row] ?? "", cx);
+  };
   a.focus = "steps";
-  click.click({}, cx);
+  click(0); // the title
   expect(a.focus).toBe("log");
   expect(draw().flatMap((m) => ("text" in m ? [m.text] : []))).toContain("▾ Run set -euo pipefail");
   expect(texts(a)[1]).toBe("2 set -euo pipefail");
-  click.click({}, cx);
+  click(1); // a line inside the group: nothing
+  expect(texts(a)[1]).toBe("2 set -euo pipefail");
+  click(0);
   expect(texts(a)).toHaveLength(9);
 });
 
