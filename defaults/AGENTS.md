@@ -102,6 +102,12 @@ pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
 `L` lists the links in the shown pull request or open card (j/k, enter opens
 one); `tab` / `shift-tab` walk the panels; `?` lists every key.
+On Actions, a finished job's log is split into its steps (`gh run view --job
+<id> --log`, placed by the runner's markers and the steps' times) and each
+`##[group]` is folded as on GitHub: a step's command shows as one title line
+with its output under it. In the log, enter / space opens or folds the first
+group from the top of the view, `z` every group of the step, and a click on
+a title that one; line numbers count the folded lines, as GitHub's do.
 The window also lives in a normal pane, beside terminals: props `{slot,
 folder, on?}` (`slot` unique: the pane finds itself and keeps its tab and
 each tab's selection across restarts). In a pane it has no frame or ✕, esc
