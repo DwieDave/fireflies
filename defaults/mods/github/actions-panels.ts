@@ -278,21 +278,24 @@ export function logPanel(v: Actions, t: Theme): Element {
           v.app.focusSelf();
           cx.stop_propagation();
         })
-        .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(i),
+        // A row's key is its line number (GitHub's); no handlers inside the renderer (gpui-kit: they throw).
+        .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(lines[i]?.n ?? i),
           (range) => lines.slice(range.start, range.end).map((l) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)
             .when(l.kind === "error", (el) => el.bg(`${t.blocked}1c`))
-            // A group's title opens or folds it (enter / space / z by keys).
-            .when(!!l.group?.size, (el) => el.cursor_pointer().on_mouse_down("left", (_e, cx) => {
-              v.focus = "log";
-              v.toggleGroup(l.n);
-              v.app.focusSelf();
-              cx.stop_propagation();
-              cx.notify();
-            }))
+            .when(!!l.group?.size, (el) => el.cursor_pointer())
             .child(div().w(38).flex_none().text_right().text_color(edge(t)).child(String(l.n)))
             .child(div().min_w(0).truncate().text_color(color[l.kind]).child(l.group ? `${l.group.open && l.group.size ? "▾" : "▸"} ${l.text}` : l.text || " "))
             .when(!!l.group?.size && !l.group.open, (el) => el.child(div().flex_none().text_color(t.dim).child(`${l.group?.size ?? 0} lines`)))
             .child(div().flex_1())))
+          // A click on a group's title opens or folds it (enter / space / z by keys).
+          .on_item_click((key, cx) => {
+            v.focus = "log";
+            v.app.focusSelf();
+
+            if (lines.some((l) => String(l.n) === key && l.group?.size)) v.toggleGroup(Number(key));
+
+            cx.notify();
+          })
           .size_full().track_scroll(v.logScroll));
   }
 
