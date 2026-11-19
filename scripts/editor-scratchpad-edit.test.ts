@@ -122,6 +122,7 @@ class Ed {
     const len = (l: number) => (l + 1 < st.length ? st[l + 1] - 1 : this.v.length) - st[l];
     const clamp = (p: P) => { const l = Math.max(0, Math.min(st.length - 1, p.line)); return { line: l, col: Math.max(0, Math.min(len(l), p.col)) }; };
     this.anchor = clamp({ line, col }); this.head = end ? clamp(end) : { ...this.anchor };
+    if (!end) this.focus(); // set_cursor_position focuses the editor (gpui-base); with an end it doesn't
   }
   selection() { const [s, e] = cmp(this.anchor, this.head) <= 0 ? [this.anchor, this.head] : [this.head, this.anchor]; const v = this.v; return { start: { ...s }, end: { ...e }, get text() { return v.slice(off(v, s), off(v, e)); } }; }
   set_selections(list: { start: P; end: P }[]) { const s = list[0]; if (s) { this.anchor = { ...s.start }; this.head = { ...s.end }; } }
@@ -189,7 +190,8 @@ class Ed {
     const r = rows[i];
     return { x: (p.col - r.start) * 8, y: 14 + i * 18 - this.scrolled, width: 8, height: 18, view: { x: 0, y: 10, width: 484, height: 400 } };
   }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; }
+  /** The window has one focus: an editor taking it takes it from every other. */
+  focus() { for (const e of eds) e.focusedNow = false; this.focusedNow = true; } focused() { return this.focusedNow; }
   set_tab_size() {} set_cursor_shape() {} set_diagnostics() {} set_line_notes() {} find_close() {} top_line() { return 0; } scroll_to_line() {} set_soft_wrap() {}
   find() { return { query: "", count: 0, current: null, active: false }; }
 }
@@ -664,4 +666,44 @@ test("its own autosave read back from disk changes nothing: no reload, the block
   expect(block(p).focusedNow).toBe(true);
   expect(p.cur.conflict).toBe(false);
   expect(caret(p)).toEqual({ line: 0, col: 11 });
+});
+
+// ---- the save keeps his place (Developer, 2026-11-19: "Scratchpad sometimes looses cursor (insert mode) on saving/on saved")
+
+test("typing in insert mode, the save and its echo leave the keyboard, insert mode and the caret where they were, also with a second copy of the note open (it reloads what was saved)", async () => {
+  // He types in this copy (p9) ...
+  panesNow = [editorPane("p9", "s1", { focused: true })];
+  focusedNow = { pane: "p9" };
+  const p = await note(NOTE, true);
+  // ... and the note is open in another pane too (p1, out of his way).
+  panesNow = [editorPane("p9", "s1", { focused: true }), editorPane("p1", "s0")];
+  focusedNow = { pane: "p1" };
+  const q = await note(NOTE, true);
+  // Its caret where it was last used: in the heading he is about to type into.
+  block(q).set_cursor(0, 2);
+  R(q).syncCaret(true);
+  focusedNow = { pane: "p9" };
+  block(p).focus();
+  block(p).set_cursor(0, 7);
+  press(p, "i");
+  expect(p.vim.mode).toBe("insert");
+  type(p, " now");
+  // Typing kept the keyboard in his block (not the file's editor, which isn't drawn).
+  expect(block(p).focusedNow).toBe(true);
+  // The save, the write's echo in this copy, and the other copy reading the note again.
+  expect(await saved()).toBe(NOTE.replace("# Ideas", "# Ideas now"));
+  p.load(cx(), null, true);
+  q.load(cx(), null, true);
+  await flush();
+  tick();
+  expect(main(q).value()).toBe(NOTE.replace("# Ideas", "# Ideas now"));
+  expect(block(p).focusedNow).toBe(true);
+  expect(block(q).focusedNow).toBe(false);
+  expect(main(p).focusedNow).toBe(false);
+  expect(main(q).focusedNow).toBe(false);
+  expect(p.vim.mode).toBe("insert");
+  expect(caret(p)).toEqual({ line: 0, col: 11 });
+  // What he types next lands where he was.
+  type(p, "!");
+  expect(main(p).value().split("\n")[0]).toBe("# Ideas now!");
 });

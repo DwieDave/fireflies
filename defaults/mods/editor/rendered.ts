@@ -54,7 +54,7 @@ import type { Range, Unit } from "./live.ts";
 import { units, unitFor, splice } from "./live.ts";
 import type { SyntaxColors } from "./logic.ts";
 import type { Sel } from "./md-text.ts";
-import { editBetween } from "./md-text.ts";
+import { caretTo, editBetween } from "./md-text.ts";
 import { columnView, litHeight, measureBlock, CHAR, ROW } from "./rendered-column.ts";
 import { blockKey, clickUnit, enterBelow } from "./rendered-keys.ts";
 import { GAP } from "./rendered-units.ts";
@@ -386,7 +386,9 @@ export class Rendered {
       return;
     }
 
-    if (samePos(a, h)) this.block.set_cursor(h.line, h.col);
+    // Never the keyboard: a copy reloading the note (another pane saved it) would take it from
+    // the pane being typed in; the callers that should have it focus the block themselves.
+    if (samePos(a, h)) caretTo(this.block, h.line, h.col);
     else this.block.set_cursor(a.line, a.col, h);
 
     this.placed = { anchor: a, head: h };
@@ -548,7 +550,7 @@ export class Rendered {
 
     const off = this.range.from;
 
-    if (samePos(anchor, c)) this.doc.editor.set_cursor(c.line + off, c.col);
+    if (samePos(anchor, c)) caretTo(this.doc.editor, c.line + off, c.col);
     else this.doc.editor.set_cursor(anchor.line + off, anchor.col, { line: c.line + off, col: c.col });
 
     this.placed = { anchor, head: c };
