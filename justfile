@@ -160,6 +160,8 @@ test:
     bun test scripts/nocturne-toolbar.test.ts
     # Git, GitHub and Scripts opened as normal panes: nocturne.<mod>:pane | :tab | :window | {as, folder?, on?}, the "+ new" tiles, the palette's "… in a pane".
     bun test scripts/nocturne-inpane.test.ts
+    # Paths for every mod: nocturne.copy-path and nocturne.reveal (the system's file manager, the path one argument), with a herdr stand-in.
+    bun test scripts/nocturne-paths.test.ts
     # The editor's Markdown commands (bold … rule, enter in a list), each text and selection in and out, and off again.
     bun test scripts/editor-mdedit.test.ts
     # The editor's rendered view model: units by source line, the caret's walk, a round trip on a Markdown corpus.
