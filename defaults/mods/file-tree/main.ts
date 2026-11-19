@@ -52,6 +52,8 @@
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   o              a folder in a new files pane  y  copy the path
+//   Y              copy the path relative to the space's folder (else the root)
+//   f              show it in the system's file manager, selected (nocturne.reveal; not another machine's)
 //   w              an HTML file as a page in the web pane (the shown tab's: a new front tab; else one beside)
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file

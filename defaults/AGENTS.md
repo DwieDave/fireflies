@@ -1191,6 +1191,17 @@ the highlighted line shows where it will land.
   `.copy-path` (a scratchpad's more menu, its path to the clipboard), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
+- **Paths for every mod** (Nocturne's, nocturne/files.ts; they work
+  whichever mod runs them, the files pane's menu among them):
+  `nocturne.copy-path:{"path"}` puts the path on the clipboard as given (a
+  toast says what); `nocturne.reveal:{"path"}` shows it in the system's file
+  manager, selected (macOS `open -R`, Windows `explorer /select,`, Linux
+  `xdg-open` on its folder; the path is one argument, no shell). The value may
+  be the bare path (`nocturne.reveal:/abs/x`, a key's `"name:value"`), `~/`
+  is the home; a relative path is refused with a toast. This computer's paths
+  only: offer reveal for another machine's files nowhere, and copy those as
+  `machine:/path` yourself. From a mod: ``run(`nocturne.reveal:${JSON.stringify({ path })}`)``
+  while `shared("layout") === "nocturne"`.
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
   "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
   `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
@@ -1282,8 +1293,16 @@ the highlighted line shows where it will land.
   a database has the same "open in Databases"), edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
-  (`y`), the file operations below, close; on the empty space below the rows:
-  new file / folder and paste in the root. File operations, one row at a time:
+  (`y`: absolute; another machine's as `machine:/path`), Copy relative path
+  (`Y`: relative to the shown space's folder when the row is in it, a space at
+  home aside, else to the tree's root; the root itself in the space's folder is
+  `.`), the row in the system's file manager, selected (`f`: "Reveal in Finder"
+  on macOS, "Reveal in Explorer" on Windows, "Show in the file manager"
+  elsewhere, which opens its folder; it runs `nocturne.reveal`, and under
+  another layout `files.open {in: "system"}` opens the file's folder or the
+  folder itself; never for another machine's files), the file operations
+  below, close; on the empty space below the rows: new file / folder, paste,
+  copy paths and reveal for the root. File operations, one row at a time:
   `a` new file, `A` new folder (also the filter line's `+ file` / `+ folder`
   chips, `+ folder` only where it fits, and an empty folder's `+ new file`: a
   name row in the selected folder or beside the selected file, the root with
@@ -1303,7 +1322,7 @@ the highlighted line shows where it will land.
   marks / unmarks and steps down, `V` marks a range while moving (`V` again ends
   it), shift-↑↓ mark while moving, esc clears the marks before anything else;
   the hint line counts them. With marks, `d` (one question: the count and the
-  first names), `x` / `P`, `y` (every path, one a line) and the menu on a marked
+  first names), `x` / `P`, `y` / `Y` (every path, one a line) and the menu on a marked
   row ("Delete 3 items…") act on all of them; a marked folder covers what's in
   it; rename, open, edit and the viewers act on the keyboard's row. Each row is
   tried; what failed is listed afterwards with its reason. Drag a row, or the
