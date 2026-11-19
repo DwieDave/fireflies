@@ -151,6 +151,8 @@ export default class GitView extends View {
   wtIntent: Intent | null = null;
   wtPicked = new Set<string>(); // worktree paths picked for d (M, U, A)
   userHome: string | null = null;
+  /** Where new worktrees go (settings.json's worktrees.directory), once read. */
+  wtRoot: string | null = null;
   handle: FocusHandle | null = null;
   acts = new Queue();
   reads = new Queue();

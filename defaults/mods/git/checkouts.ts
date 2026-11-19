@@ -63,7 +63,7 @@ export function goToWorktree(v: GitView, w: { readonly path: string; readonly pr
 
 /** n: a branch for a new worktree (an existing one is checked out, a new
  *  one starts from `base`, HEAD by default), checked out under
- *  ~/.herdr/worktrees/<repo>/ and opened as a space. `now`: no prompt. */
+ *  <worktrees.directory>/<repo>/ (default ~/.herdr/worktrees) and opened as a space. `now`: no prompt. */
 export function newWorktree(v: GitView, options: NewWorktree = {}) {
   const { value = "", base = null, label = null, track = false, now = false, tab, argv } = options;
   const g = v.git;
@@ -110,7 +110,7 @@ export function newWorktree(v: GitView, options: NewWorktree = {}) {
   v.prompt({
     title: "New worktree: branch", value,
     placeholder: "a branch: an existing one, or a new name",
-    note: `An existing branch is checked out; a new one starts from ${from}. It goes to ${v.tilde(v.userHome ? WT.ROOT(v.userHome) : "~/.herdr/worktrees")}/${g.name}/ and opens as a space.`,
+    note: `An existing branch is checked out; a new one starts from ${from}. It goes to ${v.tilde(v.wtRoot ?? (v.userHome ? WT.ROOT(v.userHome) : "~/.herdr/worktrees"))}/${g.name}/ and opens as a space.`,
     suggest: (q) => {
       const f = q.trim().toLowerCase();
 

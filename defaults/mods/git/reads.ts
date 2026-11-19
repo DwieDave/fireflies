@@ -33,6 +33,8 @@ export function start(v: GitView) {
 
     if (v.on && !v.userHome) v.userHome = await WT.userHomeOn(v.on).catch(() => null);
 
+    if (v.userHome) v.wtRoot = await WT.rootFor(v.userHome).catch(() => null);
+
     worktreeIntent(v);
   });
 }

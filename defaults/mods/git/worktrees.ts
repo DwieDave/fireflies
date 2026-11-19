@@ -2,21 +2,69 @@
 // what the worktree dialog and Nocturne's worktrees pane did, here. Every
 // checkout of the repo, the main one first, then by their branch's last
 // commit; which spaces show each one and which agents work in it; new ones
-// go to <home>/.herdr/worktrees/<repo>/<branch> on the repo's machine and
-// open as a space; removing closes the spaces in it first, says what would
+// go to <worktrees.directory>/<repo>/<branch> on the repo's machine (settings.json,
+// default ~/.herdr/worktrees) and open as a space; removing closes the spaces in it first, says what would
 // be lost (uncommitted changes, submodules, commits in them pushed nowhere)
 // and can take the branch along.
 
-import { exec, home, spaces, panes, agents } from "herdr";
+import { exec, home, spaces, panes, agents, appHome, readTextFile, window } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo } from "herdr";
 import type { Git } from "./git.ts";
 import type { Worktree } from "./parse.ts";
 import { parseWorktrees } from "./parse.ts";
+import { isString, object, parseJson } from "./guard.ts";
 
-/** Where new checkouts go: <ROOT>/<repo>/<branch, slashes as dashes>. */
+/** Where new checkouts go without a setting: <ROOT>/<repo>/<branch, slashes as dashes>. */
 export const ROOT = (userHome: string) => `${userHome}/.herdr/worktrees`;
 
-export const slug = (branch: string) => branch.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+/** The folder new checkouts go to: settings.json's `worktrees.directory`
+ *  (absolute, or `~` / `~/…` on the repo's machine: `userHome`), else ROOT.
+ *  Throws on a setting that isn't a usable path. */
+export async function rootFor(userHome: string) {
+  const raw = (await readTextFile(`${appHome()}/settings.json`)) ?? "{}";
+
+  if (!parseJson(raw, isAnyObject)) throw new Error("settings.json has errors: fix it first.");
+
+  const settings = parseJson(raw, isWorktreeSettings);
+
+  if (!settings) throw new Error("worktrees.directory must be a non-empty path.");
+
+  const directory = settings.worktrees?.directory;
+
+  if (directory === undefined) return ROOT(userHome);
+
+  if (!directory.trim()) throw new Error("worktrees.directory must be a non-empty path.");
+
+  let path = directory.replace(/\\/g, "/");
+
+  if (path === "~" || path.startsWith("~/")) path = userHome.replace(/\\/g, "/").replace(/\/$/, "") + path.slice(1);
+
+  if (!path.startsWith("/") && !/^[A-Za-z]:\//.test(path)) throw new Error("worktrees.directory must be an absolute path or start with ~/.");
+
+  return path.replace(/\/+$/, "");
+}
+
+/** settings.json: any object. */
+const isAnyObject = object({});
+
+/** What rootFor reads of settings.json: `worktrees.directory`, a string where set. */
+const isWorktreeSettings = object({}, { worktrees: object({}, { directory: isString }) });
+
+/** A branch's folder name: letters (any script, with their combining marks),
+ *  digits, `.`, `_` and `-`, the rest as dashes; a name of symbols only gets
+ *  a hash of itself, so two such branches never share a folder. */
+export const slug = (branch: string) => {
+  const normalized = branch.normalize("NFC");
+  const name = normalized.replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "");
+
+  if (name) return name;
+
+  let hash = 2166136261;
+
+  for (const char of normalized) hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 16777619);
+
+  return `branch-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+};
 
 export const inside = (p: string | null | undefined, dir: string | null | undefined) => Boolean(p && dir) && (p === dir || Boolean(p?.startsWith((dir ?? "").replace(/\/+$/, "") + "/")));
 
@@ -197,7 +245,7 @@ export async function inspect(w: { readonly path: string }, on: string | null): 
 export async function pathFor(g: Git, branch: string) {
   const main = await mainOf(g);
 
-  return `${ROOT(await userHomeOn(g.on))}/${main.split("/").pop() ?? main}/${slug(branch)}`;
+  return `${await rootFor(await userHomeOn(g.on))}/${main.split("/").pop() ?? main}/${slug(branch)}`;
 }
 
 /** The main checkout's folder (the one holding .git). */
@@ -223,7 +271,10 @@ export async function create(g: Git, branch: string | null, options: CreateOptio
 
   if (!name) return { error: "Type a branch name." };
 
-  const path = await pathFor(g, name);
+  let path: string;
+
+  try { path = await pathFor(g, name); } catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
+
   const exists = (await g.read(["show-ref", "--verify", "--quiet", `refs/heads/${name}`])).code === 0;
   const args = exists ? ["worktree", "add", path, name] : ["worktree", "add", "-b", name, path, base ?? "HEAD"];
   const r = await g.run("New worktree", args, { timeout: 600000 });
@@ -246,14 +297,40 @@ export interface RemoveHooks {
   readonly step?: (text: string) => void;
 }
 
-/** Removes one checkout: closes the spaces showing it (a shell sitting in
- *  the folder keeps it busy), takes its submodules out first when asked
- *  (`clearSubs`), forces past uncommitted changes when `dirty` was shown,
- *  and deletes the branch when `branch`. Resolves "" or an error. */
+/** Why git won't remove the checkout at `path` (it's locked, or git doesn't
+ *  list it), or "". */
+async function blocked(g: Git, path: string) {
+  const list = await g.read(["-c", "core.quotePath=false", "worktree", "list", "--porcelain"]);
+
+  if (list.code !== 0) return list.stderr.trim() || "git worktree list failed.";
+
+  const record = list.stdout.split(/\n\n+/).map((r) => r.split("\n")).find(([first]) => first === `worktree ${path}`);
+
+  if (!record) return "Git could not find this worktree.";
+
+  const lock = record.find((f) => f === "locked" || f.startsWith("locked "));
+
+  if (lock) return lock === "locked" ? "This worktree is locked." : `This worktree is locked: ${lock.slice(7)}`;
+
+  return "";
+}
+
+/** Removes one checkout: closes the spaces showing it once it's gone (first
+ *  on Windows, where a shell sitting in the folder keeps it busy; a removal
+ *  git refuses, a locked checkout, keeps them), takes its submodules out
+ *  first when asked (`clearSubs`), forces past uncommitted changes when
+ *  `dirty` was shown, and deletes the branch when `branch`. Resolves "" or an error. */
 export async function removeOne(g: Git, w: Pick<Worktree, "path" | "branch">, opts: Removal, hooks: RemoveHooks = {}) {
   const { closeSpace, step = () => {} } = hooks;
+  const why = await blocked(g, w.path);
 
-  for (const s of opts.spaces ?? []) closeSpace?.(s);
+  if (why) return why;
+
+  // Git on a remote Windows machine reports a drive-letter or UNC path.
+  const windows = g.on ? /^(?:[A-Za-z]:\/|\/\/)/.test(w.path) : window().platform === "windows";
+  const closeSpaces = () => { for (const s of opts.spaces ?? []) closeSpace?.(s); };
+
+  if (windows) closeSpaces();
 
   if (opts.subs && opts.clearSubs) {
     step("removing its submodules");
@@ -277,6 +354,8 @@ export async function removeOne(g: Git, w: Pick<Worktree, "path" | "branch">, op
   const r = await g.run("Remove worktree", ["worktree", "remove", ...(force ? ["--force"] : []), w.path], { timeout: 600000 });
 
   if (!r.ok) return r.err || "git worktree remove failed.";
+
+  if (!windows) closeSpaces();
 
   if (opts.branch && w.branch) {
     step("deleting the branch");
