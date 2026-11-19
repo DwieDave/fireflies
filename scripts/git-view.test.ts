@@ -642,6 +642,12 @@ test("worktrees: a branch named in another script, with combining marks or with 
   expect(slug("@@@")).not.toBe(slug("###"));
 });
 
+test("worktrees: a bare repo kept in <project>/.bare puts its checkouts under the project's name", async () => {
+  const { repoName } = await import("../defaults/mods/git/worktrees.ts");
+  expect(repoName("/home/u/project/.bare")).toBe("project");
+  expect(repoName("/home/u/src/repo")).toBe("repo");
+});
+
 test("worktrees: a removal git refuses (a locked checkout) keeps the spaces on it", async () => {
   homeNow = join(dir, "home");
   settingsText = null;

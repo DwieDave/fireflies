@@ -634,3 +634,12 @@ test("the list fits its popup: the popup's height holds the head, the longest li
   // the list's max height, its 2 px padding above and below, the 1 px border twice
   expect(spec.height).toBeGreaterThanOrEqual(HEAD + 12 * ROW + 4 * SEC + 4 + FOOT + 2);
 });
+
+// Upstream Herdr's #1001, ported: a bare repo hidden beside its worktrees is named after its project.
+test("the sidebar names a repo by its main folder: a bare repo without .git, one kept in <project>/.bare after its project", async () => {
+  const { repoName } = await import("../defaults/mods/nocturne/spaces.ts");
+  expect(repoName("/home/u/src/app")).toBe("app");
+  expect(repoName("/home/u/src/app.git")).toBe("app");
+  expect(repoName("/home/u/project/.bare")).toBe("project");
+  expect(repoName("/home/u/project/.bare/")).toBe("project");
+});

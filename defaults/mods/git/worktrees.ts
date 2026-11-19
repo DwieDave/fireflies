@@ -245,7 +245,16 @@ export async function inspect(w: { readonly path: string }, on: string | null): 
 export async function pathFor(g: Git, branch: string) {
   const main = await mainOf(g);
 
-  return `${await rootFor(await userHomeOn(g.on))}/${main.split("/").pop() ?? main}/${slug(branch)}`;
+  return `${await rootFor(await userHomeOn(g.on))}/${repoName(main)}/${slug(branch)}`;
+}
+
+/** A repo's name from its main checkout's folder: that folder's, or, for a
+ *  bare repo hidden beside its worktrees (<project>/.bare), its project's. */
+export function repoName(main: string) {
+  const parts = main.replace(/\/+$/, "").split("/");
+  const last = parts.at(-1) ?? main;
+
+  return last === ".bare" ? parts.at(-2) ?? last : last;
 }
 
 /** The main checkout's folder (the one holding .git). */
