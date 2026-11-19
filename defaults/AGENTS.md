@@ -2209,7 +2209,7 @@ The main ones:
   (a pane holding an agent, whatever its status, or a mod pane holding unsaved work, an
   editor's, asks the person first, parked ones too; a script passes `confirmed`; a shell
   or another program closes without a word, so tool panes toggle quietly),
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`, `pane.resize {direction, step?, px?, pane?}` (step: a share of the tab, default 0.05; or px), `pane.rename {pane?, name}` ("": unnamed again; `panes()[i].name`, kept with its tab),
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`, `pane.resize {direction, step?, px?, pane?}` (step: a share of the tab, default 0.05; or px), `pane.rename {pane?, name}` ("": unnamed again; `panes()[i].name`, kept with its tab; Nocturne's pane header and tab strip show it, after a name given to the pane's terminal),
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),

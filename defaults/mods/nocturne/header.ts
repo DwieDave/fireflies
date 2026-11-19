@@ -49,6 +49,8 @@ export interface HeaderPane {
   readonly terminal: string | null;
   readonly focused: boolean;
   readonly title: string;
+  /** The name `pane.rename` gave the pane, or null. */
+  readonly name?: string | null | undefined;
   readonly cwd?: string | null | undefined;
   readonly branch?: string | null | undefined;
   readonly status?: Status | null | undefined;
@@ -132,10 +134,10 @@ export function markPath(p: Marked | null | undefined): string {
 /** A mod pane's kind in a word ("web", "editor", "files", "databases"), null for a terminal. */
 export const modKind = (p: Marked | null | undefined): string | null => (p?.mod ? (modLook(p.mod)?.[0] ?? p.mod).toLowerCase() : null);
 
-/** What a pane is called: the name a person gave its terminal, its mod's
- *  name, its agent's or shell's, its title, its program's. */
+/** What a pane is called: the name a person gave its terminal, else the pane
+ *  (`pane.rename`), its mod's name, its agent's or shell's, its title, its program's. */
 export function paneName(p: HeaderPane): string {
-  return givenName(p.terminal) ?? viewerName(p) ?? modLook(p.mod)?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
+  return givenName(p.terminal) ?? (p.name || null) ?? viewerName(p) ?? modLook(p.mod)?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
 }
 
 /** A viewer's props, as far as its name goes: its file or folder, and its slot. */

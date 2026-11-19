@@ -602,7 +602,7 @@ export default class Tabs {
     // A mod pane's name and mark (header.ts modLook: Databases, a launcher's mod such as Kubernetes).
     const look = modLook(lead?.mod);
     // An unnamed tab goes by its lead pane: the name it was given, else its agent's, mod's or program's.
-    const name = c.named ? c.name : givenName(lead?.terminal) ?? (prog?.agent ? prog.name : look?.[0] || lead?.title || prog?.name || c.name);
+    const name = c.named ? c.name : givenName(lead?.terminal) ?? (lead?.name || null) ?? (prog?.agent ? prog.name : look?.[0] || lead?.title || prog?.name || c.name);
     const lifted = this.drag?.id === c.id;
     const icon = prog?.icon;
     const tint = c.active ? t.foreground : t.dim;
