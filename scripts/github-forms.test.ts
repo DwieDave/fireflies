@@ -136,7 +136,7 @@ function makeApp() {
     repo: { owner: "me", name: "app", full: "me/app", host: "github.com", root: "/src/app", on: null, base: "main", branch: "feat/pr-form", url: "https://github.com/me/app" },
     note: null, picker: null, closed: false, tab: "prs", refreshed: 0,
     focusSelf() { focusedInput = null; }, kick() {}, openUrl() {}, openDiff() {},
-    spawn(c: any, fn: Function) { c.spawn(async () => { try { await fn(); } catch (e) { app.thrown = e; } }); },
+    spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch (e) { app.thrown = e; } }); },
     refresh(c: any) { app.refreshed++; c.spawn(() => app.tabObj?.poll({ all: true, fresh: true }, c)); },
   };
   return app;

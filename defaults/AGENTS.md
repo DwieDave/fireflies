@@ -94,8 +94,15 @@ If `shared.json` is invalid, Fireflies logs a warning and keeps it as
 `herdr-app check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
 runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
-`data/github/cache.json`: it shows that at once when opened and reads
-GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
+`data/github/cache.json`: it shows that at once when opened (from the
+keys, the palette, + new, another mod's `nocturne.github*` command, or back
+from a pull request's review) and reads GitHub behind it, every time; the
+bar says "updating…", then "updated 2m ago". While open it reads the shown
+tab again every 3 s while a run, job or check moves and every minute when all
+is still; closed, it reads nothing. A workflow run by hand, a re-run (`R`,
+`A`, `e`) or a cancel (`X`) is read again after 1, 2, 3, 5 and 8 s, then
+every 10 s, until GitHub shows it (2 minutes at most for a new run, 1 for a
+re-run or cancel). Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
@@ -150,7 +157,7 @@ pointer, "GitHub: run a workflow…",
 declares (text, number, a list for `choice` and `environment`, a toggle for
 `boolean`; defaults filled, required ones checked). It runs
 `gh workflow run <file> --ref <ref> -f name=value…`, then waits for the run
-and selects it. Both forms take keys like every form (below): tab /
+(GitHub lists it a few seconds later) and selects it. Both forms take keys like every form (below): tab /
 shift-tab walk the fields, then Review and Cancel; ← → change a choice
 (base, head, a workflow, a ref, a choice input), space flips a toggle or
 opens a list (typing filters it), enter reviews (cmd-enter from the body or

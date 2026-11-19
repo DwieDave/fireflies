@@ -207,11 +207,11 @@ export class PrForm {
   load(cx: Context): void {
     const repo = this.repo, [owner = "", name = ""] = repo.full.split("/");
 
-    const done = () => {
+    const done = (cx: Context) => {
       if (!this.closed) cx.notify();
     };
 
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const cfg = await this.git(["config", "--get-regexp", "^(remote|branch)\\."]).catch(() => "");
       const list = candidates(cfg, repo.branch);
 
@@ -219,21 +219,21 @@ export class PrForm {
       this.baseRemote = remoteFor(list, repo.full, repo.host) ?? this.remote;
       await this.reread(cx);
     });
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const out = await this.git(["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)%09%(upstream:short)%09%(upstream:track)", "refs/heads"]).catch(() => "");
 
       this.local = parseBranches(out);
-      done();
+      done(cx);
     });
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const { data } = await api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] }));
       const names = (data ?? []).map((b) => b.name);
 
       // The default branch first, the rest as GitHub sorts them.
       this.remoteBranches = repo.base && names.includes(repo.base) ? [repo.base, ...names.filter((n) => n !== repo.base)] : names;
-      done();
+      done(cx);
     });
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const d = await graphql(repo, CHOICES, isPrChoices, [["owner", owner], ["name", name]], { partial: true }).catch(() => null);
       const r = d?.repository;
 
@@ -241,9 +241,9 @@ export class PrForm {
         me: d?.viewer?.login ?? null,
         users: r?.assignableUsers?.nodes ?? [], labels: r?.labels?.nodes ?? [], milestones: r?.milestones?.nodes ?? [],
       };
-      done();
+      done(cx);
     });
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const files = await this.git(["ls-files", "--", ":(icase)pull_request_template*", ":(icase).github/pull_request_template*", ":(icase)docs/pull_request_template*"]).catch(() => "");
 
       this.templates = templatesIn(files.split("\n").filter(Boolean));
@@ -254,7 +254,7 @@ export class PrForm {
 
       this.template = await this.git(["show", `HEAD:${first}`]).catch(() => "");
       this.fill();
-      done();
+      done(cx);
     });
   }
 
