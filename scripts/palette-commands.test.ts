@@ -36,6 +36,7 @@ mock.module("herdr", () => ({
   shared: () => null, window: () => ({ platform: state.platform }), focused: () => state.focused, panes: () => state.panes,
   terminals: () => state.terminals, agents: () => state.agents, updates: () => state.updates, layout: () => state.layout,
   spaces: () => state.spaces, pickFolder: async () => "/picked",
+  themes: () => [{ name: "moonfly", light: false }, { name: "graphite", light: false }, { name: "paper", light: true }], settings: () => ({ dark: true }),
 }));
 mock.module("gpui-kit", () => ({ div: () => el, svg: () => el, View: class {} }));
 mock.module("gpui-base", () => ({ h_flex: () => el, v_flex: () => el, InputState: { new: () => ({ on() {}, value: () => "", focus() {} }) }, Input: { new: () => el } }));

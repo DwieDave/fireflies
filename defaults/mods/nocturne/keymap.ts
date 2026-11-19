@@ -94,6 +94,7 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["pane.equalize:column", "Even out the panes stacked with this one"],
   ["terminal.search", "Search the terminal's screen and scrollback"],
   ["terminal.copy", "Copy the selection (nothing selected: the key goes to the program)"],
+  ["terminal.select_all", "Select the terminal's whole screen and history"],
   ["terminal.paste", "Paste"],
   ["terminal.paste_image", "Paste the clipboard's image as a file (a terminal on another machine)"],
   ["overlay.focus", "Focus the next floating window: Git, GitHub, a floating terminal"],

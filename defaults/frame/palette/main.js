@@ -111,6 +111,7 @@ export const OUT = {
   "terminal.show": "needs a terminal: the agents list",
   "terminal.peek": "needs a terminal: the agents list",
   "terminal.kill": "needs a terminal: Close pane ends the focused one",
+  "terminal.adjust_selection": "needs a direction: a mod's copy mode moves the selection's end with it",
   "float.view": "needs a view index: the floating terminal's own tabs",
   "layout.set": "needs a whole layout tree (agents and mods write it)",
   "layout.show": "needs a layout node id",
