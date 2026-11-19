@@ -290,6 +290,8 @@ function litView(v: Rendered, o: ViewOptions): Element {
     .pl(12)
     .pr(o.kindInBar ? 12 : 92)
     .py(5)
+    // A right-click here is the block editor's own (cut, copy, paste), not the pane's (a scratchpad's more menu).
+    .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
     .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(edge(t))))
     .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
     .when(!o.kindInBar, (el) => el.child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit))))

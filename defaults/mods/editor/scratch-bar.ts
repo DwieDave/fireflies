@@ -7,12 +7,20 @@
 // space .) and "more" (its menu: copy the note's path, the view, word wrap,
 // vim). No language, indent, server or line:col: a note is always Markdown,
 // and the pane's header names it.
+//
+// Copying the note's path (Developer, 2026-11-19, asking a second time: "Scratchpad: Add copy
+// path option"; it was only behind "more" and in the palette): "more"'s first entry (y), a
+// right-click anywhere on the scratchpad but in the block being typed into (the more menu at
+// the pointer; that block keeps its editor's cut / copy / paste), the tab menu's "Copy its
+// path" (y; every file's), editor.copy-path, and the palette's "Scratchpad: copy its path"
+// (nocturne.scratchpad-copy-path).
 
 import type EditorPane from "./main.ts";
 import { kindWord } from "./rendered-column.ts";
 import { tilde } from "./logic.ts";
 import { focusText, openMdMenu } from "./md-pane.ts";
-import { BAR, dither } from "./pane-kit.ts";
+import type { Doc } from "./pane-kit.ts";
+import { BAR, dither, zoom } from "./pane-kit.ts";
 import { setWrap, toggleVim } from "./pane-vim.ts";
 import { h_flex, v_flex } from "gpui-base";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
@@ -20,6 +28,8 @@ import { div, svg } from "gpui-kit";
 import type { Theme } from "herdr";
 import { home, notify } from "herdr";
 import { edge } from "@fireflies/tones";
+import type { Pt } from "@fireflies/menu-place";
+import { placeMenu } from "@fireflies/menu-place";
 
 /** The more button's mark: three dots on the pixel grid. */
 const MORE = "mods/editor/art/more.svg";
@@ -41,17 +51,24 @@ interface MoreItem {
   readonly run: (ed: EditorPane, cx: Context) => void;
 }
 
-/** The note's path to the clipboard, a toast saying so (nocturne.scratchpad-copy-path does it from anywhere). */
-export function copyNotePath(ed: EditorPane, cx: Context): void {
-  const path = ed.on ? `${ed.on}:${ed.path}` : ed.path;
+/** Tab `d`'s path to the clipboard (on another machine: `machine:path`), a toast saying so: the
+ *  more menu, the tab menu, editor.copy-path (nocturne.scratchpad-copy-path does it for the
+ *  note from anywhere). */
+export function copyDocPath(ed: EditorPane, d: Doc, cx: Context): void {
+  const path = ed.on ? `${ed.on}:${d.path}` : d.path;
 
   cx.write_to_clipboard(path);
 
   try {
-    notify({ title: "copied the scratchpad's path", body: tilde(path, home()), level: "success" });
+    notify({ title: d.scratch ? "copied the scratchpad's path" : "copied its path", body: tilde(path, home()), level: "success" });
   } catch {
     ed.say("copied its path");
   }
+}
+
+/** The shown note's path to the clipboard. */
+export function copyNotePath(ed: EditorPane, cx: Context): void {
+  copyDocPath(ed, ed.shown(), cx);
 }
 
 const on = (yes: boolean, t: Theme, color: Color): readonly [string, Color] => (yes ? ["on", color] : ["off", t.dim]);
@@ -70,6 +87,18 @@ export const MORE_ITEMS: readonly MoreItem[] = [
 export function toggleMore(ed: EditorPane, cx: Context): void {
   ed.moreMenu = ed.moreMenu ? null : { at: Date.now() };
   ed.mdMenu = null;
+  focusText(ed);
+  cx.notify();
+}
+
+/** A right-click on the scratchpad (pane-frame.ts): the more menu at the press (`near`, pane
+ *  layout px), its path first. Not in a find, ex or the card's line (their fields have their own menus). */
+export function moreAt(ed: EditorPane, near: Pt | null, cx: Context): void {
+  if (!ed.scratch || ed.look || ed.mode !== null || ed.vim.ex !== null || ed.card) return;
+
+  ed.moreMenu = { at: Date.now(), near };
+  ed.mdMenu = null;
+  ed.tabMenu = null;
   focusText(ed);
   cx.notify();
 }
@@ -199,7 +228,21 @@ export function scratchBar(ed: EditorPane, t: Theme, parts: BarParts): Element {
     .child(moreChip(ed, t));
 }
 
-/** The more menu, under the bar at the right. */
+/** The more menu's size (layout px; its height about what its rows take: two group heads, six entries). */
+const MORE_W = 300;
+const MORE_H = 182;
+
+/** Where the more menu stands: at a right-click's press (menu-place.ts keeps it inside the
+ *  pane), else under the bar at the right, by its button. */
+function morePlace(ed: EditorPane): Pt {
+  const near = ed.moreMenu?.near;
+  const z = zoom();
+  const room = { width: ed.size.width / z, height: ed.size.height / z };
+
+  return near ? placeMenu({ width: MORE_W, height: MORE_H }, room, near) : { x: Math.max(8, room.width - 10 - MORE_W), y: ed.stripH() + BAR + 2 };
+}
+
+/** The more menu, under the bar at the right (by a right-click: at the pointer). */
 export function moreView(ed: EditorPane, t: Theme): Element {
   let group = "";
   const rows: Element[] = [];
@@ -233,12 +276,14 @@ export function moreView(ed: EditorPane, t: Theme): Element {
     );
   }
 
+  const place = morePlace(ed);
+
   return v_flex()
     .id("editor-more-menu")
     .absolute()
-    .right(10)
-    .top(ed.stripH() + BAR + 2)
-    .w(300)
+    .left(place.x)
+    .top(place.y)
+    .w(MORE_W)
     .py(4)
     .bg(t.background)
     .border(1)

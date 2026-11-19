@@ -19,7 +19,7 @@ import { closeTab, popIn, popOut, stepMove, stepShownTab } from "./pane-tabs.ts"
 import { setWrap, toggleVim } from "./pane-vim.ts";
 import { setView } from "./preview-pane.ts";
 import { openTabMenu } from "./tab-menu.ts";
-import { copyNotePath, toggleMore } from "./scratch-bar.ts";
+import { copyDocPath, toggleMore } from "./scratch-bar.ts";
 
 // The Markdown preview: how it shows, in the order the switch goes.
 export const VIEWS: readonly EditorView[] = ["rendered", "split", "preview", "text"];
@@ -41,7 +41,8 @@ export function command(ed: EditorPane, c: string, cx: Context): void {
   // A scratchpad's more menu (scratch-bar.ts): copy its path, the view, wrap, vim.
   if (c === "more") return ed.scratch ? toggleMore(ed, cx) : ed.say("the more menu is a scratchpad's");
 
-  if (c === "copy-path") return ed.scratch ? copyNotePath(ed, cx) : ed.say("copy-path is a scratchpad's (a drawn file: y)");
+  // The shown file's path to the clipboard (a scratchpad's note, any file).
+  if (c === "copy-path") return copyDocPath(ed, ed.shown(), cx);
 
   if (c === "replace") return openFind(ed, true);
 

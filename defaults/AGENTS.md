@@ -931,7 +931,8 @@ the highlighted line shows where it will land.
   the pane it stays); the order is kept. A right-click on a tab opens its menu at
   the pointer (space b m, `editor.tab-menu`, under the shown tab; under the bar
   with one file): pop out into its own pane, pop
-  out into a new tab, move into the editor beside, move left / right, close,
+  out into a new tab, move into the editor beside, move left / right, copy its
+  path (y; on another machine `machine:path`), close,
   close the others (those with unsaved changes stay); j k / ↑ ↓, enter, the
   entries' letters, esc. **Popping a tab out** (the menu, the drag, space b o,
   `:popout`, `editor.pop-out` beside or `.pop-out-tab` in a new tab
@@ -1072,8 +1073,9 @@ the highlighted line shows where it will land.
   normal mode, enter makes the new block under the lit one and types into it
   (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
-  the block under the pointer, and the "add a block" line under the last
-  block, put an empty paragraph there. An empty block made so offers the
+  the block under the pointer (it stays while the pointer is on the block's
+  row, its gutter and the "+" included), and the "add a block" line under the
+  last block, put an empty paragraph there. An empty block made so offers the
   kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
   height kept, edited in place, never shorter than its text's rows), and a
@@ -1199,7 +1201,7 @@ the highlighted line shows where it will land.
   Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
   `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
   `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.more` and
-  `.copy-path` (a scratchpad's more menu, its path to the clipboard), `.next-tab`, `.prev-tab`,
+  `.copy-path` (a scratchpad's more menu; the shown file's path to the clipboard), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **Paths for every mod** (Nocturne's, nocturne/files.ts; they work
@@ -1235,10 +1237,17 @@ the highlighted line shows where it will land.
   "format" (the Markdown commands, cmd-. / space .) and "more" (a click or
   `editor.more`: copy its path y, rendered r, text e, split with the preview
   s, word wrap w, vim v; a letter or a click runs one); no language, indent,
-  server or line:col, and the header names the note. Only the focused pane
+  server or line:col, and the header names the note. A right-click anywhere
+  on it (the bar, a drawn block, the margins) opens the more menu at the
+  pointer; in the block being typed into a right-click is its editor's own
+  (cut, copy, paste). Its path to the clipboard: more's y, the right-click
+  menu's y, the tab menu's "Copy its path" (space b m), `editor.copy-path`,
+  or the palette's "Scratchpad: copy its path" (`nocturne.scratchpad-copy-path`,
+  the note needn't be open). Only the focused pane
   takes the keyboard: an editor that starts out of sight (a pane pinned to
-  the shelf, loaded parked) or another editor on the same note leaves it
-  where it is. The
+  the shelf, loaded parked) or another editor on the same note (reloading
+  what this one saved) leaves it where it is, and the save keeps insert mode
+  and the caret where they were. The
   pane's tab reads "scratchpad" and its repository; other files (a picker's,
   a link's) open in an editor beside it, never as its tabs. Agents may read
   and write the note like any file (`writeTextFile` semantics: an open pane

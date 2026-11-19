@@ -222,7 +222,10 @@ export function watchShared(ed: EditorPane, cx: Context): void {
   // The editor that last had the keyboard, for the files pane and the picker to send files to.
   const slot = ed.slot;
 
-  if (slot && (ed.editor.focused() || (ed.look && ed.lookHandle?.is_focused() === true)) && readShared(shared, LAST_KEY, null) !== slot) {
+  // The rendered view's block holds it there (the file's editor isn't drawn).
+  const typing = ed.editor.focused() || (ed.view === "rendered" && ed.cur?.rendered?.focused() === true);
+
+  if (slot && (typing || (ed.look && ed.lookHandle?.is_focused() === true)) && readShared(shared, LAST_KEY, null) !== slot) {
     cx.timer.after(0, () => {
       if (readShared(shared, LAST_KEY, null) !== slot) writeShared(setShared, LAST_KEY, slot);
     });

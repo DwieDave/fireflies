@@ -482,6 +482,10 @@ test("an empty block offers the kinds; each makes that block (a click, or cmd-. 
 
 // ---- adding blocks: the pointer
 
+/** The element that answers the pointer's hover for drawn unit `key`: the innermost one with an
+ *  on_hover holding the unit's own element. */
+const hoverBox = (v: any, key: string) => all(v).filter((x: any) => x.calls?.on_hover && all(x).some((k: any) => k.calls?.id?.[0]?.[0] === `rd-${key}`)).at(-1);
+
 test("the + beside a block (on hover) and \"add a block\" under the last one add an empty paragraph there, lit", async () => {
   const p = await pane();
   clickLine(p, 0);
@@ -489,7 +493,7 @@ test("the + beside a block (on hover) and \"add a block\" under the last one add
   const item = rows.find((r: any) => !r.lit && r.u.kind === "item");
   // Hovering shows its +.
   let v = p.renderedView(theme);
-  byId(v, `rd-${item.key}`).calls.on_hover[0][0](true, cx());
+  hoverBox(v, item.key).calls.on_hover[0][0](true, cx());
   v = p.renderedView(theme);
   const plus = byId(v, `rd-${item.key}-add`);
   expect(plus).toBeTruthy();
@@ -621,4 +625,40 @@ test("vim: insert mode types into the block; the arrows step out of it at its ed
   expect(main(p).cursor().line).toBe(4);
   block(p).press("escape");
   expect(p.vim.mode).toBe("normal");
+});
+
+test("the + beside a block stays shown on the pointer's way from the block's text to it, and a click on it adds a block (Developer: \"it fades out before i can reach it with my cursor\")", async () => {
+  const p = await pane();
+  clickLine(p, 0);
+  const item = R(p).rows().find((r: any) => !r.lit && r.u.kind === "item");
+  let v = p.renderedView(theme);
+  hoverBox(v, item.key).calls.on_hover[0][0](true, cx());
+  v = p.renderedView(theme);
+  // gpui answers on_hover(false) once the pointer leaves the bounds of the element that asked;
+  // a child drawn outside them (absolute, at a negative left) doesn't widen them.
+  const box = hoverBox(v, item.key);
+  const plus = byId(v, `rd-${item.key}-add`);
+  expect(plus).toBeTruthy();
+  expect(all(box)).toContain(plus);
+  const edge = box.calls.ml?.[0]?.[0] ?? 0; // the hover box's left edge, from the text's (px)
+  const plusX = edge + plus.calls.left[0][0]; // the +'s left edge, from the text's
+  expect(plusX).toBeLessThan(0); // in the gutter, left of the text
+  // The pointer from the text (x 10) to the +'s middle never leaves the hover box: it stays shown.
+  expect(plusX + 8).toBeGreaterThanOrEqual(edge);
+  expect(plusX + 16).toBeLessThanOrEqual(10);
+  // The text where it was: the box's padding takes the gutter it reaches over; a press in the
+  // unit still puts the caret by the unit's own box.
+  expect(box.calls.pl?.[0]?.[0] ?? 0).toBe(-edge);
+  expect(byId(v, `rd-${item.key}`).calls.on_mouse_down).toBeTruthy();
+  // Its click adds the block.
+  click(plus);
+  settle();
+  expect(main(p).value()).toBe(DOC.replace("- one\n", "- one\n\n\n\n"));
+  expect(R(p).unit.kind).toBe("blank");
+  // The pointer gone elsewhere: no + on it.
+  const other = R(p).rows().find((r: any) => !r.lit && r.u.kind === "item");
+  v = p.renderedView(theme);
+  hoverBox(v, other.key).calls.on_hover[0][0](true, cx());
+  hoverBox(p.renderedView(theme), other.key).calls.on_hover[0][0](false, cx());
+  expect(byId(p.renderedView(theme), `rd-${other.key}-add`)).toBeFalsy();
 });
