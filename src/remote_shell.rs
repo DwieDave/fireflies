@@ -96,6 +96,9 @@ mod tests {
                 .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
                 .env("TERM", "dumb")
                 .env("HERDR_LAUNCH", "test-token")
+                // nix-darwin's /etc/zshenv sets the system PATH again in a cleared
+                // environment, dropping the one a case gives; it skips that once done.
+                .env("__NIX_DARWIN_SET_ENVIRONMENT_DONE", "1")
                 .stdin(Stdio::null());
             if let Some(shell) = shell {
                 cmd.env("SHELL", shell);
