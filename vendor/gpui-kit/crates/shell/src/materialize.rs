@@ -121,7 +121,7 @@ fn materialize_factory_subtree(
 use smallvec::SmallVec;
 
 use gpui::{
-    AbsoluteLength, AnyElement, App, Bounds, DefiniteLength, InteractiveElement, IntoElement,
+    AbsoluteLength, AnyElement, App, AppContext, Bounds, DefiniteLength, InteractiveElement, IntoElement,
     Length, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
@@ -376,9 +376,10 @@ struct Behavior {
     /// script had no way to.
     on_mouse_down_out: Option<CallbackId>,
     on_drop: Option<CallbackId>,
+    drag_paths: Option<crate::DraggedPaths>,
     /// Wheel and trackpad scrolling over this element.
     on_scroll_wheel: Option<CallbackId>,
-    /// A trackpad pinch over this element.
+    /// A trackpad pinch over this element, on platforms that report one.
     on_pinch: Option<CallbackId>,
     /// Handlers for named actions, one entry per action listened for.
     ///
@@ -603,6 +604,7 @@ impl Behavior {
             || self.on_hover.is_some()
             || self.on_key_down.is_some()
             || self.on_drop.is_some()
+            || self.drag_paths.is_some()
             || self.on_key_up.is_some()
             || self.on_modifiers_changed.is_some()
             || !self.on_mouse_down.is_empty()
@@ -1802,6 +1804,12 @@ where
     E: StatefulInteractiveElement + ParentElement,
 {
     let mut element = element;
+    if let Some(paths) = &behavior.drag_paths {
+        element = element.on_drag(paths.clone(), |paths, cursor_offset, _, cx| {
+            cx.stop_propagation();
+            cx.new(|_| crate::drag_paths::DraggedPathsPreview { paths: paths.clone(), cursor_offset })
+        });
+    }
     if let Some(callback) = behavior.on_drop {
         let runtime = Rc::downgrade(runtime);
         element = element.on_drop(move |paths: &gpui::ExternalPaths, window, cx| {
@@ -1875,6 +1883,16 @@ where
                 dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
             });
         }
+        if let Some(callback) = behavior.on_pinch {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_pinch(move |event, window, cx| {
+                let Some(runtime) = runtime.upgrade() else {
+                    return;
+                };
+                runtime.dispatch_pinch(callback, event, bounds.get(), window, cx);
+            });
+        }
         if let Some(callback) = behavior.on_scroll_wheel {
             let runtime = Rc::downgrade(runtime);
             let bounds = Rc::clone(&bounds);
@@ -1896,16 +1914,6 @@ where
                     window,
                     cx,
                 );
-            });
-        }
-        if let Some(callback) = behavior.on_pinch {
-            let runtime = Rc::downgrade(runtime);
-            let bounds = Rc::clone(&bounds);
-            element = element.on_pinch(move |event, window, cx| {
-                let Some(runtime) = runtime.upgrade() else {
-                    return;
-                };
-                runtime.dispatch_pinch(callback, event, bounds.get(), window, cx);
             });
         }
     }
@@ -2045,6 +2053,7 @@ fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
         ("on_key_down", behavior.on_key_down.is_some()),
         ("on_key_up", behavior.on_key_up.is_some()),
         ("on_drop", behavior.on_drop.is_some()),
+        ("drag_paths", behavior.drag_paths.is_some()),
         (
             "on_modifiers_changed",
             behavior.on_modifiers_changed.is_some(),
@@ -3468,6 +3477,10 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .first()
                 .and_then(|value| value.as_str().ok())
                 .map(SharedString::from);
+        }
+        "drag_paths" => {
+            behavior.drag_paths = args.first().and_then(|v| v.as_str().ok())
+                .and_then(|v| serde_json::from_str(v).ok());
         }
         "href" => {
             behavior.href = args

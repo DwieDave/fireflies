@@ -118,7 +118,7 @@ test("pending guidance clears when another terminal adds the host and checks Mac
   expect(s.probes).toEqual(["remote"]);
   const count = s.calls.length;
   await s.poll();
-  expect(s.calls.length).toBe(count);
+  expect(s.calls.length).toBeGreaterThan(count);
 });
 
 // Developer, 2026-11-18: "it told me to run this but it didnt find hc". His

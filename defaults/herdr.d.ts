@@ -20,6 +20,9 @@ export function hc(args: string[]): Promise<ExecResult>;
 export function home(): string;
 /** The app's folder (`~/.config/herdr-app`, or `$HERDR_APP_HOME`): settings.json, keys.json, layouts/. */
 export function appHome(): string;
+/** True while `herdr-app check` loads this mod: `init()` runs for real there
+ *  (exec and writeTextFile included), so guard process side effects. */
+export function checking(): boolean;
 
 /** Reads UTF-8 text (up to 1 MiB), or null if absent. Runs off the UI thread.
  *  `on`: from that machine (a space's `machine`). */
@@ -107,17 +110,22 @@ export function playSound(sound: string): null;
  * the call returns; terminal.keep/park finish in the background and toast on failure.
  * A rename without a name is asked for;
  * "" gives the space or tab Fireflies' automatic name again. The main ones:
- * Spaces: space.new {name?, folder?, tab?, argv?, task?, machine?}, space.close {id?}, space.rename {id?, name},
+ * Spaces: space.new {name?, folder?, tab?, argv?, task?, machine?, focus?}, space.close {id?}, space.rename {id?, name},
  *   space.move {id, index}, space.select {index | id}, space.next, space.prev.
- * Tabs: tab.new {name?, space?, folder?, argv?, task?} (argv: an agent, task: its first message)
- *   or {name?, space?, mod, props?} (a tab whose only pane is a mod),
- *   tab.close {id?}, tab.rename {id?, name}, tab.move {id, index?, space?} (space: the whole tab into another space on its machine, shown there), tab.select {index | id},
+ * Tabs: tab.new {name?, space?, folder?, argv?, task?, focus?} (argv: an agent, task: its first message)
+ *   or {name?, space?, mod, props?, focus?} (a tab whose only pane is a mod),
+ *   tab.close {id?}, tab.rename {id?, name}, tab.move {id?, index | by, space?} (id: default the active tab; by: -1 left, 1 right,
+ *   wrapping; space: the whole tab into another space on its machine, shown there), tab.select {index | id},
  *   tab.next, tab.prev.
+ * New spaces and tabs take focus by default. Boolean focus: false keeps the shown
+ * space, selected tab and keyboard focus; background tabs are appended in creation order.
+ * With no space shown, a new space is shown even with focus: false.
  * Panes: pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}
  *   (left/up: before the pane; auto: below a pane in a side-by-side split, right of one in a stacked
  *   split or a lone pane), pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}
  *   (a new pane along that side of a whole tab, default the shown one, spanning it; px: its fixed width
- *   or height), pane.close {pane?}, pane.zoom {pane?},
+ *   or height), pane.close {pane?}, pane.zoom {pane?}, pane.rename {pane?, name},
+ *   pane.resize {direction, step?, px?, pane?} (its divider a step: a share of the tab, default 0.05, or px),
  *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
  *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
  *   pane.park {pane?, index?} (a chip in its tab's bottom row, still running; index moves a parked chip, 1 = first),
@@ -137,6 +145,10 @@ export function playSound(sound: string): null;
  *   (default 0; peek with the same view on the one floating now only switches), float.view {index: 0 | 1} (switch the
  *   open float and give the shown one the keyboard: the terminal, or the mod if its mod.json is focusable),
  *   terminal.show {terminal?, pane?} (shown in the pane for now, in place of its own), terminal.copy, terminal.paste,
+ *   terminal.select {terminal?, at?: {row, col} | "cursor", mode?: "cell" | "word" | "line"} (replaces the selection; defaults to cursor and cell).
+ *   terminal.adjust_selection {terminal?, direction: "left" | "right" | "up" | "down" | "page_up" | "page_down" | "home" | "end" | "line_start" | "line_end"} (moves the inclusive moving end; view follows; fails without selection).
+ *   terminal.clear_selection {terminal?}. No default keys or built-in copy mode.
+ *   terminal.select_all {terminal?} (whole screen and scrollback, or only the alternate screen; Cmd+A on macOS).
  *   terminal.right_click {to: "program" | "menu", terminal?} (right-clicks to a program that takes the mouse; Shift: the menu).
  *   terminal.scroll {lines | pages | to: "top" | "bottom", terminal?} (Fireflies' view of the history: negative goes up; pages may be fractional).
  * Agents: agent.next, agent.prev (the agents list's order), agent.focus {terminal} (sub-agents too).
@@ -254,6 +266,8 @@ export interface AgentInfo {
   program: Program;
   /** The terminal's title. */
   title: string;
+  /** Its pane's name (`pane.rename`), or null. */
+  pane_name: string | null;
   /** Higher = changed more recently. */
   seq: number;
   /** Pinned with `terminal.pin`, on any herdr-core client. */
@@ -268,12 +282,26 @@ export interface AgentInfo {
 /** Terminals whose program reports a status (agents), in space, tab, pane order. Live. */
 export function agents(): AgentInfo[];
 
+/** History scroll as Ghostty reports it, read fresh by panes().
+ *  Rows from the top of retained history; `from_bottom` is 0 at the end.
+ *  PaneInfo.scroll is null on the alternate screen or with no view.
+ *  Mods refresh only on transitions between end/history/alternate screen,
+ *  not on scrolling or output within one of those states that only changes the numbers. */
+export interface PaneScroll {
+  total: number;
+  offset: number;
+  len: number;
+  from_bottom: number;
+}
+
 /** What every pane has, a terminal's or a mod's. */
 interface PaneBase {
   pane: string;
   tab: string;
   /** The terminal's title (what the program set), or the mod's name. */
   title: string;
+  /** The name someone gave it (`pane.rename`), or null. */
+  name: string | null;
   focused: boolean;
   zoomed: boolean;
   /** This pane's terminal text size on top of the app's (pane.font_bigger/smaller/reset):
@@ -297,6 +325,8 @@ export interface TerminalPaneInfo extends PaneBase {
   status: Status | null;
   app: string | null;
   program: Program;
+  /** History scroll of its attached view; null on the alternate screen or with no view. Live. */
+  scroll?: PaneScroll | null;
 }
 
 /** A mod's pane (`pane.split {mod}`): `mod` names it; it has no terminal, so none of a
@@ -311,6 +341,7 @@ export interface ModPaneInfo extends PaneBase {
   status?: undefined;
   app?: undefined;
   program?: undefined;
+  scroll?: undefined;
 }
 
 /** A pane: a terminal's or a mod's (`terminal` null; then `mod` names it). */
@@ -333,8 +364,19 @@ export function setAgentOrder(addresses: string[]): null;
  *  one) and `float_views: string[] | null` ([its program's name, view.name ?? view.mod]; null
  *  without a view); others have null for both. Parent addresses use the same machine names as `address`;
  *  parents on this computer use bare terminal IDs. Parents that cannot be mapped
- *  stay as the core reported them. Live. */
+ *  stay as the core reported them. Each entry also has `selection` (TerminalSelectionState):
+ *  view-local, in TerminalCell positions; null when absent or without an attached view. Updates
+ *  when selection changes, not on cursor motion or output. Start at the cursor with
+ *  terminal.select and read selection.end. Entries are unknown: decode what you read. Live. */
 export function terminals(): readonly unknown[];
+
+/** Zero-based cells. Rows count from the oldest retained history through the active screen.
+ *  Output preserves positions until history is pruned or the grid reflows. */
+export interface TerminalCell { row: number; col: number; }
+export interface TerminalSelectionState {
+  /** Inclusive endpoints: start is the anchor, end is the moving end (may precede start). */
+  selection: { start: TerminalCell; end: TerminalCell } | null;
+}
 
 /** Actual terminal/pane focus. `space` and `tab` are the current window context.
  *  Clicking a visible layout terminal block, or pane.focus {terminal}, focuses that block:
@@ -348,13 +390,15 @@ export function terminals(): readonly unknown[];
  *  `shown`: terminal.show replacement, if any. `agent`: the agent an agent block shows.
  *  `terminal` is null for mod panes. `block`: the layout block holding the keyboard
  *  (a focusable mod reached with pane.go or layout.focus), else null; with no space yet
- *  only `block` is set. Live. */
-export function focused(): { space: string | null; tab: string | null; pane: string | null; terminal: string | null; shown: string | null; agent: string | null; cwd: string | null; block: string | null } | null;
+ *  only `block` is set. Selection describes the terminal that receives terminal commands
+ *  (including a shown replacement or peek). Live. */
+export function focused(): ({ space: string | null; tab: string | null; pane: string | null; terminal: string | null; shown: string | null; agent: string | null; cwd: string | null; block: string | null } & Partial<TerminalSelectionState>) | null;
 
 /** The shown layout (layouts/<name>.json). Its name is shared("layout").
  *  Root `terminal_menu?: string` chooses a terminal right-click menu mod (default: "menu").
  *  Unknown names warn and fall back to "menu". This replaces the menu, not its items.
- *  Opens a pointer popup with mod.json overlay width/height (default 220×260). */
+ *  Opens a pointer popup with mod.json overlay width/height (default 220×260).
+ *  Root `link_handlers?: string[]` selects terminal link mods in order. */
 export function layout(): unknown;
 
 /** The names of every layout in layouts/ (main first). */
@@ -375,6 +419,17 @@ export function window(): {
   fullscreen: boolean;
   active: boolean;
 };
+
+/** Sets the OS window's title, which window switchers, taskbars and time trackers read. The last
+ *  call wins, whichever mod made it; null restores "Herdr". It doesn't outlive the app, so set it
+ *  again when your mod starts. Call it when the title changes, not on every render. */
+export function setWindowTitle(title: string | null): null;
+
+/** Sets the badge on the app's icon: the red label on the macOS Dock icon, e.g. how many agents
+ *  need you. The last call wins, whichever mod made it; null or "" clears it. Other platforms
+ *  ignore it for now. It doesn't outlive the app, so set it again when your mod starts. Call it
+ *  when the text changes, not on every render. */
+export function setBadge(text: string | null): null;
 
 /** For a floating mod: where it sits now. `vertical` on the left/right edges, horizontal on
  *  top/bottom; while dragged, where it would land. `hovered` is true while the pointer is on it
@@ -474,7 +529,8 @@ export function presentUpdateNotes(versions: string[]): null;
 export function feedbackIssue(title: string, message: string): { title: string; body: string; url: string };
 
 /** What the app runs with: the shown layout's look (theme name, fonts, sizes, terminal
- *  padding and opacity) with the person's zoom and sounds. */
+ *  padding and opacity, terminal_line_height, terminal_cell_width and terminal_scroll_speed) with the
+ *  person's zoom and sounds. Layout values override settings.json. */
 export function settings(): Settings;
 
 /** One language's editor settings (settings.json `editor`, `editor.languages.<id>`), as written. */
@@ -494,7 +550,14 @@ export interface EditorLanguage {
 export interface Settings {
   readonly font_family: string;
   readonly font_size: number;
+  /** The terminal text's weight, 100..900 (bold text stays 700). */
+  readonly font_weight: number;
   readonly font_ligatures: boolean;
+  /** Terminal row height and column width as a share of the font's (default 1, 0.8..2). */
+  readonly terminal_line_height: number;
+  readonly terminal_cell_width: number;
+  /** Wheel and trackpad speed in terminals (default 1, 0.1..5). */
+  readonly terminal_scroll_speed: number;
   readonly ui_font_family: string;
   readonly ui_font_size: number;
   /** How big the whole app is drawn (1 = as designed). */
@@ -511,6 +574,8 @@ export interface Settings {
   readonly terminal_padding: readonly [number, number];
   readonly terminal_opacity: number;
   readonly clipboard_write: boolean;
+  /** A terminal selection is copied to the clipboard as it's made. */
+  readonly copy_on_select: boolean;
   readonly minimum_contrast: number;
   readonly links: "app" | "system";
   /** The engine new web panes open in (cmd-click, "+ new" > Web); Chromium only counts while it is installed. */
@@ -605,6 +670,24 @@ export function notify(n: {
   action?: { name: string; args?: Record<string, unknown> };
 }): string;
 
+/** A Ctrl/Cmd-click on a terminal link, passed to the mod's link.js. */
+export interface LinkClick {
+  link:
+    | { kind: "url"; raw: string; url: string }
+    | { kind: "file"; raw: string; path: string | null };
+  source: {
+    terminal: string;
+    machine: string | null;
+    cwd: string | null;
+    pane: string | null;
+    tab: string | null;
+    space: string | null;
+  };
+}
+
+/** Signature of the named handleLink export from link.js. */
+export type HandleLink = (click: LinkClick) => "handled" | "pass" | Promise<"handled" | "pass">;
+
 /** The props this copy of the mod was given in the layout (or overlay).
  *  A layout's terminal_menu mod gets {tab: "pane", target: {pane: string, terminal: string}, overlay: string}.
  *  Target names the clicked pane/terminal, not necessarily the focused one; pass it to actions.
@@ -635,11 +718,21 @@ export function nextCommand(): Promise<string>;
  * above 4096 non-ignored directories reject the watch, so use a timer fallback.
  * macOS and Windows watch recursively, including ignored directories.
  * Pending paths are bounded: a batch containing the root means refresh everything.
- * Shared by every mod. Files also refreshes on its 10-second timer.
+ * Shared by every mod, with at most 64 folders awaiting changes at once.
+ * Idle watches may be reclaimed to make room; reload when starting a watch.
+ * Call cancel() on the returned promise when you stop showing the folder.
+ * It resolves with [] and releases this call; other callers keep watching.
+ * Closing a mod copy cancels its pending calls. Files also refreshes on its 10-second timer.
  *   cx.spawn(async (cx) => { for (;;) { await watchFolder(dir); this.reload(); cx.notify(); } });
  * Watch what you show, not a whole home folder (node_modules is a lot of events).
  */
-export function watchFolder(path: string): Promise<string[]>;
+export function watchFolder(path: string): FolderWatch;
+
+/** One pending watch. Keep this handle while the folder is shown. */
+export interface FolderWatch extends Promise<string[]> {
+  /** Resolves with [] and releases this call's watch. Safe to call again or after settlement. */
+  cancel(): void;
+}
 
 /** HUP (Herdr Preview Dev, interface native-view/0): where a native view's content comes from.
  *  Web: `url` (http/https; `localhost:3000` style input is normalized, never searched) or a local

@@ -32,7 +32,7 @@ pub const DEFAULTS: &str = include_str!("../defaults/keys.json");
 #[cfg(target_os = "macos")]
 pub const DEFAULTS: &str = include_str!("../defaults/keys.macos.json");
 
-// Exact originals from release tags, deduplicated across v0.1.4–v0.1.12.
+// Exact originals from release tags, deduplicated across v0.1.4–v0.1.15.
 // Keep these when defaults change: only untouched shipped files may migrate.
 #[cfg(any(not(target_os = "macos"), test))]
 const SHIPPED_KEYS: &[&str] = &[
@@ -48,6 +48,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/v0.1.5-keys.macos.json"),
     // Herdr's macOS keys before Fireflies added Nocturne's (layout:nocturne, mod:nocturne-browser).
     include_str!("keys/shipped/v0.1.14-keys.macos.json"),
+    // Herdr 0.1.15's, so a keys.json installed by it upgrades to Fireflies' too.
+    include_str!("keys/shipped/v0.1.15-keys.macos.json"),
     // Fireflies' first Nocturne keys, before cmd-shift-g opened the GitHub window.
     include_str!("keys/shipped/fireflies-nocturne-keys.macos.json"),
     // With cmd-shift-g, before pane.park / pane.unpark / pane.equalize keys.
@@ -91,6 +93,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // With a tab's keys, before the default layout (layout:main) got the windows' keys Nocturne has:
     // cmd-g, cmd-shift-g, cmd-shift-b, cmd-shift-o and cmd-shift-r open Git, GitHub, Databases, Processes and Scripts (mod.open).
     include_str!("keys/shipped/fireflies-tabkeys2-keys.macos.json"),
+    // With the default layout's window keys, before Herdr 0.1.16's cmd-m (window.minimize) and the terminal's
+    // cmd-a (terminal.select_all) came in with the upstream merge.
+    include_str!("keys/shipped/fireflies-upstream0116-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
@@ -347,6 +352,9 @@ pub fn install(bindings: Vec<KeyBinding>, cx: &mut App) {
     cx.bind_keys(reserved);
     cx.bind_keys(later);
     cx.set_global(Installed { kit, ours });
+    // The menu bar shows the keys it finds when it's built.
+    #[cfg(target_os = "macos")]
+    crate::macos::refresh_menus(cx);
 }
 
 #[cfg(test)]

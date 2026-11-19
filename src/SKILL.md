@@ -22,10 +22,20 @@ its terminals.
 
 `app.check_updates` checks for newer releases. Settings reports "Up to date"
 only after a successful check; on failure, check the connection and retry.
+Package-managed cores are checked but updated through their package manager.
+Dismiss a core update error with its × or `overlay.close {id:"core-update-error"}`;
+it stays dismissed until the error changes or the update recovers.
 
 ## Show something when asked
 
 New spaces and tabs are shown immediately: only create them when asked.
+To start one the person will look at later without moving them there, pass
+`--focus false`:
+
+```sh
+herdr-app do space.new --name eng-123 --folder ~/code/app/eng-123 --argv '["claude"]' --task "Implement ENG-123" --focus false
+```
+
 Pick an explicit, useful name for every new space and tab; don't rely on
 default names. Use IDs from `ls` rather than guessing or acting on the wrong
 focused pane.
@@ -258,10 +268,10 @@ it). Fixed px sizes stay. A 3x2 grid: split, then equalize all:
 herdr-app do pane.equalize '{"scope":"all"}'
 ```
 
-`pane.resize {direction, step?, pane?}` moves a pane's divider a step (default:
+`pane.resize {direction, step?, px?, pane?}` moves a pane's divider a step (default:
 the focused pane): with a neighbor on the arrow's side it grows that way, at
 the tab's edge its other divider moves and it shrinks. `step` is a share of the
-tab (default 0.05); panes keep a drag's minimum; a zoomed or one-pane tab
+tab (default 0.05), or `px` that many px; panes keep a drag's minimum; a zoomed or one-pane tab
 replies `changed: false`. Move pane p3's divider right by a tenth of the tab:
 
 ```sh
@@ -286,6 +296,23 @@ lists it under the tab's `parked`; a mod pane keeps running too). A tab keeps on
 herdr-app do pane.park --pane p12
 herdr-app do pane.unpark '{"pane":"p12","target":"p14","edge":"bottom"}'
 ```
+
+`terminal.select_all {terminal?}` selects a terminal's whole screen and scrollback,
+ready for `terminal.copy`. Without a target it follows keyboard focus. In vim and
+other alternate-screen apps, it selects only that screen. Cmd+A runs it on macOS;
+Linux and Windows have no default, so Ctrl+A stays with the shell.
+
+`terminal.select {terminal?, at?: {row, col} | "cursor", mode?: "cell" | "word" | "line"}`
+replaces the selection, at the program cursor by default. Cells are zero-based; rows
+count from the oldest retained history through the active screen. Word and line
+match double/triple click. `terminal.adjust_selection {terminal?, direction}` moves
+the inclusive moving end and follows it in the view: left, right, up, down, page_up,
+page_down, home, end, line_start, line_end. It fails without a selection.
+`terminal.clear_selection {terminal?}` clears it; `terminal.copy` copies the focused terminal's selection.
+These add no default keys or built-in copy mode. Mods read the inclusive selection
+endpoints from `focused().selection` or `terminals()`; null means none (or no
+attached view). Use `selection.end` as a copy-mode cursor. Selection facts update
+when the selection changes, without refreshing readers on ordinary terminal output.
 
 `terminal.search` opens a find bar in the focused terminal. It searches that
 terminal's screen and scrollback; Enter and Shift-Enter move between matches,
@@ -314,12 +341,27 @@ set). It is the installed guide to settings, layouts, commands and mods.
 Read the generated `.d.ts` files beside it for full API details; do not edit
 those files or the generated guide. The app rewrites them on start.
 
+- `terminal_line_height` (default 1, 0.8..2) adjusts terminal rows;
+  `terminal_cell_width` (default 1, 0.8..2) adjusts terminal columns;
+  `terminal_scroll_speed` (default 1, 0.1..5) adjusts wheel and trackpad
+  scrolling, including mouse reports. Set them in settings.json or the
+  layout's look; the layout wins.
 - Home defaults to `~/.config/herdr-app`; `HERDR_APP_HOME` selects another.
-- Mods live in `mods/<name>/` with `main.js` (or `main.ts`) and optional `mod.json`.
+- `worktrees.directory` in settings.json sets where the git window's Worktrees tab
+  (New worktree) creates checkouts, e.g. `{"worktrees":{"directory":"~/Developer/worktrees"}}`.
+  Default: `~/.herdr/worktrees`; checkouts use `<directory>/<repo>/<branch>` (slashes in
+  branches become dashes). Use an absolute path or `~` / `~/...`, resolved on the
+  space's machine. Read when it makes one; existing checkouts stay put. No clones
+  needed, and the app does not read the TUI's config.toml.
+- Mods live in `mods/<name>/` with `main.js` (or `main.ts`) for a view, `link.js`
+  for Ctrl/Cmd-clicked terminal links, and optional `mod.json`.
   They are trusted JavaScript or TypeScript with command and network access;
   a `.ts` file runs with its types removed (no enum, namespace, parameter
   properties or `<T>x`; imports name the file, `./kit.ts`), so check its types
   with `tsc` against `herdr-app types <folder>` (the guide's TypeScript section).
+  `mod.json` declares link rules. A personal layout's root `link_handlers` array
+  selects the mods and their order; a link no mod handles opens as a plain
+  click does (web links where `links` says, files in the app's viewers).
   `"focusable": true` in `mod.json` lets `pane.go` move onto a copy; it receives
   `"focus"` from `nextCommand()` and focuses its own keyboard handle. A
   focusable mod pane gets it whenever it becomes the focused pane (a tab switch,
@@ -346,6 +388,8 @@ those files or the generated guide. The app rewrites them on start.
   grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`
   switches that (`on`) or puts the window on a place (`to: "bottom-right"`,
   …, or `"left"`, `"right"`, `"up"`, `"down"`: the next one that way).
+- A mod's `watchFolder(dir)` promise has `cancel()`; cancel it when the folder
+  is no longer shown. It resolves with `[]` and releases only that call.
 - Shipped mods belong to Fireflies: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.
@@ -368,13 +412,18 @@ herdr-app status
 herdr-app shot /tmp/mod.png   # then look at the picture
 ```
 
-`check` loads the mod and renders it once. It exits nonzero with the exact
-error. Its shared state starts empty and stays in memory; it leaves shared.json
-untouched. Never call a mod done without a passing check. Then confirm it is
-shown correctly in the running window with `shot`; don't claim a visual
+`check` loads and renders the mod's view if it has one. It validates link rules
+and checks the `handleLink` export in `link.js` without running the module.
+It exits nonzero with the exact error. Its shared state starts empty and stays
+in memory, leaving shared.json untouched. Its `init()` still runs: import
+`checking` from `"herdr"` and guard
+process side effects with `if (checking()) return;`. It is true throughout a
+check and false in a live window; `exec`, `hc` and `writeTextFile` still run
+and warn during checks. Never call a mod done without a passing check.
+Then confirm it is shown correctly in the running window with `shot`; don't claim a visual
 check you haven't made.
 
-`herdr-app shot [file.png]` saves the window's last frame and prints its
+`herdr-app shot [file.png]` saves the window's current frame and prints its
 absolute path (default: `herdr-shot.png` in your current folder). It is the
 app's own rendering at full pixel size: terminals, images, overlays and
 floats included, even when the window is covered or minimized. No screen

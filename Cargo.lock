@@ -4205,7 +4205,7 @@ dependencies = [
 
 [[package]]
 name = "herdr-app"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4227,12 +4227,16 @@ dependencies = [
  "libc",
  "mermaid-rs-renderer",
  "notify 7.0.0",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "png 0.17.16",
  "ratex-layout",
  "ratex-parser",
  "ratex-svg",
  "ratex-types",
  "raw-window-handle",
+ "regex",
  "serde",
  "serde_json",
  "sha2 0.10.9",

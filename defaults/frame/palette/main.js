@@ -10,7 +10,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win, focused, panes, terminals, agents, updates, layout, spaces, pickFolder } from "herdr";
+import { commands, layouts, keys, run, theme, themes, settings, props, closeOverlay, openOverlay, shared, window as win, focused, panes, terminals, agents, updates, layout, spaces, pickFolder } from "herdr";
 
 // The list keeps one height while you move: rows and group titles have fixed
 // heights, and the window shows as many as fit in LIST_H.
@@ -96,10 +96,6 @@ const NAMED = [
   ["mod.open", { name: "procs" }, "Window", "Processes", "ports cpu memory kill top"],
   ["mod.open", { name: "scripts" }, "Window", "Scripts", "just npm make run tasks"],
   ["pane.split", { direction: "right", mod: "file-tree" }, "Pane", "Files beside", "tree folder explorer"],
-  // The shipped themes a person picks from (ink, moss and atom-one-dark still load
-  // when named, but aren't offered): moonfly is Nocturne's, graphite herdr-app's default look.
-  ...[["moonfly", "moonfly", ""], ["graphite", "graphite (herdr-app default)", " herdr default"], ["paper", "paper (light)", " light"]]
-    .map(([n, label, words]) => ["app.theme", { name: n }, "App", `Theme: ${label}`, `colors look${words}`]),
 ];
 
 // Commands that stay out of the list, each with why: most act on something
@@ -196,6 +192,10 @@ function stateEntries() {
 // Commands that need a terminal focused (they fail on a mod pane).
 const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.paste_image", "terminal.search", "terminal.scroll",
   "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
+// The shipped themes a person picks from (ink, moss and atom-one-dark still load
+// when named, but aren't offered): moonfly is Nocturne's, graphite herdr-app's default look.
+const OFFERED_THEMES = [["moonfly", "moonfly", ""], ["graphite", "graphite (herdr-app default)", " herdr default"], ["paper", "paper (light)", " light"]];
+const SHIPPED_THEMES = new Set([...OFFERED_THEMES.map(([n]) => n), "ink", "moss", "atom-one-dark"]);
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
 
 // Every entry for the state we're in now.
@@ -206,9 +206,24 @@ function entries() {
   const list = [...NAMED.filter(([n]) => known.has(n))
     .filter(([n]) => !(mac && n.startsWith("window.")) && (mac || !MAC_ONLY.has(n)) && (terminal || !NEEDS_TERMINAL.has(n)))
     .map(([name, args, group, title, words]) => ({ name, args, group, title, words })), ...stateEntries().filter((e) => known.has(e.name))];
-  for (const l of layouts()) {
+  const shown = layouts();
+  for (const l of shown) {
     const t = { main: "Fireflies", terminals: "Terminals", win98: "Fireflies 98" }[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
     list.push({ name: "layout.switch", args: { name: l }, group: "Layout", title: `Layout: ${t}`, words: `look ${l}` });
+  }
+  // `app.theme` sets the half of its theme's lightness, so only the themes
+  // that can show now are offered: dark ones in a dark window, light ones in a
+  // light one. A theme named like a layout is that layout's own (as in Settings).
+  // Of the shipped ones only OFFERED_THEMES, then the person's own (themes/<name>.json).
+  const dark = Boolean(settings().dark);
+  const all = themes();
+  const fits = ({ name, light }) => Boolean(light) !== dark && (name === shared("layout") || !shown.includes(name));
+  for (const [name, label, words] of OFFERED_THEMES) {
+    const t = all.find((x) => x.name === name);
+    if (t && fits(t)) list.push({ name: "app.theme", args: { name }, group: "App", title: `Theme: ${label}`, words: `colors look${words}` });
+  }
+  for (const t of all) {
+    if (!SHIPPED_THEMES.has(t.name) && fits(t)) list.push({ name: "app.theme", args: { name: t.name }, group: "App", title: `Theme: ${t.name.replace(/-/g, " ")}`, words: "colors look" });
   }
   // Anything new in the app shows up too, until it gets a better name here.
   const named = new Set(NAMED.map(([n]) => n));

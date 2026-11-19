@@ -1,6 +1,7 @@
 // Windows: a window app, but tests inherit Cargo's console for their child processes.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
+mod badge;
 mod bench;
 mod commands;
 mod control;
@@ -20,7 +21,8 @@ mod mirror;
 mod mirror_sync;
 mod place;
 mod persist;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod macos;
 #[cfg(target_os = "macos")]
 mod macos_check;
@@ -59,7 +61,7 @@ Usage:
   fireflies feedback <text>        draft a GitHub issue for the person to review and submit
   fireflies commands               every command, its arguments, what it does
   fireflies status                 what the window shows, and any errors
-  fireflies shot [file.png]        save the last window frame (default: herdr-shot.png)
+  fireflies shot [file.png]        save the current window frame (default: herdr-shot.png)
   fireflies check <mod folder>     load a mod once and report what's wrong
   fireflies types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
   fireflies --skill                Agent Skill: driving the window, and where hc fits
@@ -72,6 +74,12 @@ agents. The app shows them and arranges them in spaces and tabs.
 Home: ~/.config/herdr-app (HERDR_APP_HOME picks another).
 ";
 
+/// The folder tests put their scratch data in: `HERDR_TEST_TMPDIR` if set, else /var/tmp.
+#[cfg(test)]
+fn test_tmp() -> std::path::PathBuf {
+    std::env::var_os("HERDR_TEST_TMPDIR").map_or_else(|| "/var/tmp".into(), Into::into)
+}
+
 /// A Windows window app has no console: answers to `herdr-app ls` and the
 /// like go to the terminal it was started from. Output already piped (agents,
 /// scripts) keeps its pipes.
@@ -83,6 +91,12 @@ fn attach_console() {
     if out.is_null() || out == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
         unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
     }
+}
+
+fn link_check_path(args: &[String]) -> Option<&std::path::Path> {
+    let mut paths = args.iter().filter(|arg| !matches!(arg.as_str(), "--print-spec" | "--watch" | "--dev"));
+    let path = paths.next()?;
+    (!path.starts_with('-') && paths.next().is_none()).then(|| std::path::Path::new(path))
 }
 
 fn main() {
@@ -103,6 +117,20 @@ fn main() {
             eprintln!("herdr-app types: the mods' libraries were not written: {e}");
         }
         mods::install_check_policy();
+        if args[1] == "check" && let Some(path) = link_check_path(&args[2..]) {
+            let dir = if path.is_file() { path.parent().unwrap_or(path) } else { path };
+            match mods::check_link_mod(dir) {
+                Ok(true) if dir.join("link.js").is_file() && !dir.join("main.js").is_file() => {
+                    println!("check passed: {}", dir.display());
+                    return;
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("herdr-app check: {error:#}");
+                    std::process::exit(1);
+                }
+            }
+        }
         gpui_shell::host::main_with_components(gpui_shell::FrozenComponentRegistry::default());
         return;
     }
@@ -158,8 +186,8 @@ fn main() {
     };
     #[cfg(target_os = "macos")]
     core_bin::install_cli_link();
-    if core.is_ok() {
-        update::after_update();
+    if let Ok(core) = &core {
+        update::after_update(core.clone());
     }
     update::start();
     bench::start();
@@ -196,7 +224,7 @@ fn main() {
                     }
                 }
                 mods::finish_shared();
-                update::apply();
+                let _ = update::apply();
                 async {}
             })
             .detach();

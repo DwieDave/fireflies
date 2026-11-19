@@ -122,11 +122,13 @@ Add an SSH machine from Settings → Machines or the sidebar's Add machine actio
 
 ## Make it yours
 
-Open the command palette (Cmd+Shift+P) to find an action by name and see its key, or open Settings to change fonts, colors, sounds and other preferences. Settings → Look switches layouts: Nocturne, plus Herdr's own main, Terminals and Windows 98 layouts.
+Open the command palette (Cmd+Shift+P) to find an action by name and see its key, or open Settings to change fonts, colors, sounds and other preferences. Settings → Look switches layouts: Nocturne, plus Herdr's own main, Terminals and Windows 98 layouts. It also adjusts terminal line height, cell width and scroll speed. All default to 100%; layouts can override them with `terminal_line_height` (0.8–2), `terminal_cell_width` (0.8–2) and `terminal_scroll_speed` (0.1–5).
 
 A **layout** arranges the window. **Mods** are small JavaScript programs that draw its panels, menus and dialogs. Duplicate a shipped layout or mod before changing it: your copies stay yours, and the app replaces the shipped ones on start. Save a personal layout, mod or key file and the window reloads it. A broken edit keeps the last good version and reports the error.
 
 Change any key in `keys.json`. The [keys section](defaults/AGENTS.md#keys-keysjson) of the mod guide has the format.
+
+On macOS, Cmd+A selects the terminal's whole screen and scrollback, ready for Cmd+C. In vim and other alternate-screen apps, it selects only that screen. Linux and Windows keep Ctrl+A for the shell; bind `terminal.select_all` in `keys.json` if desired.
 
 [Layouts and mods](docs/mods.md) · [Commands](docs/commands.md) · [Labels](docs/labels.md)
 
