@@ -166,7 +166,7 @@ test:
     bun test scripts/editor-live.test.ts
     # The editor's rendered view and the scratchpad as a whole pane (mocks herdr): the block written back byte for byte, arrows across blocks, cmd-. and a letter, vim, undo, autosave and close.
     bun test scripts/editor-rendered.test.ts
-    # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
+    # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer (the "+" kept shown on the way from the text to it), vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
     # A file changed on disk read again: the line at the top of the text, the preview and the rendered view (a scratchpad's too), the caret and selection kept on their text, moved by lines added above; the keyboard not taken.
     bun test scripts/editor-reload.test.ts

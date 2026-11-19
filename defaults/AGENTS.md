@@ -1061,8 +1061,9 @@ the highlighted line shows where it will land.
   normal mode, enter makes the new block under the lit one and types into it
   (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
-  the block under the pointer, and the "add a block" line under the last
-  block, put an empty paragraph there. An empty block made so offers the
+  the block under the pointer (it stays while the pointer is on the block's
+  row, its gutter and the "+" included), and the "add a block" line under the
+  last block, put an empty paragraph there. An empty block made so offers the
   kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
   height kept, edited in place, never shorter than its text's rows), and a
