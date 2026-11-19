@@ -94,6 +94,8 @@ test:
     bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
     bun test scripts/nocturne-chrome-keys.test.ts
+    # Nocturne's toast grows to show its whole text when the window fits it (fitHeight), else one line each, cut off.
+    bun test scripts/nocturne-toast-fit.test.ts
     # The floating tool windows' keys, with herdr and gpui stand-ins.
     bun test scripts/nocturne-windows-keys.test.ts
     # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.

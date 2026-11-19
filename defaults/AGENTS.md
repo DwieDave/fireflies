@@ -1535,7 +1535,10 @@ Properties any node can have:
   (Fireflies' own and every `notify()`), in place of the shipped `toast`; an
   unknown mod logs a warning and falls back to `toast`. It gets the same
   `props()`: `{title, body, level, icon, action, timeout, overlay}` (`timeout`
-  is optional). A mod that hands them to the system instead
+  is optional). The shipped `toast` and Nocturne's also get `fitHeight: true`
+  when the notification sets no `height`: the window sizes the card to its
+  text (340 wide, at least 72 high, up to most of the window, scrolling
+  past that), so they wrap rather than cut lines off. A mod that hands them to the system instead
   (`exec("notify-send", ...)`) closes itself at once
   with `closeOverlay(props().overlay)`. The older name `"toast_mod"` (this fork) still works.
 - Root only: `"prompt_mod"`, `"confirm_mod"`, `"palette_mod"` (this fork) choose

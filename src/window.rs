@@ -5255,7 +5255,8 @@ impl AppWindow {
             }
             _ => s,
         });
-        let bundled_toast = kind == OverlayKind::Toast && name == "toast";
+        // The toasts that grow to fit their text (`fitHeight`): the shipped one and Nocturne's.
+        let bundled_toast = kind == OverlayKind::Toast && matches!(name.as_str(), "toast" | "nocturne");
         let fit_toast = bundled_toast && spec.get("height").and_then(Value::as_f64).is_none();
         if bundled_toast {
             props["fitHeight"] = json!(fit_toast);
