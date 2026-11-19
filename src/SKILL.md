@@ -142,6 +142,12 @@ on a folder path in terminal output does the same. It leaves dotfiles and
 git-ignored files out unless settings.json `files` says otherwise (H / I show
 them): to show a `.github/` or `target/` folder, open that folder itself.
 
+To point them at a file or folder in their file manager, `herdr-app do
+'nocturne.reveal:{"path":"/abs/report.pdf"}'` shows it selected in Finder
+(Explorer on Windows; its folder on Linux); `nocturne.copy-path:{"path"}`
+puts a path on their clipboard. In a files pane, `y` copies a row's path, `Y`
+its path relative to the space's folder, `f` reveals it.
+
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the
 top of the sidebar's agent list (`false` unpins). The pin stays with the

@@ -62,7 +62,7 @@ import { SIDEBAR_HELP, blockOf, isLayoutNode } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.ts";
 import { UsageSection } from "./usage.ts";
-import { focusFiles } from "./files.ts";
+import { focusFiles, pathCommand } from "./files.ts";
 import { togglePicker } from "./picker.ts";
 import { copyScratchpadPath, openScratchpad } from "./scratchpad.ts";
 import { toggleGithub, githubForm } from "./github.ts";
@@ -202,6 +202,7 @@ export default class Sky {
         else if (c === "fold") this.fold(later);
         // nocturne.git:pane / :tab / :window or :{"as", folder?, on?} (github, scripts too): inpane.ts.
         else if (databasesCommand(c)) { /* a connection sent to the Databases window, or it opened */ }
+        else if (pathCommand(c, later)) { /* nocturne.copy-path / nocturne.reveal (files.ts) */ }
         else if (openAsCommand(c)) { /* opened */ }
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
