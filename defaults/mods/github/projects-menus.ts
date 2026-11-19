@@ -84,7 +84,7 @@ export function openFields(proj: Projects, item: Item, cx: Context): void {
   const repo = item.content.repo ?? proj.app.repo?.full ?? null;
 
   if (fields.some((f) => f.type === "labels" || f.type === "assignees")) {
-    proj.app.spawn(cx, async () => {
+    proj.app.spawn(cx, async (_cx) => {
       try {
         await proj.choicesFor(repo);
       } catch {

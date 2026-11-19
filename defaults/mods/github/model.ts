@@ -119,6 +119,12 @@ export function pollEvery(items: readonly Timed[] | null | undefined): number {
   return (items ?? []).some((x) => LIVE.has((x.status ?? "").toLowerCase())) ? FAST : SLOW;
 }
 
+/** Waiting for GitHub to show something it took (a dispatched run, a re-run, a cancel): the wait
+ *  before the read after `n` reads that didn't show it yet. 1, 2, 3, 5, 8 s, then every 10 s. */
+const BACKOFF = [1000, 2000, 3000, 5000, 8000];
+
+export const soon = (n: number): number => BACKOFF[Math.max(0, n)] ?? 10000;
+
 /** What `gh api -i` printed: the status (0: none), the ETag and the body. */
 export interface Answer {
   readonly status: number;

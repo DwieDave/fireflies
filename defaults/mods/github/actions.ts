@@ -16,6 +16,8 @@ import type { Guard, Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
 import { api, ghRun, fileAt, slimmed } from "./gh.ts";
+import type { Expected, RunAction } from "./run-actions.ts";
+import { paced, runAction, settled } from "./run-actions.ts";
 import type { Job, Needs, NeedsOf, Run, Step } from "./model.ts";
 import { pollEvery, jobColumns, jobParents, needsFromWorkflow, splitLog, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
 import type { Hint } from "./kit.ts";
@@ -115,8 +117,7 @@ interface Drag {
   readonly from: { readonly x: number; readonly y: number };
 }
 
-/** A run's re-run or cancel. */
-type RunAction = "failed" | "all" | "cancel" | "job";
+
 
 export default class Actions {
   readonly app: Host;
@@ -184,6 +185,9 @@ export default class Actions {
 
   /** A dispatch sent, its run not listed yet. */
   waiting: Waiting | null = null;
+
+  /** A re-run (live) or cancel (not live) GitHub took and the list doesn't show yet: read again soon. */
+  expected: Expected | null = null;
 
   /** The other tab's read behind this one, while it runs. */
   warming: Promise<void> | null = null;
@@ -346,9 +350,10 @@ export default class Actions {
     return r && jobs ? jobParents(jobs, this.needs.get(this.needsKey(r)) ?? null) : null;
   }
 
-  /** Runs and the selected run's jobs: what's moving decides the pace. */
+  /** Runs and the selected run's jobs: what's moving decides the pace; a re-run or cancel GitHub
+   *  doesn't show yet is read again sooner (run-actions.ts). */
   interval(): number {
-    return pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]);
+    return paced(this.expected, pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]));
   }
 
   live(): boolean {
@@ -382,6 +387,7 @@ export default class Actions {
 
     this.runsCache.set(branch, { list: data ?? [], etag, at: Date.now() });
     this.useRuns();
+    this.expected = settled(this.expected, this.list());
 
     if (this.sel === null || !this.list().some((r) => r.id === this.sel)) this.sel = this.list()[0]?.id ?? null;
 
@@ -591,22 +597,9 @@ export default class Actions {
     if (j && s && n !== undefined) toggleFold(this.opened, `${j.id}:${s.number}:`, lines, n);
   }
 
-  act(what: RunAction, cx: Context): void {
-    const r = this.run(), repo = this.app.repo;
-
-    if (!r || !repo) return;
-
-    const t = `#${r.run_number ?? ""} ${r.name ?? ""}`;
-    const forget = () => this.jobs.delete(r.id);
-
-    if (what === "failed") this.app.ask(`Re-run the failed jobs of ${t}?`, () => this.app.act(ghRun(repo, ["run", "rerun", String(r.id), "--failed"]), `Re-running failed jobs of ${t}.`, cx, forget));
-    else if (what === "all") this.app.ask(`Re-run every job of ${t}?`, () => this.app.act(ghRun(repo, ["run", "rerun", String(r.id)]), `Re-running ${t}.`, cx, forget));
-    else if (what === "cancel") this.app.ask(`Cancel ${t}?`, () => this.app.act(ghRun(repo, ["run", "cancel", String(r.id)]), `Cancelling ${t}.`, cx));
-    else {
-      const j = this.job();
-
-      if (j) this.app.ask(`Re-run the job "${j.name ?? ""}"?`, () => this.app.act(ghRun(repo, ["run", "rerun", "--job", String(j.id)]), `Re-running ${j.name ?? ""}.`, cx, forget));
-    }
+  /** R / A / e / X (run-actions.ts). */
+  act(what: RunAction, _cx: Context): void {
+    runAction(this, what);
   }
 
   key(k: string, e: KeyEvent, cx: Context): boolean | "typing" {

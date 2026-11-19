@@ -88,6 +88,8 @@ test:
     bun test scripts/github-log-fold.test.ts
     # The GitHub window as a normal pane: no frame or ✕, esc stays, narrow tabs, moved window -> pane -> window, two copies, a restart's props.
     bun test scripts/github-pane.test.ts
+    # The GitHub window keeps itself current: an opening reads behind the cache, a dispatched run, re-run or cancel is read again with a bounded backoff until GitHub shows it, a closed window reads nothing (fake gh, virtual clock, a cx refused after its call as the engine does).
+    bun test scripts/github-refresh.test.ts
     # A panel's long title ends in an ellipsis inside its panel (GitHub window, git window), with recording gpui stand-ins.
     bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.

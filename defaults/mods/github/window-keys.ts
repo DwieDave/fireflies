@@ -20,7 +20,7 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   if (confirm) {
     v.confirm = null;
 
-    if (k === "y" || k === "enter") confirm.go();
+    if (k === "y" || k === "enter") confirm.go(cx);
 
     cx.stop_propagation();
     cx.notify();
