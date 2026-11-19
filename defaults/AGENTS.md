@@ -1953,7 +1953,16 @@ Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
 last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
-drops nothing. A tab's right-click menu (or `m` on it in the strip): Rename,
+drops nothing. More tabs than fit scroll sideways: the wheel or the trackpad
+over them scrolls the strip while it overflows (while every tab fits, or over
+the toolbar, the wheel steps tabs: `tab.prev` / `tab.next`). The shown tab is
+always brought into view, clear of the fades: after a switch (key, click,
+wheel, command), a new tab, a closed or moved one, and when the strip changes
+width; scrolling by hand stays put. A cut-off end fades the tabs into the
+night (the left one only while the strip is scrolled) and counts those
+beyond it, `‹ n` / `n ›`; a click on a count brings in the next tab that
+way. A dragged tab held on a cut-off end scrolls the strip a tab at a time,
+its stake by each tab brought in. A tab's right-click menu (or `m` on it in the strip): Rename,
 New tab, Pin tab to the jar (pinned: Unpin from the jar, Move left / right on
 the shelf), Move to space… and Close. "Move to space…" lists the other spaces
 on the tab's machine in the sidebar's order, a worktree's space indented under
