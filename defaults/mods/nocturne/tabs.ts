@@ -19,6 +19,10 @@
 // the bell, as before.
 // Drag a tab along the strip to move it (tabdrag.ts): it lifts where it is
 // and a stake marks the gap it drops into; leaving the strip drops nothing.
+// More tabs than fit scroll sideways (tabscroll.ts): the wheel scrolls them
+// while they overflow (steps tabs while they fit), the shown tab is always
+// brought into view, a cut-off end fades and counts its tabs (‹ n, n ›), and
+// a drag held on one scrolls on.
 // The drop-downs (+ new, the script deck) hang under their button, right
 // edges lined up (kit.ts dropBelow); a second press closes them. A rule like
 // the ones between the groups closes the strip before the bell's block.
@@ -35,7 +39,6 @@ import { div, svg, image } from "gpui-kit";
 import type { Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, MouseMoveEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, ScrollHandle } from "gpui-base";
-import type { ScrollHandle as Scroll } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { isBoolean, readShared, writeShared } from "./guard.ts";
@@ -43,6 +46,7 @@ import { statusMark } from "./winged.ts";
 import { byKey, dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "@fireflies/toolground";
+import { SEAM, StripScroll, seamFade } from "./tabscroll.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
 import { openMenu, openKeys, toggleGitMenu, gitMenuOpen, openToSpace } from "./menu.ts";
@@ -67,44 +71,8 @@ import { edge } from "@fireflies/tones";
 
 const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
-// Where the tabs end and the tools begin (kit.ts toolGround, TOOL_LOOK): the
-// tabs dissolve into the night under the seam in SEAM[look].steps dithered
-// bands of SEAM.band px, then the seam itself, and the tools (with the bell
-// and "+ new", blocks of their own) stand on their own ground to the strip's
-// right edge. "ledge": a gap of night that cuts the tabs' horizon, then a
-// raised, lit ledge. "plate": a dithered band the strip's height, then a plate.
-export const SEAM = { band: 8, ledge: { steps: 5, gap: 12 }, plate: { steps: 6, band: 6 } } as const;
-
-/** How much of the night covers band `i` of `n` (0..1, the last all). */
-export const fadeCover = (i: number, n: number): number => (i + 1) / n;
-
-/**
- * The tabs' fade under the seam, at the right of the tab area: the night
- * (the background) over them, thickening rightwards in dithered steps, as
- * much of it as fadeCover says: a checker of the night (half) at an opacity
- * below a half, the checker plus the solid night above it. Over the tab
- * area's end it shows nothing (the night on the night); over overflowing
- * tabs they dissolve into it rather than run into the tools. It takes no
- * pointer: a press goes through to the tab under it. The horizon stays.
- */
-export function seamFade(t: Theme, look: ToolLook = TOOL_LOOK): Element {
-  const n = SEAM[look].steps;
-
-  const band = (i: number) => {
-    const c = fadeCover(i, n);
-    const el = div().absolute().top(0).bottom(0).left(i * SEAM.band).w(SEAM.band);
-
-    if (c >= 1) return el.bg(t.background);
-
-    if (c <= 0.5) return el.opacity(c * 2).child(dither(t.background, 1));
-
-    // over half: the checker, and the solid night over the rest
-    return el.child(dither(t.background, 1)).child(div().absolute().top(0).left(0).size_full().bg(t.background).opacity((c - 0.5) * 2));
-  };
-
-  return div().id("tab-fade").absolute().top(0).bottom(2).right(0).w(SEAM.band * n)
-    .children(Array.from({ length: n }, (_, i) => band(i)));
-}
+// The seam's sizes, the fade and its cover live with the strip's scroll (tabscroll.ts).
+export { SEAM, seamFade, fadeCover } from "./tabscroll.ts";
 
 /** The seam between the fade and the tools: "ledge", a gap of night over the
  *  tabs' horizon (it ends there); "plate", a dithered band the strip's height. */
@@ -161,7 +129,7 @@ export default class Tabs {
   polling = false;
   press: Press | null = null;
   handle: FocusHandle | null = null;
-  scroll: Scroll | null = null;
+  edges = new StripScroll(); // the strip's scroll (tabscroll.ts)
   row: Row = "tabs";
   cursor: string | null = null;
   want: Row | null = null;
@@ -185,7 +153,7 @@ export default class Tabs {
     });
     // The keyboard (nav.ts): the row and control the cursor is on, the rows as last drawn.
     this.handle = cx.focus_handle();
-    this.scroll = ScrollHandle.new();
+    this.edges.handle = ScrollHandle.new();
     this.row = "tabs";
     this.cursor = null;
     this.rows = { tabs: [], head: [], parked: [] };
@@ -434,13 +402,11 @@ export default class Tabs {
     cx.notify();
   }
 
-  /** Scrolls the strip to the tab under the cursor. */
+  /** Scrolls the strip to the tab under the cursor (clear of the fades). */
   reveal(): void {
     if (this.row !== "tabs") return;
 
-    const i = this.rows.tabs.filter((x) => x.id.startsWith("tab:")).findIndex((x) => x.id === this.cursor);
-
-    if (i >= 0) this.scroll?.scroll_to_item(i);
+    this.edges.reveal(this.rows.tabs.filter((x) => x.id.startsWith("tab:")).findIndex((x) => x.id === this.cursor));
   }
 
   /** Where the cursor is for the header, the chips and the bell (shared CURSOR), only when it changes. */
@@ -475,6 +441,11 @@ export default class Tabs {
       this.drag = { id: p.id, gap: null };
     }
 
+    // Held on a cut-off end: the strip scrolls on, the stake by each tab brought in.
+    this.edges.dragAt(e.position.x, cx, (g) => {
+      if (this.drag) this.drag.gap = g;
+    });
+
     if (this.drag.gap?.id === gap.id && this.drag.gap.after === gap.after) return;
 
     this.drag.gap = gap;
@@ -485,6 +456,7 @@ export default class Tabs {
   drop(cx: Context): void {
     const d = this.drag;
 
+    this.edges.stopEdge();
     this.drag = null;
     this.pressed = null;
 
@@ -501,6 +473,7 @@ export default class Tabs {
   cancelDrag(cx: Context): void {
     const dragging = Boolean(this.drag);
 
+    this.edges.stopEdge();
     this.drag = null;
     this.pressed = null;
 
@@ -689,21 +662,22 @@ export default class Tabs {
 
     this.tell(on);
     this.order = (space?.tabs ?? []).map((c) => c.id);
+    this.edges.frame(shown.map((c) => c.id), shown.find((c) => c.active)?.id ?? null);
 
     const drag = this.drag;
     const at = drag ? stakeAt(this.order, shown.map((c) => c.id), drag.id, dropIndex(this.order, drag.id, drag.gap)) : null;
 
-    const item = (c: TabInfo): Element => this.tabItem(t, c, space, at);
+    // Each tab tells the strip's scroll where it is (tabscroll.ts).
+    const item = (c: TabInfo): Element => this.edges.tab(this.tabItem(t, c, space, at), c.id, c.active);
 
-    // Past the last tab: the gap at the end, at least wide enough to aim at.
-    const end = div().id("tab-end").relative().flex_1().min_w(24).h_full()
+    // Past the last tab: the gap at the end, at least a fade wide (tabscroll.ts).
+    const end = div().id("tab-end").relative().flex_1().h_full()
       .on_mouse_move((e, cx) => this.dragOver({ id: null, after: false }, e, cx))
       .when(Boolean(at) && at?.before === null, (el) => el.child(stake(t)));
 
     const rule = () => div().w(1).h(14).mx(4).flex_none().bg(edge(t));
     const handle = this.handle;
-    const scroll = this.scroll;
-    const strip = h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar();
+    const strip = h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center();
 
     return h_flex().id("tabs").relative().size_full().min_w(0).pr(0).items_center().bg(t.background)
       .when(Boolean(handle), (el) => (handle ? el.track_focus(handle) : el))
@@ -713,15 +687,17 @@ export default class Tabs {
         if (!hovered) this.cancelDrag(cx);
       })
       .when(Boolean(drag), (el) => el.cursor_grabbing())
+      // Over overflowing tabs the wheel scrolls them (tabscroll.ts); else it steps tabs.
       .on_scroll_wheel((e) => {
-        if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next");
+        if (!this.edges.owns(e.position.x) && Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next");
       })
       // The horizon: a 2 px dithered line the tabs stand on.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)))
-      // Its left padding inside the scroll, so a stake before the first tab isn't cut.
+      // The tabs scroll under the fades, a cut-off end counts its tabs (tabscroll.ts).
       .child(h_flex().id("tab-area").relative().flex_1().min_w(0).h_full()
-        .child((scroll ? strip.track_scroll(scroll) : strip).children(shown.map(item)).child(end))
-        .child(seamFade(t)))
+        .child(this.edges.strip(strip, shown.map(item), end))
+        .child(seamFade(t))
+        .children(this.edges.marks(t)))
       // The seam, then the tools on their own ground (kit.ts toolGround),
       // which the bell's and "+ new"'s blocks carry on to the strip's end.
       .child(seam(t))

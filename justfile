@@ -220,6 +220,8 @@ test:
     bun test scripts/nocturne-shelf.test.ts
     # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
     bun test scripts/nocturne-tab-seam.test.ts
+    # More tabs than fit nocturne's strip: the wheel scrolls it, the shown tab is always in view (switch, new, close, move, narrower), ‹ n / n › mark a cut-off end, a drag held on one scrolls on.
+    bun test scripts/nocturne-tab-scroll.test.ts
     # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.
     bun test scripts/nocturne-move-menu.test.ts
     # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
