@@ -5831,6 +5831,44 @@ export default class Notes extends View {
     assert!(tree.contains("picked=6-11 after=15-15"), "{tree}");
 }
 
+// HERDR: `replace(text, all)` (the find bar's) and `replace(text)` (the selection's) are one
+// method: with `all` given it replaces the search's matches, without it the selection.
+#[gpui::test]
+fn a_script_editors_replace_with_all_replaces_the_search_matches(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { Editor, EditorState } from "gpui-base";
+export default class Notes extends View {
+  init() {
+    this.code = EditorState.new({ language: "markdown", value: "one two one" });
+    this.code.find("one");
+    const state = this.code.replace("1", true);
+    this.code.find_close();
+    this.code.set_selected_range({ start: 2, end: 5 });
+    this.code.replace("TWO");
+    this.report = `count=${state.count}`;
+  }
+  render(cx) {
+    return div().child(Editor.new(this.code).h(120)).child(this.code.value()).child(this.report);
+  }
+}
+"#;
+    let view_type = runtime.load_source("replace-all", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("editor render");
+    assert!(tree.contains("1 TWO 1"), "{tree}");
+    assert!(tree.contains("count=0"), "{tree}");
+}
+
 // HERDR: readonly rejects keyboard edits without disabling selection or programmatic refresh.
 #[gpui::test]
 fn a_readonly_script_editor_remains_selectable(cx: &mut TestAppContext) {
