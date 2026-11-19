@@ -707,3 +707,60 @@ test("typing in insert mode, the save and its echo leave the keyboard, insert mo
   type(p, "!");
   expect(main(p).value().split("\n")[0]).toBe("# Ideas now!");
 });
+
+// ---- its path (Developer, 2026-11-19, a second time: "Scratchpad: Add copy path option")
+
+const { tabMenuKeyDown } = await import("../defaults/mods/editor/tab-menu.ts");
+
+test("the note's path to the clipboard from each place: more's first entry, a right-click's menu at the pointer, the tab menu, editor.copy-path", async () => {
+  const p = await note();
+  const copied = () => { const got = [...clipboard]; clipboard.length = 0; toasts.length = 0; return got; };
+  copied();
+  // The bar's more menu: its first entry.
+  click(byId(p.render(cx()), "bar-more"));
+  expect(texts(byId(p.render(cx()), "editor-more-menu"))[1]).toBe("y");
+  click(byId(p.render(cx()), "more-copy-path"));
+  expect(copied()).toEqual([PATH]);
+  // A right-click on the scratchpad (a drawn block, the bar, the margins): the more menu at the
+  // press, its path first; y copies it.
+  const right = (root: any) => root.calls.on_mouse_down.find((h: any) => h[0] === "right")[1];
+  right(p.render(cx()))({ local_position: { x: 200, y: 300 }, position: { x: 200, y: 300 } }, cx());
+  expect(p.moreMenu).toMatchObject({ near: { x: 200, y: 300 } });
+  const menu = byId(p.render(cx()), "editor-more-menu");
+  expect(menu.calls.left[0][0]).toBe(202);
+  expect(menu.calls.top[0][0]).toBe(302);
+  expect(texts(menu)).toContain("Copy its path");
+  expect(block(p).press("y")).toBe(true);
+  expect(copied()).toEqual([PATH]);
+  expect(p.moreMenu).toBeNull();
+  // Near the pane's foot it opens above the press, inside the pane.
+  right(p.render(cx()))({ local_position: { x: 850, y: 690 }, position: { x: 850, y: 690 } }, cx());
+  const low = byId(p.render(cx()), "editor-more-menu");
+  expect(low.calls.left[0][0] + 300).toBeLessThanOrEqual(900);
+  expect(low.calls.top[0][0] + 182).toBeLessThanOrEqual(700);
+  block(p).press("escape");
+  expect(p.moreMenu).toBeNull();
+  // In the block being typed into a right-click is its editor's own (cut, copy, paste): it stops there.
+  let stopped = false;
+  const lit = byId(p.render(cx()), "rendered-lit");
+  lit.calls.on_mouse_down.find((h: any) => h[0] === "right")[1]({}, { ...cx(), stop_propagation: () => { stopped = true; } });
+  expect(stopped).toBe(true);
+  // The tab menu (a right-click on a tab, space b m, editor.tab-menu): "Copy its path", y.
+  p.command("tab-menu", cx());
+  expect(p.tabMenu.items.map((i: any) => [i.key, i.label])).toEqual([["y", "Copy its path"], ["d", "Close"]]);
+  tabMenuKeyDown(p, key("y"), cx());
+  expect(copied()).toEqual([PATH]);
+  expect(p.tabMenu).toBeNull();
+  // editor.copy-path.
+  p.command("copy-path", cx());
+  expect(copied()).toEqual([PATH]);
+  // Another file: its own path, the toast saying so.
+  const q = await pane("/p/notes.md", NOTE);
+  copied();
+  q.command("copy-path", cx());
+  expect(clipboard).toEqual(["/p/notes.md"]);
+  expect(toasts[0]).toMatchObject({ title: "copied its path", level: "success" });
+  // No right-click menu there: the more menu is a scratchpad's.
+  right(q.render(cx()))({ local_position: { x: 200, y: 300 }, position: { x: 200, y: 300 } }, cx());
+  expect(q.moreMenu).toBeNull();
+});
