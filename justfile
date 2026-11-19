@@ -258,6 +258,8 @@ test:
     bun test scripts/databases-k8s.test.ts
     # The Databases window, mouse and keyboard first: columns resized (o/O/{/} and the header's edge), hidden, moved and kept per table; ORDER BY shown and quoted, a result's own sort; ranges copied as TSV, rows as JSON / CSV / INSERT; every context menu and the keys it shows; names dragged into a query, tabs and connections reordered, files dropped; rename, disconnect, duplicate; the new keys type in fields.
     bun test scripts/databases-ux.test.ts
+    # Enter opens a table in the Databases window from every state a double click does (Developer's report): the find line left by enter or ↓ or a click, a password, rename or ask closed by a key, chip or click beside it (the keyboard back to the view), a cell edit left for [2], databases.table:<name> under a schema or a find, a list read again shorter.
+    bun test scripts/databases-enter.test.ts
     # The Databases window's reads: nothing sits in "reading" without something running (a missing client said before anything is read, a throw, a read delivered twice); a read's seconds, esc and its stop chip, its deadline; the client from the space folder's direnv first; the Log names each run; no exact count unasked.
     bun test scripts/databases-reads.test.ts
     # Pinned connections and a connection's port-forward: one list for the machine, every window told, a restart, no secret in the file; the forward's facts checked; its port looked at first, the ask with its overview, the forward started as the k8s mod starts one (the shared fixture), a pod that's gone, a port another program holds, stopping it.

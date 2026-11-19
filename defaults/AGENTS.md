@@ -263,7 +263,11 @@ goes in quoted at its caret; a table dropped on the Rows tab opens there;
 query tabs and saved connections (`J` / `K` too) drag to another place; a
 SQLite file dropped on the window opens as a connection (not saved), a
 `.sql` file as a query tab (not run): nothing that writes starts from a
-drop. A double click is enter everywhere; a cut cell, a header, a
+drop. `/` finds a table in [2] by its name: enter opens the cursor's match
+and leaves the list filtered (↓ goes to the list without opening), enter there
+opens the cursor's table, esc ends the find. A double click is enter everywhere
+(a dialog closed by a click gives the keyboard back, a cell being edited is
+kept when another panel takes it); a cut cell, a header, a
 connection and a table say more on hover; the wheel scrolls (shift: a grid
 sideways). Nothing runs on open. A statement that writes asks first (`y`);
 DROP, TRUNCATE, ALTER … DROP and a DELETE or UPDATE without WHERE ask twice,
@@ -297,7 +301,7 @@ command line, shared state, settings, the log or the history. It keeps
 password literal blanked) and `queries/<id>.json` (each tab's text). Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
-rows and structure), `databases.cancel`, `databases.stop` (what esc does to a
+rows and structure, the cursor in [2] on its row), `databases.cancel`, `databases.stop` (what esc does to a
 read going on), `databases.forward-start` / `databases.forward-anyway` /
 `databases.forward-k8s` (the forward ask's enter, c and k), and any key's action by name
 (`databases.export`, `databases.refresh`, `databases.save`…);

@@ -12,6 +12,7 @@ import type { DbProps, Handover, KeptCopy } from "./state.ts";
 import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCopy } from "./state.ts";
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
+import { shownTables } from "./panels.ts";
 import { runQuery } from "./query.ts";
 import { setCell } from "./cell-edit.ts";
 import { stopReads } from "./reads.ts";
@@ -243,8 +244,18 @@ function openNamed(v: DbView, name: string, cx: Context): void {
     return;
   }
 
+  // The cursor on its row in [2] as drawn (its tab; a schema or a find that hides it goes), so
+  // enter opens the table that's open, not the one at its index in the whole catalog.
   v.panel = "tables";
-  v.tableAt = Math.max(0, v.catalog.tables.filter((x) => x.type === t.type).indexOf(t));
+  v.tablesTab = t.type === "view" ? "views" : "tables";
+
+  if (!shownTables(v).includes(t)) {
+    v.schema = null;
+    v.tableFind = null;
+    v.findTyping = false;
+  }
+
+  v.tableAt = Math.max(0, shownTables(v).indexOf(t));
   openTable(v, t, cx);
 }
 

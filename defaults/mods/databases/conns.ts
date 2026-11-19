@@ -466,7 +466,9 @@ export function askPassword(v: DbView, c: Conn, keychain: boolean, cx: Context, 
     done: () => {
       const pw = input.value();
 
+      // Its input had the keyboard: back to the view (else enter on a table went nowhere after).
       v.password = null;
+      v.focusShown();
       v.secrets.set(c.id, pw);
 
       const go = then ?? (() => void connect(v, keychain ? { ...c, secret: "ask" } : c, cx));
