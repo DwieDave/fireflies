@@ -1799,7 +1799,16 @@ needs you, working, running a command, done, resting; the done and resting ones
 sit on the ground above the hills (the rail pairs them up when crowded). A row
 takes a press anywhere on it (its full width and half the gap to its
 neighbours; on the rail the cell and its padding): click focuses the agent,
-right-click its menu, double-click renames it. Pinned agents
+right-click its menu, double-click renames it. With more than one machine
+(`machines()`), a row of chips under the fireflies' heading filters them by
+machine: "all", "this mac" (or "this machine") and one per machine; a chosen
+one shows only that machine's fireflies, in the sky, the jar and on the rail
+(and `agent.next` walks only those), kept in shared `nocturne.machine`
+(`{ "machine": name | null }`; null this one; unset all; a machine that's
+gone shows all and keeps the choice). In "all" each firefly's name wears a
+small square tag: `~` for this machine, else the shortest start of its name
+no other machine shares. With one machine the row isn't drawn. The chips are
+in the sidebar's keyboard walk (enter chooses). Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
 a sheen down its glass, never shorter than a jar with room under one firefly,
@@ -1978,8 +1987,10 @@ wings (`winged.ts`, one helper for the sidebar, the tabs and the headers; a
 12 px mark there), in the colour the sidebar gives its status (working, needs
 you, done; idle muted). While it works its wings beat a little and slowly
 (only while the window is in front and more motion is fine); it blinks while
-it needs you; done and resting hold still. A plain terminal's tab and header
-keep its plain mark, without wings.
+it needs you; done and resting hold still, and done wears the sidebar's check
+on the mark's corner, as its firefly does. A tab with several agents wears the
+mark of the one its status comes from (the most urgent). A plain terminal's
+tab and header keep its plain mark, without wings.
 Nocturne's pane header by mouse: a click focuses the pane, a right-click opens
 its menu, a middle click on the bar (its mark, name, folder or band; not its
 buttons) closes the pane as its close button does (`pane.close` without
