@@ -72,6 +72,7 @@ const STATUSES = ["working", "blocked", "done", "idle"] as const;
 const colour = (s: string) => (s === "idle" ? "muted" : s);
 const WINGS = "svg:mods/nocturne/art/wings.svg";
 const LOGO = "svg:mods/nocturne/art/logo-claude.svg";
+const CHECK = "svg:mods/workspace-chrome/check.svg";
 
 const agentPane = (status: string | null) => ({ pane: "p1", tab: "t1", terminal: "a/1", focused: true, title: "claude", cwd: "/home/a", status, app: "claude-code",
   program: { key: "claude", name: "Claude Code", icon: "icons/claude.svg", tint: true, agent: true } });
@@ -106,7 +107,9 @@ for (const status of STATUSES) {
       const mark = find(root, id);
       expect(mark, where).toBeDefined();
       // One icon: the program's art logo; its wings beside it are part of it.
-      expect(icons(root).map((e: any) => e.tag), where).toEqual([LOGO]);
+      // Done also wears the sidebar's check on it (item 29), in the done colour.
+      expect(icons(root).map((e: any) => e.tag), where).toEqual(status === "done" ? [LOGO, CHECK] : [LOGO]);
+      if (status === "done") expect(icons(root)[1].calls.text_color?.[0], where).toBe("done");
       const wings = all(mark).filter((e: any) => e.tag === WINGS);
       expect(wings.length, where).toBe(1);
       for (const e of [wings[0], icons(root)[0]]) expect(e.calls.text_color?.[0], where).toBe(colour(status));

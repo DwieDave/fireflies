@@ -597,7 +597,10 @@ export default class Tabs {
    *  lead pane), its status, lit when shown; pressed, dragged, closed with the
    *  middle button, its menu on the right; the stake where a drag would land. */
   tabItem(t: Theme, c: TabInfo, space: SpaceInfo | undefined, at: StakeAt | null): Element {
-    const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
+    // Its lead pane: the agent the tab's status comes from (the most urgent one,
+    // as the sidebar ranks them first), else its first agent, else its first pane.
+    const own = panes().filter((p) => p.tab === c.id);
+    const lead = own.find((p) => p.program?.agent && c.status != null && p.status === c.status) ?? own.find((p) => p.program?.agent) ?? own[0];
     const prog = lead?.program;
     // A mod pane's name and mark (header.ts modLook: Databases, a launcher's mod such as Kubernetes).
     const look = modLook(lead?.mod);
@@ -608,7 +611,7 @@ export default class Tabs {
     const tint = c.active ? t.foreground : t.dim;
 
     // An agent's tab wears its one mark: the sidebar's winged one in its status
-    // colour (winged.ts statusMark); a mod pane's tab its mod's mark, as the
+    // colour, with the sidebar's check when it's done (winged.ts statusMark); a mod pane's tab its mod's mark, as the
     // pane's header; any other tab its program's icon.
     const mark = c.status ? statusMark(t, lead ?? {}, c.status, `tab-mark-${c.id}`)
       : look ? svg(iconPath(look[1])).size(12).flex_none().text_color(tint)
