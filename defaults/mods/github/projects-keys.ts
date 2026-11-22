@@ -85,7 +85,8 @@ function detailKey(proj: Projects, k: string): boolean {
 }
 
 /** The board's own keys: move, scroll, open, pick up, edit, add, filter, views, projects, links, fold. */
-function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context): boolean {
+/** A key on the board (no menu, no typing, no card in hand): what it does to the selected card or the view. */
+export function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context): boolean {
   const a = proj.at(lay), item = proj.current(lay);
   const dir = DIRS.get(k);
 

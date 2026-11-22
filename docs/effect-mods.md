@@ -733,6 +733,45 @@ overlays. What a read of it showed, and what closed each:
 | Branches sorted by boolean arithmetic | items.ts | an `Order` (the checked-out one first, then by name) |
 | Tests waited with wall-clock sleeps, polled the lanes and faked herdr's waits with promises that never end | scripts/git-*.test.ts | git-host.ts: a context whose clock the test moves, `drained(v)` on the lanes, the kit's test layers, `Deferred`s for operations held open |
 
+**Wave 1: github, done (2026-11-22).** The whole mod in the Effect pass
+(`effect_sources` names `defaults/mods/github`): its 2,806 findings fixed,
+its guard.ts and guards.ts gone, gh and git through `Exec` (gh.ts: a read is
+an effect failing with `GhError` in a person's words, `GhStatus` with
+GitHub's status, or `Misread` with where the answer differed from its
+Schema), the cache file through `Files` (store.ts), the shared state through
+the kit's `sharedKey` and `mapOf` (kept.ts, lastview.ts, place.ts, the
+Projects settings). Each copy attaches to the mod's runtime in `init`
+(fx.ts); its opening, fork switch, command loop, tick, kick, every tab's
+read (actions-reads.ts, prs-reads.ts, projects-reads.ts, window-reads.ts,
+one read per tab at a time on a Semaphore), a job's log, a card's detail,
+the forms' reads and sends (pr-form-reads.ts, dispatch-form-reads.ts,
+`FormSpec.send` an effect), the Projects edits and every gh action
+(`Host.act`) are runs on it, ended by `close`. The cache write runs on the
+mod's runtime so a close still waits for it. The tests run the window's
+effects through one shared stand-in, scripts/github-host.ts (`runOn`: redrawn
+through the test's cx, its sleeps on that cx's timers). What a read of it
+showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| An answer of another shape was `undefined`, then an Error with no detail | gh.ts (guards) | Schema decode; `Misread` says where it differed |
+| A file at a ref: every failure read as "no file" | gh.ts fileAt | none only for a 404; another failure is the caller's |
+| A git that couldn't run read as "no repo here" | gh.ts repoOf | a `GhError` saying git couldn't run |
+| The cache write retried on any failure, and one that failed was dropped | store.ts, window-reads.ts | retried on `StaleFile` alone; a failed write leaves the window dirty, tried again |
+| Reads, timers, the command loop, logs, details and gh actions were `cx.spawn` / `cx.timer` work that ran on after close | main.ts, window-reads.ts, the tabs | runs on the copy's runtime, interrupted by `close` |
+| The shown tab awaited the other tab's "warming" promise | window-reads.ts | a Semaphore per tab |
+| The dispatched run was looked for with `new Promise` over `cx.timer.after` | dispatchForm.ts | `Effect.sleep` on the window's clock (dispatch-form-reads.ts) |
+| The PR form's reads swallowed seven failures | prForm.ts | each fallback named where it is; a branch GitHub says isn't there (404) told from one that couldn't be asked |
+| A run opened from a check: any failure of its read swallowed | actions.ts | a 404 lets the run go; another failure is the read's |
+| Ages and durations read `Date.now` per row; a filter's `@current` read the wall clock inside | model.ts, the draws, board-filter.ts | one `now()` per window (the runtime's Clock), passed in |
+| GraphQL literals built by `JSON.stringify` | board.ts, board-edits.ts | one escaper (`lit`), the same text |
+| A pane's slot from `Date.now` and `Math.random` | place.ts | `randomId` on the runtime's Clock and Random (as git's) |
+| Kept state compared and written as JSON text | lastview.ts, place.ts | Schema equivalence and encode |
+| Its own copy of "the folder for a window opened without one" | main.ts | the kit's `hereOf` |
+
+Left for later: the github tests (scripts/github*.test.ts) still drive the
+window with their own async herdr stand-ins; github-host.ts is where they go.
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings

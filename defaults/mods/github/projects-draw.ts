@@ -16,6 +16,7 @@ import { filterTokens, selectOf } from "./board-filter.ts";
 import { cardFields, editableFields, initials, loginSlot, valueText, wrap, ansiKey, label, numW } from "./board-cards.ts";
 import { choose, menuFields, openProjects, options } from "./projects-menus.ts";
 import { flipped, toggleFold } from "./projects-keys.ts";
+import { cardMenu } from "./card-menu.ts";
 import type { default as Projects, ColumnRow, Menu } from "./projects.ts";
 import { edge as edgeTone } from "@fireflies/tones";
 
@@ -265,6 +266,8 @@ export function column(proj: Projects, t: Theme, b: Board, lay: Layout, ci: numb
       (range) => Arr.map(within(rows, range.start, range.end), (r, k) => ("lane" in r ? laneRow(proj, t, r, ci, range.start + k)
         : "pad" in r ? div().id(`ppad-${ci}-${range.start + k}`).h(r.pad).w_full() : card(proj, t, r.item, a, ci, chars, fields))))
       .on_item_click((key, cx) => clicked(proj, lay, ci, key, cx))
+      // A right-click on a card: its menu at the pointer (card-menu.ts).
+      .on_item_secondary_click((key, e, cx) => cardMenu(proj, lay, ci, key, e, cx))
       .size_full().when(handle !== undefined, (el) => (handle === undefined ? el : el.track_scroll(handle))));
 
   return v_flex().id(`pcolumn-${ci}`).w(w).flex_none().h_full().min_h(0).border(1).border_color(edge)
