@@ -4,10 +4,13 @@
 // view, drill-ins and splitters hold. main.ts's GitView holds these fields.
 
 import type { Element } from "gpui-kit";
-import { spaces, panes, focused } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, sharedKey, sharedMapKey } from "./guard.ts";
+import { Array as Arr, Option, Schema, String as Str } from "effect";
+import type { Props } from "gpui-shell";
+import { spaces, panes, focused, props } from "herdr";
+import { sharedKey } from "@fireflies/kit";
+import { sharedMapKey } from "./shared-map.ts";
 import type { CommitFile, Env } from "./git.ts";
+import { ScopeSchema } from "./git.ts";
 import type { Graph } from "./graph.ts";
 import type { DiffFile, DiffRow } from "./patch.ts";
 import type { Branch, Commit, ReflogEntry, Remote, RemoteBranch, RepoState, StashEntry, Status, StatusFile, Tag } from "./parse.ts";
@@ -19,24 +22,32 @@ import type { Item } from "./items.ts";
 export const WINDOW = "git.window"; // { id, beat }: the open window, for the toggle
 
 /** The open window, for the toggle (nocturne's git.ts reads it). */
-export const WINDOW_KEY = sharedKey(WINDOW, nullable(object({ id: isString }, { beat: isNumber, folder: nullable(isString) })));
+export const WindowNoteSchema = Schema.Struct({ id: Schema.String, beat: Schema.optionalKey(Schema.Finite), folder: Schema.optionalKey(Schema.NullOr(Schema.String)) });
+
+export const WINDOW_KEY = sharedKey(WINDOW, Schema.NullOr(WindowNoteSchema));
 
 /** The GitHub window's note (github's main.ts): this window holds its place when opened from it. */
-export const GITHUB_WINDOW = sharedKey("github.window", nullable(object({ id: isString }, { beat: isNumber })));
+export const GITHUB_WINDOW = sharedKey("github.window", Schema.NullOr(Schema.Struct({ id: Schema.String, beat: Schema.optionalKey(Schema.Finite) })));
 
 /** The side panels, top to bottom. */
-export type Panel = "status" | "files" | "branches" | "commits" | "stash";
+export const PanelSchema = Schema.Literals(["status", "files", "branches", "commits", "stash"]);
 
-export const PANELS: readonly Panel[] = ["status", "files", "branches", "commits", "stash"];
+export type Panel = typeof PanelSchema.Type;
 
-export const isPanel = literal("status", "files", "branches", "commits", "stash");
+export const PANELS: readonly Panel[] = PanelSchema.literals;
 
 /** Each tabbed panel's tabs. */
-export type FilesTab = "files" | "review" | "worktrees";
+export const FilesTabSchema = Schema.Literals(["files", "review", "worktrees"]);
 
-export type BranchesTab = "branches" | "remotes" | "tags";
+export const BranchesTabSchema = Schema.Literals(["branches", "remotes", "tags"]);
 
-export type CommitsTab = "commits" | "reflog";
+export const CommitsTabSchema = Schema.Literals(["commits", "reflog"]);
+
+export type FilesTab = typeof FilesTabSchema.Type;
+
+export type BranchesTab = typeof BranchesTabSchema.Type;
+
+export type CommitsTab = typeof CommitsTabSchema.Type;
 
 export type Tab = FilesTab | BranchesTab | CommitsTab;
 
@@ -47,6 +58,9 @@ export interface TabOf {
   commits: CommitsTab;
 }
 
+/** A kept TabOf: each panel's tab, where one was kept. */
+export const TabOfSchema = Schema.Struct({ files: Schema.optionalKey(FilesTabSchema), branches: Schema.optionalKey(BranchesTabSchema), commits: Schema.optionalKey(CommitsTabSchema) });
+
 export const TABS = {
   files: [["files", "Files"], ["review", "Review"], ["worktrees", "Worktrees"]],
   branches: [["branches", "Local branches"], ["remotes", "Remotes"], ["tags", "Tags"]],
@@ -56,28 +70,28 @@ export const TABS = {
 export const isTabbed = (p: Panel): p is keyof TabOf => p === "files" || p === "branches" || p === "commits";
 
 /** A side panel's screen mode. */
-export type Mode = "normal" | "half" | "full";
+export const ModeSchema = Schema.Literals(["normal", "half", "full"]);
 
-export const MODES: readonly Mode[] = ["normal", "half", "full"];
+export type Mode = typeof ModeSchema.Type;
 
-export const isMode = literal("normal", "half", "full");
+export const MODES: readonly Mode[] = ModeSchema.literals;
 
 // Where the window was, per folder: its panel, tabs, mode and sizes.
-export const isKept = object({}, {
-  panel: isPanel,
-  tabOf: object({}, { files: literal("files", "review", "worktrees"), branches: literal("branches", "remotes", "tags"), commits: literal("commits", "reflog") }),
-  mode: isMode,
-  tree: isBoolean,
-  showLog: isBoolean,
-  sideW: nullable(isNumber),
-  railW: nullable(isNumber),
-  midW: nullable(isNumber),
-  logH: isNumber,
+export const KeptSchema = Schema.Struct({
+  panel: Schema.optionalKey(PanelSchema),
+  tabOf: Schema.optionalKey(TabOfSchema),
+  mode: Schema.optionalKey(ModeSchema),
+  tree: Schema.optionalKey(Schema.Boolean),
+  showLog: Schema.optionalKey(Schema.Boolean),
+  sideW: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+  railW: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+  midW: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+  logH: Schema.optionalKey(Schema.Finite),
 });
 
-export type Kept = Guarded<typeof isKept>;
+export type Kept = typeof KeptSchema.Type;
 
-export const STATE = sharedMapKey("git.state", isKept);
+export const STATE = sharedMapKey("git.state", KeptSchema);
 
 export const ROW = 18, WIDE_ROW = 32, LOG_ROW = 16, NARROW = 640;
 
@@ -93,64 +107,117 @@ export const CONTEXT_NAMES = {
   menu: "menu", confirm: "confirm", prompt: "prompt", commit: "commit", filter: "filter", keys: "keys", global: "global", list: "list",
 } as const satisfies { readonly [C in ViewContext]: string };
 
-/** The shown space's folder and machine. */
-export function here() {
-  const space = spaces().find((s) => s.active) ?? null;
-  const tab = space?.tabs.find((c) => c.active)?.id ?? null;
-  const f = focused();
-  const pane = panes().find((p) => p.focused && p.tab === tab) ?? panes().find((p) => p.tab === tab && p.cwd);
+/** A folder, or none when it's empty. */
+const some = (s: string | null | undefined): Option.Option<string> => (s === null || s === undefined || Str.isEmpty(s) ? Option.none() : Option.some(s));
 
-  return { folder: (space?.attached && space.folder) || pane?.cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
+/** A folder and the machine it's on (null: this computer). */
+export interface Here {
+  readonly folder: string | null;
+  readonly on: string | null;
+}
+
+/** The shown space's folder and machine: the space's own folder when it's
+ *  attached to one, else the focused terminal's, else a terminal's in the
+ *  shown tab, else where the space was made. */
+export function here(): Here {
+  const space = Arr.findFirst(spaces(), (s) => s.active);
+  const tab = Option.getOrNull(Option.flatMap(space, (s) => Option.map(Arr.findFirst(s.tabs, (c) => c.active), (c) => c.id)));
+  const all = panes();
+  const pane = Arr.findFirst(all, (p) => p.focused && p.tab === tab).pipe(Option.orElse(() => Arr.findFirst(all, (p) => p.tab === tab && some(p.cwd).pipe(Option.isSome))));
+  const attached = Option.flatMap(Option.filter(space, (s) => s.attached), (s) => some(s.folder));
+
+  const folder = attached.pipe(
+    Option.orElse(() => Option.flatMap(pane, (p) => some(p.cwd))),
+    Option.orElse(() => Option.flatMap(Option.fromNullishOr(focused()), (f) => some(f.cwd))),
+    Option.orElse(() => Option.flatMap(space, (s) => some(s.folder))),
+  );
+
+  return { folder: Option.getOrNull(folder), on: Option.getOrNull(Option.flatMap(space, (s) => Option.fromNullishOr(s.machine))) };
 }
 
 // ---- what the window is opened with
 
 /** A pane opened from the window (ctrl-p): what it shows. */
-export const isShow = oneOf(
-  object({ kind: literal("file"), path: isString }),
-  object({ kind: literal("commit"), hash: isString }, { path: isString }),
-  object({ kind: literal("stash"), ref: isString }, { path: isString }),
-  object({ kind: literal("range"), a: isString, b: isString }),
-  object({ kind: literal("review"), scope: literal("work", "branch", "pr") }, { pr: isNumber, repo: nullable(isString), path: isString }),
-  object({ kind: literal("log"), ref: isString }),
-);
+export const ShowSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("file"), path: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("commit"), hash: Schema.String, path: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({ kind: Schema.Literal("stash"), ref: Schema.String, path: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({ kind: Schema.Literal("range"), a: Schema.String, b: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("review"), scope: ScopeSchema, pr: Schema.optionalKey(Schema.Finite), repo: Schema.optionalKey(Schema.NullOr(Schema.String)), path: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({ kind: Schema.Literal("log"), ref: Schema.String }),
+]);
 
-export type Show = Guarded<typeof isShow>;
+export type Show = typeof ShowSchema.Type;
 
-/** The GitHub window to put back (github's main.ts: { mod, props }). */
-export const isBack = object({ mod: isString }, { props: object({}) });
+/** The GitHub window to put back (github's main.ts: { mod, props }), its props kept whole. */
+export const BackSchema = Schema.Struct({ mod: Schema.String, props: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)) });
 
-export type Back = Guarded<typeof isBack>;
+export type Back = typeof BackSchema.Type;
 
 /** Opened for a worktree (the space menu's New / Remove worktree, the sidebar's w, the palette). */
-export const isIntent = object({}, { action: literal("new", "open", "remove"), space: isString, branch: isString, tab: isString, argv: arrayOf(isString) });
+export const IntentSchema = Schema.Struct({
+  action: Schema.optionalKey(Schema.Literals(["new", "open", "remove"])),
+  space: Schema.optionalKey(Schema.String),
+  branch: Schema.optionalKey(Schema.String),
+  tab: Schema.optionalKey(Schema.String),
+  argv: Schema.optionalKey(Schema.Array(Schema.String)),
+});
 
-export type Intent = Guarded<typeof isIntent>;
+export type Intent = typeof IntentSchema.Type;
 
 /** The window's props, the plain fields (show, back and worktrees are read on their own:
  *  one of them in another shape leaves the rest). */
-export const isGitProps = object({}, {
-  overlay: isString,
-  slot: isString,
-  folder: nullable(isString),
-  on: nullable(isString),
-  paneId: isString,
-  review: isBoolean,
-  pr: isNumber,
-  repo: nullable(isString),
-  scope: literal("work", "branch", "pr"),
+export const GitPropsSchema = Schema.Struct({
+  overlay: Schema.optionalKey(Schema.String),
+  slot: Schema.optionalKey(Schema.String),
+  folder: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  on: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  paneId: Schema.optionalKey(Schema.String),
+  review: Schema.optionalKey(Schema.Boolean),
+  pr: Schema.optionalKey(Schema.Finite),
+  repo: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  scope: Schema.optionalKey(ScopeSchema),
 });
 
-/** The props' fields read on their own. */
-export const isGroups = object({}, { show: isShow, back: isBack, worktrees: isIntent });
+export type GitProps = typeof GitPropsSchema.Type;
 
-export type GitProps = Guarded<typeof isGitProps>;
+/** Whether a value (a pane's props) is the window's props. */
+export const isGitProps = Schema.is(GitPropsSchema);
 
-export type Groups = Guarded<typeof isGroups>;
+/** The props' fields read on their own: each one in another shape is left out alone. */
+export interface Groups {
+  show?: Show;
+  back?: Back;
+  worktrees?: Intent;
+}
+
+const asFields = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown));
+const decodeShow = Schema.decodeUnknownOption(ShowSchema);
+const decodeBack = Schema.decodeUnknownOption(BackSchema);
+const decodeIntent = Schema.decodeUnknownOption(IntentSchema);
+
+/** The window's props as read: the plain fields and the groups. */
+export interface Opened {
+  readonly plain: GitProps;
+  readonly groups: Groups;
+}
+
+/** What the window is opened with: its plain fields (none of them when
+ *  they aren't in the window's shape), and show, back and worktrees, each
+ *  read on its own. The app's props win over `init`'s (a restart). */
+export function openedWith(p: Props | undefined): Opened {
+  const given = props() ?? p ?? null;
+  const fields = Option.getOrElse(asFields(given), () => ({}));
+  const groups: Groups = {};
+
+  Option.map(decodeShow(fields["show"]), (show) => { groups.show = show; });
+  Option.map(decodeBack(fields["back"]), (back) => { groups.back = back; });
+  Option.map(decodeIntent(fields["worktrees"]), (worktrees) => { groups.worktrees = worktrees; });
+
+  return { plain: Option.getOrElse(Schema.decodeUnknownOption(GitPropsSchema)(given), () => NO_PROPS), groups };
+}
 
 export const NO_PROPS: GitProps = {};
-
-export const NO_GROUPS: Groups = {};
 
 // ---- the window's state
 

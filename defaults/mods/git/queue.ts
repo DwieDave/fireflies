@@ -1,31 +1,22 @@
-// The git window's job queues: a long-lived task drains each, so async work
-// keeps that task's cx (main.ts: acts for git actions, reads for reads).
+// The git window's lanes: its actions run one at a time, in the order they
+// were asked for, and so do its reads (main.ts: `acts` for git actions,
+// `reads` for reads). Each job is its own run on the copy's runtime, so
+// closing the window interrupts a job waiting in a lane as well as one
+// running; a lane only orders them.
 
-import type { AsyncContext } from "gpui-kit";
+import { Effect, Semaphore } from "effect";
 
-/** A job queue a long-lived task drains: async work keeps that task's cx. */
-export type Job = (cx: AsyncContext) => Promise<void> | void;
+export class Lane {
+  readonly gate = Semaphore.makeUnsafe(1);
+  /** Jobs asked for and not done yet (waiting or running): tests wait for none. */
+  pending = 0;
 
-export class Queue {
-  items: Job[] = [];
-  wake: (() => void) | null = null;
+  /** `job`, after every job asked for before it on this lane. */
+  serial<A, E, R>(job: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.suspend(() => {
+      this.pending += 1;
 
-  push(job: Job) {
-    this.items.push(job);
-
-    const w = this.wake;
-
-    this.wake = null;
-    w?.();
-  }
-
-  async next(): Promise<Job> {
-    for (;;) {
-      const job = this.items.shift();
-
-      if (job) return job;
-
-      await new Promise<void>((r) => { this.wake = r; });
-    }
+      return this.gate.withPermits(1)(job).pipe(Effect.ensuring(Effect.sync(() => { this.pending -= 1; })));
+    });
   }
 }
