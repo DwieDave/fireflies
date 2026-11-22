@@ -3,6 +3,9 @@
 // values read back, the spec of a form, and what it asks of the window.
 
 import type { Context, Element, Size } from "gpui-kit";
+import type { Effect } from "effect";
+import type { RunOptions } from "@fireflies/kit";
+import type { GithubServices } from "./fx.ts";
 import type { InputState, TextareaState } from "gpui-base";
 import type { Theme } from "herdr";
 import { Predicate } from "effect";
@@ -134,6 +137,8 @@ export interface FormSpec<R> {
 export interface FormHost {
   focusSelf(): void;
   spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
+  /** Runs `effect` for the window (interrupted when it closes); a failure is shown as its note. */
+  run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void;
 }
 
 export const isText = (f: Field): f is TextField | AreaField => f.kind === "text" || f.kind === "number" || f.kind === "area";

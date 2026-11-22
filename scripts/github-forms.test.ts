@@ -130,6 +130,7 @@ const settle = async () => { for (let i = 0; i < 50 && work.length; i++) { while
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: Actions } = await import("../defaults/mods/github/actions.ts");
 const { awaitRead } = await import("../defaults/mods/github/gh-await.ts");
+const { Effect } = await import("effect");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {
@@ -138,6 +139,9 @@ function makeApp() {
     note: null, picker: null, closed: false, tab: "prs", refreshed: 0,
     focusSelf() { focusedInput = null; }, kick() {}, openUrl() {}, openDiff() {},
     spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch (e) { app.thrown = e; } }); },
+    // A run on the window: on the mod's runtime, its end awaited by settle(); a failure kept as the window's note would show it.
+    run(effect: any) { work.push(awaitRead(Effect.catchCause(effect, (c: any) => Effect.sync(() => { app.thrown = c; })), cx)); },
+    now: () => Date.now(),
     refresh(c: any) { app.refreshed++; c.spawn(() => app.tabObj && awaitRead(app.tabObj.read({ all: true, fresh: true }), c)); },
   };
   return app;
@@ -285,7 +289,8 @@ test("a branch from the git window starts on the title; one on GitHub needs no p
   expect(at(prs.form)).toBe("title");
   expect(prs.form.field("push")).toBeNull();
   prs.form.set("head", "main", { force: true });
-  await prs.flow.reread(cx);
+  prs.flow.reread(cx);
+  await settle();
   prs.form.go(2); type("x");
   key(prs.form, "enter");
   expect(prs.form.errors.get("head")).toBe("Head and base are the same branch.");
