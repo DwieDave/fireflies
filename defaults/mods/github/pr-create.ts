@@ -4,6 +4,7 @@
 // request template, reads git's answers, checks the form and builds
 // `git push` and `gh pr create`.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Candidate } from "./remotes.ts";
 
 /** A commit between base and head. */
@@ -14,7 +15,10 @@ export interface Commit {
 }
 
 /** gh's humanize: a branch name with - and _ as spaces. */
-export const humanize = (branch: string | null | undefined): string => (branch ?? "").replace(/[-_]/g, " ");
+/** A string that is there and not empty. */
+const given = (s: string | null | undefined): s is string => s !== null && s !== undefined && s !== "";
+
+export const humanize = (branch: string | null | undefined): string => Str.replace(/[-_]/g, " ")(branch ?? "");
 
 /** A pull request's title and body. */
 export interface Filled {
@@ -29,11 +33,11 @@ export function fillFrom(commits: readonly Commit[] | null | undefined, head: st
   const list = commits ?? [];
   const [only] = list;
 
-  if (list.length === 1 && only) return { title: only.subject, body: only.body.trim() };
+  if (list.length === 1 && only !== undefined) return { title: only.subject, body: Str.trim(only.body) };
 
-  if (!list.length) return { title: humanize(head), body: "" };
+  if (list.length === 0) return { title: humanize(head), body: "" };
 
-  return { title: humanize(head), body: list.map((c) => `- ${c.subject}`).join("\n") };
+  return { title: humanize(head), body: Arr.join(Arr.map(list, (c) => `- ${c.subject}`), "\n") };
 }
 
 // Where gh looks for a template: the repo's root, .github/ and docs/, any case.
@@ -49,34 +53,35 @@ export function templatesIn(paths: readonly string[] | null | undefined): string
     else if (MANY.test(p)) many.push(p);
   }
 
-  const rank = (p: string) => (p.toLowerCase().startsWith(".github/") ? 0 : p.includes("/") ? 2 : 1);
+  const rank = (p: string) => (Str.startsWith(".github/")(Str.toLowerCase(p)) ? 0 : Str.includes("/")(p) ? 2 : 1);
+  const byName = (a: string, b: string) => Str.localeCompare(b)(a);
 
-  one.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-  many.sort((a, b) => a.localeCompare(b));
+  one.sort((a, b) => rank(a) - rank(b) || byName(a, b));
+  many.sort(byName);
 
   return [...one, ...many];
 }
 
 /** The body to start with: the template when there is one, else the commits' (`fill`). */
 export function startBody(template: string | null | undefined, fill: string | null | undefined): string {
-  const t = (template ?? "").trim();
+  const t = Str.trim(template ?? "");
 
-  if (!t) return fill ?? "";
+  if (t === "") return fill ?? "";
 
   return t;
 }
 
 /** `git log --format=%H%x1f%s%x1f%b%x1e` output, newest first as git prints it, to [{ sha, subject, body }] oldest first. */
 export function parseLog(text: string | null | undefined): Commit[] {
-  return (text ?? "").split("\x1e").flatMap((record): Commit[] => {
-    const r = record.replace(/^\n+/, "");
+  return Arr.reverse(Arr.flatMap(Str.split(text ?? "", "\x1e"), (record): Commit[] => {
+    const r = Str.replace(/^\n+/, "")(record);
 
-    if (!r.trim()) return [];
+    if (Str.trim(r) === "") return [];
 
-    const [sha = "", subject = "", body = ""] = r.split("\x1f");
+    const [sha = "", subject = "", body = ""] = Str.split(r, "\x1f");
 
-    return [{ sha: sha.trim(), subject: subject.trim(), body: body.trim() }];
-  }).reverse();
+    return [{ sha: Str.trim(sha), subject: Str.trim(subject), body: Str.trim(body) }];
+  }));
 }
 
 /** A changed file: lines added and deleted, or binary. */
@@ -99,7 +104,7 @@ export function parseNumstat(text: string | null | undefined): Numstat {
   const files: FileStat[] = [];
   let add = 0, del = 0;
 
-  for (const line of (text ?? "").split("\n")) {
+  for (const line of Str.split(text ?? "", "\n")) {
     const [, adds, dels, path] = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line) ?? [];
 
     if (adds === undefined || dels === undefined || path === undefined) continue;
@@ -127,10 +132,10 @@ export interface LocalBranch {
 export function parseBranches(text: string | null | undefined): LocalBranch[] {
   const out: LocalBranch[] = [];
 
-  for (const line of (text ?? "").split("\n")) {
-    if (!line.trim()) continue;
+  for (const line of Str.split(text ?? "", "\n")) {
+    if (Str.trim(line) === "") continue;
 
-    const [name = "", upstream = "", track = ""] = line.split("\t");
+    const [name = "", upstream = "", track = ""] = Str.split(line, "\t");
 
     out.push({
       name, upstream: upstream || null,
@@ -144,7 +149,9 @@ export function parseBranches(text: string | null | undefined): LocalBranch[] {
 
 /** The remote that holds the repo (`owner/name` on `host`), among the folder's (remotes.ts candidates), or null. */
 export function remoteFor(candidates: readonly Candidate[] | null | undefined, full: string, host = "github.com"): string | null {
-  return (candidates ?? []).find((c) => c.full.toLowerCase() === full.toLowerCase() && c.host === host)?.remote ?? null;
+  const want = Str.toLowerCase(full);
+
+  return Option.getOrNull(Option.map(Arr.findFirst(candidates ?? [], (c) => Str.toLowerCase(c.full) === want && c.host === host), (c) => c.remote));
 }
 
 /** Head's state for pushPlan: the remote, the branch, whether GitHub has it, local commits it doesn't, tracking. */
@@ -166,7 +173,7 @@ export interface PushPlan {
  *  null (it's there and current), or { why, args } with the git push argv.
  *  `onRemote`: GitHub has the branch; `ahead`: local commits it doesn't. */
 export function pushPlan({ remote, head, onRemote, ahead = 0, tracking = false }: PushState): PushPlan | null {
-  if (!remote || !head) return null;
+  if (!given(remote) || head === "") return null;
 
   if (!onRemote) return { why: `${head} isn't on ${remote} yet`, args: ["push", "--set-upstream", remote, head] };
 
@@ -200,30 +207,30 @@ export interface PrErrors {
 export function prErrors(f: PrFields, { commits = null }: { readonly commits?: readonly Commit[] | null } = {}): PrErrors {
   const e: PrErrors = {};
 
-  if (!f.base) e.base = "Pick the branch to merge into.";
+  if (f.base === "") e.base = "Pick the branch to merge into.";
 
-  if (!f.head) e.head = "Pick the branch with the changes.";
+  if (f.head === "") e.head = "Pick the branch with the changes.";
 
-  if (f.base && f.head && f.base === f.head && !f.headOwner) e.head = "Head and base are the same branch.";
+  if (f.base !== "" && f.base === f.head && !given(f.headOwner)) e.head = "Head and base are the same branch.";
 
-  if (!f.title.trim()) e.title = "A pull request needs a title.";
+  if (Str.trim(f.title) === "") e.title = "A pull request needs a title.";
 
-  if (!e.head && !e.base && commits && commits.length === 0) e.head = `No commits between ${f.base} and ${f.head}.`;
+  if (e.head === undefined && e.base === undefined && commits !== null && commits.length === 0) e.head = `No commits between ${f.base} and ${f.head}.`;
 
   return e;
 }
 
 /** `gh pr create` argv (without -R). `headOwner`: a fork's owner, for a pull request into its parent. */
 export function prArgs(f: PrFields): string[] {
-  const args = ["pr", "create", "--base", f.base, "--head", f.headOwner ? `${f.headOwner}:${f.head}` : f.head, "--title", f.title.trim(), "--body", f.body ?? ""];
+  const args = ["pr", "create", "--base", f.base, "--head", given(f.headOwner) ? `${f.headOwner}:${f.head}` : f.head, "--title", Str.trim(f.title), "--body", f.body ?? ""];
 
-  if (f.draft) args.push("--draft");
+  if (f.draft === true) args.push("--draft");
 
   const lists = [["--reviewer", f.reviewers], ["--assignee", f.assignees], ["--label", f.labels]] as const;
 
-  for (const [flag, list] of lists) if (list?.length) args.push(flag, list.join(","));
+  for (const [flag, list] of lists) if (list !== undefined && list.length > 0) args.push(flag, Arr.join(list, ","));
 
-  if (f.milestone) args.push("--milestone", f.milestone);
+  if (given(f.milestone)) args.push("--milestone", f.milestone);
 
   return args;
 }
