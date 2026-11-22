@@ -290,6 +290,8 @@ test:
     bun test scripts/databases-lastview.test.ts
     # The GitHub window back where it was left in its space (github/lastview.ts): its tab, selection and filters per space id, written by the tick when changed; another space and another folder open as before; a pane's own place still wins.
     bun test scripts/github-lastview.test.ts
+    # The fireflies command in the manual and installers: every call written fireflies (never herdr-app or hc), each fireflies <word> a window command, app, core or a core command, ls the core's (fireflies app ls the window's); ff linked.
+    bun test scripts/fireflies-cli.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
