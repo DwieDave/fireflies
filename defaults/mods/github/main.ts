@@ -40,17 +40,20 @@
 
 import { View, div } from "gpui-kit";
 import { Schema } from "effect";
+import type { Effect } from "effect";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
-import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
+import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import { readShared, sharedKey, writeShared } from "@fireflies/kit";
-import type { Ran, Repo } from "./gh-await.ts";
+import type { RunOptions } from "@fireflies/kit";
+import type { Repo } from "./gh-await.ts";
+import type { GhError } from "./gh.ts";
 import { runtime } from "./fx.ts";
-import type { GithubFx } from "./fx.ts";
-import { commands, start, switchFork } from "./window-life.ts";
+import type { GithubFx, GithubServices } from "./fx.ts";
+import { acted, commands, start, switchFork } from "./window-life.ts";
 import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
@@ -183,7 +186,7 @@ export default class GitHub extends View implements Host {
   located = false;
   dirty = false;
   savedAt = 0;
-  saving: Promise<boolean> | null = null;
+  saving: Promise<void> | null = null;
   closed = false;
   switching = false;
   gen = 0;
@@ -398,7 +401,7 @@ export default class GitHub extends View implements Host {
     warm(this, cx);
   }
 
-  persist(): Promise<boolean> | null {
+  persist(): Promise<void> | null {
     return persist(this);
   }
 
@@ -444,6 +447,10 @@ export default class GitHub extends View implements Host {
 
   now(): number {
     return Date.now();
+  }
+
+  run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void {
+    this.fx?.run(effect, options);
   }
 
   override async close(): Promise<void> {
@@ -541,27 +548,10 @@ export default class GitHub extends View implements Host {
     this.confirm = { text, go };
   }
 
-  /** Runs a gh action; says how it went, then reads again soon. */
-  act(promise: Promise<Ran>, ok: string, cx: Context, after?: () => void): void {
-    this.note = noteOf("…", "working", Date.now());
-    cx.spawn(async (cx) => {
-      let r: Ran;
-
-      try {
-        r = await promise;
-      } catch (err) {
-        r = { ok: false, out: "", err: err instanceof Error ? err.message : String(err) };
-      }
-
-      if (r.ok) after?.();
-
-      this.note = r.ok ? (ok ? noteOf(ok, "done", Date.now()) : null) : noteOf(r.err, "failed", Date.now());
-
-      if (!r.ok && !this.overlay) notify({ title: "GitHub", body: r.err, level: "error" });
-
-      this.refresh(cx, true);
-      cx.notify();
-    });
+  /** Runs a gh action (window-life.ts acted); says how it went, then reads again soon. */
+  act(effect: Effect.Effect<unknown, GhError, GithubServices>, ok: string, cx: Context, after?: () => void): void {
+    this.note = noteOf("…", "working", this.now());
+    this.run(acted(this, effect, ok, this.acx ?? cx, after));
   }
 
   // ---- keys (window-keys.ts)

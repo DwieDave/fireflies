@@ -53,12 +53,16 @@ const cx: any = { spawn: (f: Function) => { work.push(Promise.resolve(f(cx))); }
 const settle = async () => { while (work.length) await work.shift(); };
 
 const { default: Projects } = await import("../defaults/mods/github/projects.ts");
+const { awaitRead } = await import("../defaults/mods/github/gh-await.ts");
+const { Effect } = await import("effect");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {
   return {
     repo: { owner: "DwieDave", name: "fireflies", full: "DwieDave/fireflies", host: "github.com", root: "/src", on: null, parent: "herdrdev/herdr-app" },
     note: null as any, next: Infinity, asked: null as any, opened: null as any,
+    // A run on the window: on the mod's runtime, its end awaited by settle() (a failure is the run's to show, as the window does).
+    run(effect: any) { work.push(awaitRead(Effect.ignore(effect), null)); },
     focusSelf() {}, refresh() {}, spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch {} }); },
     ask(text: string, go: Function) { this.asked = { text, go }; }, openUrl(url: string) { this.opened = url; },
   };
@@ -67,7 +71,7 @@ function makeApp() {
 async function open() {
   const app = makeApp();
   const tab = new Projects(app, {});
-  await tab.poll({ all: true }, cx);
+  await awaitRead(tab.read({ all: true }), cx);
   return { app, tab };
 }
 const press = (tab: any, ...keys: string[]) => { for (const k of keys) tab.key(k, { modifiers: {} }, cx); };
@@ -322,7 +326,7 @@ test("a token without the project scope gets the command that fixes it", async (
   gh.noScope = true;
   const app = makeApp();
   const tab = new Projects(app, {});
-  await tab.poll({ all: true }, cx);
+  await awaitRead(tab.read({ all: true }), cx);
   expect(tab.scope.command).toBe("gh auth refresh -s read:project");
   expect(() => drawn(tab)).not.toThrow();
 });

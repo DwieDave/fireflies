@@ -137,7 +137,7 @@ export function graphPanel(v: Actions, t: Theme): Element {
     v.focus = "graph";
     v.jobSel = node.job.id;
     v.stepSel = null;
-    v.loadLog(cx);
+    v.loadLog();
     v.app.focusSelf();
     cx.notify();
   }, px, py, v.app.now());

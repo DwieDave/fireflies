@@ -4,16 +4,17 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div } from "gpui-kit";
+import { Semaphore } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import { arrayOf, isNumber, isString, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
-import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, graphql, slimmed } from "./gh-await.ts";
+import { pollPrs } from "./prs-reads.ts";
+import * as Gh from "./gh.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
-import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
+import { checkRows, rollupTone, readAgo, SLOW, linksIn, isPrView, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
 import type { Pieces } from "./cache.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "@fireflies/markdown";
@@ -27,8 +28,6 @@ import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
 import { edge } from "@fireflies/tones";
 
-// What the right panel draws (no state, no mergeable: GitHub computes those slowly).
-const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
 const FILTERS: readonly PrFilter[] = ["all", "mine", "review"];
 const FILTER_WORD = { all: "open", mine: "mine", review: "to review" } as const satisfies { readonly [K in PrFilter]: string };
 
@@ -123,8 +122,8 @@ export default class Prs {
   /** A pull request just made: selected once the list has it. */
   want: number | null = null;
 
-  /** The other tab's read behind this one, while it runs. */
-  warming: Promise<void> | null = null;
+  /** One read of this tab at a time (the shown tab's, and the read behind it: window-reads.ts). */
+  readonly reading = Semaphore.makeUnsafe(1);
 
   constructor(app: Host, kept: PrsKept = {}) {
     this.app = app;
@@ -258,56 +257,10 @@ export default class Prs {
     return live ? CHECKS_LIVE : SLOW;
   }
 
-  /** Reads GitHub: the list, and the shown PR's view beside it (both at once).
+  /** Reads GitHub (prs-reads.ts): the list, and the shown PR's view beside it (both at once).
    *  all: past the timers; fresh: past the ETags. */
-  async poll({ all = false, fresh = false }: ReadOptions, cx: Context | null): Promise<void> {
-    const repo = this.app.repo;
-
-    if (!repo) return;
-
-    const now = Date.now(), filter = this.filter;
-    const list = all || !this.list || now - this.listAt >= SLOW ? this.readList(repo, filter) : null;
-    // The PR shown now (a cached list's) is read while the list is.
-    const first = this.current();
-    const view = first && this.wantsDetail(first, all, now) ? this.readDetail(repo, first, fresh) : null;
-
-    view?.catch(() => {}); // awaited below; not unhandled if the list fails first
-
-    if (list) {
-      const rows = await list;
-
-      if (this.filter !== filter || this.app.repo !== repo) return;
-
-      const at = Date.now();
-
-      this.lists.set(filter, { list: rows, at });
-      this.list = rows;
-      this.listAt = at;
-
-      const want = this.want;
-
-      if (want !== null && rows.some((p) => p.number === want)) {
-        this.sel = want;
-        this.want = null;
-        this.focus = "list";
-        this.scrollY = 0;
-        this.checkSel = 0;
-        this.listScroll.scroll_to_item(rows.findIndex((p) => p.number === want));
-      }
-
-      if (this.sel === null || !rows.some((p) => p.number === this.sel)) this.sel = rows[0]?.number ?? null;
-
-      this.follow();
-      cx?.notify();
-    }
-
-    await view;
-
-    const p = this.current();
-
-    if (p && p.number !== first?.number && this.wantsDetail(p, all, now)) await this.readDetail(repo, p, fresh);
-
-    this.follow();
+  read(opts: ReadOptions) {
+    return pollPrs(this, opts);
   }
 
   wantsDetail(p: PrRow, all: boolean, now: number): boolean {
@@ -316,31 +269,7 @@ export default class Prs {
     return all || !d || now - d.at >= this.interval() - 500;
   }
 
-  async readList(repo: Repo, filter: PrFilter): Promise<PrRow[]> {
-    const { query, vars } = prListQuery(filter, repo.full);
 
-    return prRows(await graphql(repo, query, isPrList, vars));
-  }
-
-  async readDetail(repo: Repo, p: PrRow, fresh: boolean): Promise<void> {
-    const d = this.details.get(p.number);
-
-    const [pr, review] = await Promise.all([
-      ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW], isPrView),
-      api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`, slimmed(isReviewComments, (a) => a.map(slimReviewComment), isReviewComments), { fresh, prior: d?.reviewTag ? { etag: d.reviewTag, data: d.review } : null })
-        .catch(() => ({ data: d?.review ?? [], etag: d?.reviewTag ?? null })),
-    ]);
-
-    if (this.app.repo !== repo) return;
-
-    this.details.set(p.number, { pr, review: review.data ?? [], reviewTag: review.etag ?? null, at: Date.now() });
-
-    if (this.details.size > LIMITS.details * 2) {
-      const keep = new Set(newest(this.details, LIMITS.details).keys());
-
-      for (const n of this.details.keys()) if (!keep.has(n)) this.details.delete(n);
-    }
-  }
 
   /** The list's rows follow what their PR's view read (checks, review, title). */
   follow(): void {
@@ -492,7 +421,7 @@ export default class Prs {
   checkout(p: PrRow, cx: Context): void {
     const repo = this.app.repo;
 
-    if (repo) this.app.act(ghRun(repo, ["pr", "checkout", String(p.number)], { timeout: 120000 }), `Checked out #${p.number}.`, cx);
+    if (repo) this.app.act(Gh.ghRun(repo, ["pr", "checkout", String(p.number)], 120000), `Checked out #${p.number}.`, cx);
   }
 
   startComment(cx: Context): void {
@@ -519,7 +448,7 @@ export default class Prs {
       composer.release();
       this.composer = null;
       this.app.focusSelf();
-      this.app.act(ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
+      this.app.act(Gh.ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
         this.details.delete(p.number);
         this.scroll(1e9);
       });

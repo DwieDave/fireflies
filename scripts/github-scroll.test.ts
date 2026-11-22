@@ -53,7 +53,7 @@ const { default: GitHub } = await import("../defaults/mods/github/main.ts");
 /** The stand-in window's clock: one fixed time, so ages read the same on every run. */
 const NOW = Date.parse("2026-11-22T12:00:00Z");
 
-const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {}, now: () => NOW });
+const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, run() {}, openUrl() {}, dragged: () => false, resize() {}, now: () => NOW });
 const last = (h: Handle) => h.calls[h.calls.length - 1]?.[0];
 
 beforeEach(() => { zoomNow = 1; });
