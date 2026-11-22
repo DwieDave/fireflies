@@ -2187,7 +2187,7 @@ impl AppWindow {
         let mut copy = Copy { inst, id: 0, root: None, _watch: None, error: None, missing: false };
         let (Some(runtime), Some(folder)) = (&self.runtime, self.view_mod(&copy.inst.name)) else {
             copy.missing = self.runtime.is_some();
-            copy.error = Some(format!("no mod folder ~/.config/herdr-app/mods/{}", copy.inst.name));
+            copy.error = Some(format!("no mod folder {}", crate::paths::shown(&mods::mods_dir().join(&copy.inst.name))));
             return copy;
         };
         copy.id = mods::prepare_load(&copy.inst);
@@ -6225,7 +6225,7 @@ impl AppWindow {
                 .text_color(c("blocked"))
                 .overflow_y_scroll()
                 .child(if *missing {
-                    format!("The {} mod isn't installed (no folder ~/.config/herdr-app/mods/{}).\n\nClose this pane, or put the mod back.", inst.name, inst.name)
+                    format!("The {} mod isn't installed (no folder {}).\n\nClose this pane, or put the mod back.", inst.name, crate::paths::shown(&mods::mods_dir().join(&inst.name)))
                 } else {
                     format!("{} did not load:\n\n{}\n\nFix the files; Fireflies retries on save.", inst.name, error.as_deref().unwrap_or("?"))
                 })

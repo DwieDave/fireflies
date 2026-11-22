@@ -1,8 +1,13 @@
 # Fireflies
 
 Fireflies, Developer's fork of the Herdr 2 desktop app (command `fireflies`,
-also `herdr-app`): a native GPUI client of
-[herdr-core](https://github.com/herdrdev/herdr-core). Developer maintains it;
+short `ff`): a native GPUI client of
+[herdr-core](https://github.com/herdrdev/herdr-core). `fireflies` drives the
+window and hands every other command to the core (`fireflies run`, `send`,
+`ls`; `fireflies app ls` is the window's list). Write `fireflies` and
+`~/.config/fireflies/app`; Herdr's names (`herdr-app`, `hc`, `herdr-core`,
+`~/.config/herdr-app`) keep working for older setups and the Herdr iOS app,
+which runs `hc` over ssh. Developer maintains it;
 FIREFLIES.md says what it adds to Herdr.
 
 If AGENTS.local.md exists, read it too: Developer's local rules.
@@ -29,12 +34,12 @@ If all three are no, it belongs in mods (their shared storage, their own
 code), even at the price of some repetition. Same for herdr-core: what the
 app asks of it is upstream's decision, so it goes to herdr-core's maintainers.
 
-`herdr-app --skill` prints the window manual in `src/SKILL.md`.
+`fireflies --skill` prints the window manual in `src/SKILL.md`.
 Keep it current when changing agent-facing behavior.
 
 ## The guide users' agents read
 
-`defaults/AGENTS.md` is written into every user's `~/.config/herdr-app` on
+`defaults/AGENTS.md` is written into every user's `~/.config/fireflies/app` on
 every start: it's how their agents learn what the app can do. A change to
 what users or agents can do (a command, a setting, a layout or mod
 feature, a file) updates it in the same commit. `cargo test` checks that it

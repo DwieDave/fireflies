@@ -200,6 +200,8 @@ test:
     bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits (@fireflies/usage-limits): a scratch app asks nothing; no mod carries a copy.
     bun test scripts/usage-limits.test.ts
+    # The notifications hook's records: written under ~/.local/state/fireflies/notify, Herdr's herdr-app/notify still read.
+    bun test scripts/notifications-hook.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/usage-poll.test.ts
     # The mods' Effect kit (@fireflies/kit): decoding, exec, shared keys, the HTTP policy (fake server; curl against a local one), a view's runs and close.

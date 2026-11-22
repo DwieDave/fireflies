@@ -100,10 +100,10 @@ a bun test against bun's types.
 | --- | --- | --- |
 | `defaults/mods/<mod>/*.ts`, `defaults/frame/**/*.ts` | `defaults/tsconfig.json` | `defaults/types/gpui-kit.d.ts` and `runtime.d.ts` (committed), `herdr` from `defaults/herdr.d.ts` (`paths`) |
 | `scripts/*.ts` (the bun tests) | `scripts/tsconfig.json` | `@types/bun` (`bun install` once), the gpui modules from `defaults/types/gpui-kit.d.ts`, `window` from `scripts/mod-globals.d.ts`, `herdr` as above |
-| an installed mod, `~/.config/herdr-app/mods/<mod>/` | its own, which the app writes on load beside a `gpui-kit.d.ts` | that file (`herdr` included) |
-| an installed mod the app can't write into (linked from the nix store) | `~/.config/herdr-app/tsconfig.json`, which the app writes on every start for exactly those mods | `gpui-kit.d.ts` and `herdr.d.ts` beside it |
+| an installed mod, `~/.config/fireflies/app/mods/<mod>/` | its own, which the app writes on load beside a `gpui-kit.d.ts` | that file (`herdr` included) |
+| an installed mod the app can't write into (linked from the nix store) | `~/.config/fireflies/app/tsconfig.json`, which the app writes on every start for exactly those mods | `gpui-kit.d.ts` and `herdr.d.ts` beside it |
 
-`defaults/types/` is what `herdr-app types` writes for this build, without
+`defaults/types/` is what `fireflies types` writes for this build, without
 `herdr`, split in two: `gpui-kit.d.ts` holds the gpui modules (gpui-kit,
 gpui-base, gpui-shell, gpui-fps), `runtime.d.ts` the runtime's globals and
 Node-like modules (`console`, `Buffer`, `URL`, `"path"`, …), which a bun test
@@ -473,7 +473,7 @@ type-checked or linted.
 
 ## The typings
 
-`herdr-app types <dir>` writes `gpui-kit.d.ts` (gpui-kit, gpui-base, the
+`fireflies types <dir>` writes `gpui-kit.d.ts` (gpui-kit, gpui-base, the
 engine's globals and the `herdr` module, from `defaults/herdr.d.ts`) and the
 editor config: a strict `tsconfig.json` for a `main.ts` mod, `jsconfig.json`
 for a `.js` one; an author's own config is never replaced. The app does the

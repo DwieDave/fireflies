@@ -142,7 +142,7 @@ the editor, cmd-click goes to a symbol's definition or opens the link or path un
 `editor.open` doesn't save for them: their edits are theirs.
 
 Each repository has a scratchpad: the person's Markdown note for it, kept out
-of the repository at `~/.config/herdr-app/scratchpad/<repo>-<hash>.md`
+of the repository at `~/.config/fireflies/app/scratchpad/<repo>-<hash>.md`
 (`$HERDR_APP_HOME/scratchpad/` when set), one per repository and shared by its
 worktrees; `scratchpad/index.json` names the repository of each file
 (`{ "<file>": { "name", "dir": "<git common dir>", "repo" } }`). Read it for
@@ -346,7 +346,7 @@ the screen.
 
 ## Customize layouts, keys, or mods
 
-First read `~/.config/herdr-app/AGENTS.md` (or `$HERDR_APP_HOME/AGENTS.md` if
+First read `~/.config/fireflies/app/AGENTS.md` (or `$HERDR_APP_HOME/AGENTS.md` if
 set). It is the installed guide to settings, layouts, commands and mods.
 Read the generated `.d.ts` files beside it for full API details; do not edit
 those files or the generated guide. The app rewrites them on start.
@@ -356,7 +356,9 @@ those files or the generated guide. The app rewrites them on start.
   `terminal_scroll_speed` (default 1, 0.1..5) adjusts wheel and trackpad
   scrolling, including mouse reports. Set them in settings.json or the
   layout's look; the layout wins.
-- Home defaults to `~/.config/herdr-app`; `HERDR_APP_HOME` selects another.
+- Home defaults to `~/.config/fireflies/app`; `HERDR_APP_HOME` selects another.
+  Herdr's `~/.config/herdr-app` is moved there on the first start and left as
+  a link to it, so the old name still reaches the same files.
 - `worktrees.directory` in settings.json sets where the git window's Worktrees tab
   (New worktree) creates checkouts, e.g. `{"worktrees":{"directory":"~/Developer/worktrees"}}`.
   Default: `~/.herdr/worktrees`; checkouts use `<directory>/<repo>/<branch>` (slashes in
@@ -417,7 +419,7 @@ those files or the generated guide. The app rewrites them on start.
 After every mod change:
 
 ```sh
-fireflies check ~/.config/herdr-app/mods/<name>
+fireflies check ~/.config/fireflies/app/mods/<name>
 fireflies status
 fireflies shot /tmp/mod.png   # then look at the picture
 ```

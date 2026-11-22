@@ -176,6 +176,8 @@ fn main() {
                 .unwrap_or_else(|_| "warn,herdr_app=info,gpui_shell=info".into()),
         )
         .init();
+    // Herdr's ~/.config/herdr-app and ~/.cache/herdr-app move to Fireflies' own, once.
+    paths::migrate();
 
     update::leave_install_folder();
     if update::apply_on_startup() {

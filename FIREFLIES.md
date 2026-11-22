@@ -1,8 +1,9 @@
 # Fireflies
 
 Fireflies is a fork of [Herdr](https://github.com/herdrdev/herdr-app) (the
-desktop app). Under the name it is still Herdr: same config folder
-(`~/.config/herdr-app`), same core, same mod API. On top of Herdr it adds:
+desktop app). Under the name it is still Herdr: same core, same mod API, and
+Herdr's config folder (`~/.config/herdr-app`) still reaches its files (see
+Folders). On top of Herdr it adds:
 
 - **Native views for mods**: a mod can host a native view in its pane (a
   WKWebView browser, Safari's Web Inspector). `nativeView`, `nativeViewCall`,
@@ -61,6 +62,37 @@ desktop app). Under the name it is still Herdr: same config folder
   whole mod folders from `Fireflies.app/Contents/Resources/mods/` (replacing a
   built-in one of the same name). A packager can ship the mods there and change
   them without recompiling the app.
+
+## Folders
+
+| what | where | Herdr's name, kept as a link |
+| --- | --- | --- |
+| the app's home (settings, keys, layouts, mods, scratchpad, socket) | `~/.config/fireflies/app` | `~/.config/herdr-app` |
+| the machine's cache (usage-limits records) | `~/.cache/fireflies` | `~/.cache/herdr-app` |
+| the notifications hook's records | `~/.local/state/fireflies/notify` | none: the app reads `~/.local/state/herdr-app/notify` too |
+| herdr-core's install and state | `~/.local/share/herdr-core`, `~/.local/state/herdr-core` | they stay |
+
+The first window start moves the two Herdr folders (`src/paths.rs`, a rename,
+never a copy) and leaves a link at each old name, so the Herdr iOS app over
+ssh, older binaries and scripts that name them reach the same files. It moves
+nothing while a window runs on the old home, nor when `HERDR_APP_HOME` is set,
+nor on Windows (a link needs developer mode there). When both folders are
+real, nothing moves and the old one stays in use (the log says so).
+
+herdr-core's folders are the core's own, and they don't move:
+
+- The core is upstream's binary (a pinned release, not built here). Its
+  manual names no folder setting of its own (`HC_INSTALL_DIR` moves only the
+  links); tests move it with the XDG variables, which every program it starts
+  would inherit.
+- `~/.local/share/herdr-core/active/Herdr Core.app` is a fixed path on
+  purpose: macOS privacy grants belong to that bundle, and the core's
+  updater, its `current` link and the `hc` / `herdr-core` links in
+  `~/.local/bin` point there.
+- `~/.local/state/herdr-core/<session>` holds the running core's and every
+  terminal holder's sockets and records. Moving it under live terminals would
+  cut them off, and a core started over ssh (the iOS app) has to find the
+  same folder as the desktop's.
 
 ## Branches
 

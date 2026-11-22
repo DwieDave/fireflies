@@ -1,4 +1,4 @@
-//! ~/.config/herdr-app/keys.json: string or object actions, reloaded live.
+//! ~/.config/fireflies/app/keys.json: string or object actions, reloaded live.
 //!
 //! ```json
 //! {

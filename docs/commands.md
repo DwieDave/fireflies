@@ -2,9 +2,9 @@
 
 # Commands
 
-Inspect the window with `fireflies ls` and `fireflies status`.
+Inspect the window with `fireflies app ls` and `fireflies status`.
 `fireflies commands` lists the app actions below, even without an open window.
-`herdr-app` is the same command and keeps working.
+`herdr-app` (the window's commands alone: `herdr-app ls`) keeps working.
 
 Run an action in the open window with `fireflies do`:
 

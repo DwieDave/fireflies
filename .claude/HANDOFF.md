@@ -43,7 +43,7 @@ Developer has not yet run `darwin-rebuild`; the lists of what only his hands
 can check are in each `/Volumes/data/coding/fireflies-wt/<name>-report.md`
 ("not verified").
 
-## His scratchpad (~/.config/herdr-app/scratchpad/fireflies-c6ebf457.md)
+## His scratchpad (~/.config/fireflies/app/scratchpad/fireflies-c6ebf457.md)
 
 Ticked: fullscreen, mouse buttons, pinned-tab status, pinning one tab, the
 five scratchpad items, editor type checking, PiP drag. Tick an item when its
@@ -88,7 +88,7 @@ uncommitted work in progress (do not remove them):
 | fx-git | t13b | git | 0 | 13 |
 
 Their briefs (task part) are in `.claude/handoff/briefs/`. If the terminals
-are still live (`hc get <t>`), a message resumes each with its context; if
+are still live (`fireflies get <t>`), a message resumes each with its context; if
 not, start fresh agents in the same worktrees from those briefs and tell
 them to read their own diff first.
 
@@ -119,8 +119,8 @@ was 45 to 70 points. Its advice, which he has not answered: resume one
 mid-sized mod first (git: 9.2k lines, 2,187 findings) to measure the cost per
 mod before resuming the rest. Ask him for a usage threshold before resuming
 anything; the watcher that paused at 20% read
-`~/.cache/herdr-app/usage-claude.json` (`.answer.week.used`) once a minute
-and ran `hc interrupt` on every working agent.
+`~/.cache/fireflies/usage-claude.json` (`.answer.week.used`) once a minute
+and ran `fireflies interrupt` on every working agent.
 
 ## Questions he has not answered
 

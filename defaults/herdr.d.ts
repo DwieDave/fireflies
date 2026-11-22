@@ -18,7 +18,7 @@ export function hc(args: string[]): Promise<ExecResult>;
 
 /** The user's home directory. */
 export function home(): string;
-/** The app's folder (`~/.config/herdr-app`, or `$HERDR_APP_HOME`): settings.json, keys.json, layouts/. */
+/** The app's folder (`~/.config/fireflies/app`, or `$HERDR_APP_HOME`): settings.json, keys.json, layouts/. */
 export function appHome(): string;
 /** True while `herdr-app check` loads this mod: `init()` runs for real there
  *  (exec and writeTextFile included), so guard process side effects. */
@@ -100,7 +100,7 @@ export function pickFolder(options?: { prompt?: string }): Promise<string | null
 export function pickFile(options?: { prompt?: string }): Promise<string | null>;
 
 /** Plays "done" or "blocked" (the attention sounds, or the files settings.json names), or an MP3
- *  file (absolute, or relative to ~/.config/herdr-app). */
+ *  file (absolute, or relative to ~/.config/fireflies/app). */
 export function playSound(sound: string): null;
 
 /**
