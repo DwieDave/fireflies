@@ -11,7 +11,8 @@ Layouts can load mods. Check those references too.
 
 ## What stays on disk
 
-The default app home is `~/.config/herdr-app`, including on macOS and Windows (under your user home).
+The default app home is `~/.config/fireflies/app`, including on macOS and Windows (under your user home).
+Herdr's `~/.config/herdr-app` is moved there on the first start and left as a link to it (Windows keeps the old folder: a link needs developer mode there).
 `XDG_CONFIG_HOME` changes the config root. `HERDR_APP_HOME` selects an app home directly and takes precedence.
 
 This folder holds your settings, keys, layouts, mods, generated agent guide and API types.

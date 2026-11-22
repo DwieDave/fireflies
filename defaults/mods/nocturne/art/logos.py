@@ -2,7 +2,7 @@
 
 The fireflies wear their agent's mark, tinted by status at draw time
 (svg(...).text_color()). Source: the icons Fireflies writes to
-~/.config/herdr-app/icons. Needs rsvg-convert and ImageMagick:
+~/.config/fireflies/app/icons. Needs rsvg-convert and ImageMagick:
 
     nix shell nixpkgs#librsvg nixpkgs#imagemagick -c python3 -I logos.py
 """
@@ -14,7 +14,7 @@ import tempfile
 
 SIZE = 16
 BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-ICONS = os.path.expanduser("~/.config/herdr-app/icons")
+ICONS = os.path.expanduser("~/.config/fireflies/app/icons")
 OUT = os.path.dirname(os.path.abspath(__file__))
 
 # key -> how to read the icon. Every fill and stroke is painted white, so

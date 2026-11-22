@@ -178,6 +178,42 @@ test("splits a job's log into its steps by markers and time", () => {
   expect(m.get(33)).toEqual(["Cleaning up orphan processes"]);
 });
 
+// A real job (renamed, trimmed): composite actions (`uses: ./.github/actions/…`) with
+// names of their own, steps 5 to 8 starting in the same second. Each composite's
+// inner `Run` groups sit between ##[start-action] and ##[end-action].
+test("a job with composite actions: each step holds its own command and output", async () => {
+  const dir = `${import.meta.dir}/fixtures/github`;
+  const steps = await Bun.file(`${dir}/composite-steps.json`).json();
+  const m = splitLog(await Bun.file(`${dir}/composite-steps.log`).text(), steps);
+  const shown = (n: number) => (m.get(n) ?? []).flatMap((l) => logLine(l) ?? []).map((l) => l.text);
+
+  // A run: step that failed: its own script, its output and the error, nothing else.
+  expect(shown(8)[0]).toBe("Run set -euo pipefail");
+  expect(shown(8)).toContain(`short_sha="\${HEAD_SHA:0:7}"`);
+  expect(shown(8)).toContain("Preview images:");
+  expect(shown(8)).toContain("jq: error (at infra/konfig/images.json:35): no promoted image for report-sync");
+  expect(shown(8).at(-1)).toBe("Process completed with exit code 5.");
+  expect(shown(8).some((t) => t.includes("sops") || t.includes("Prepare all required actions"))).toBe(false);
+  // Composite steps: their runner prelude, their group and their inner steps.
+  expect(shown(5).slice(0, 3)).toEqual(["Prepare all required actions", "Getting action download info", "Run ./.github/actions/read-domain"]);
+  expect(shown(6).slice(0, 2)).toEqual(["Prepare all required actions", "Run ./.github/actions/install-sops"]);
+  expect(shown(6)).toContain("Run set -euo pipefail");
+  expect(shown(7).slice(0, 2)).toEqual(["Prepare all required actions", "Run ./.github/actions/normalize-owner"]);
+  expect(shown(7).some((t) => t.includes("owner_lc="))).toBe(true);
+  expect(shown(4).at(-1)).toBe("shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}");
+  // Action steps.
+  expect(shown(2)[0]).toBe("Run actions/checkout@v7");
+  expect(shown(2)).toContain("Checking out the ref");
+  expect(shown(3)[0]).toBe("Run oven-sh/setup-bun@v2");
+  expect(shown(13)[0]).toBe("Run actions/github-script@v9");
+  expect(shown(13).some((t) => t.includes("Preview images"))).toBe(false);
+  // The runner's start/end markers aren't drawn.
+  expect([...m.keys()].some((n) => shown(n).some((t) => t.includes("start-action") || t.includes("end-action")))).toBe(false);
+  expect(shown(24)).toEqual(["Post job cleanup."]);
+  expect(shown(26)).toEqual(["Post job cleanup."]);
+  expect(shown(27)).toEqual(["Cleaning up orphan processes"]);
+});
+
 test("a log for steps that never started is empty, not a crash", () => {
   expect(splitLog("x\ty\tz", [{ number: 1, name: "a", started_at: null, completed_at: null, conclusion: null }]).size).toBe(0);
   expect(splitLog("", []).size).toBe(0);

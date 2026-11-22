@@ -14,6 +14,8 @@
 //             and down from there
 //   merge     more than one parent
 
+import { Array as Arr, Option } from "effect";
+
 export const LANE_COLORS = 8;
 
 /** A lane's color index (0 … LANE_COLORS - 1), or null for a free lane. */
@@ -63,8 +65,12 @@ export function layoutGraph(commits: readonly GraphCommit[]): Graph {
   let next = 0;
   const rows: GraphRow[] = [];
 
+  // A lane's hash, or none: a free lane, or a hole past the end a fork's lane skipped.
+  const taken = (i: number): boolean => (lanes[i] ?? null) !== null;
+  const colorsNow = (): Lane[] => Arr.map(Arr.fromIterable(lanes.keys()), (i) => (taken(i) ? colorAt(i) : null));
+
   for (const c of commits) {
-    const before = lanes.map((h, i) => (h ? colorAt(i) : null));
+    const before = colorsNow();
     let col = lanes.indexOf(c.hash);
 
     if (col < 0) {
@@ -78,12 +84,12 @@ export function layoutGraph(commits: readonly GraphCommit[]): Graph {
 
     const joins: Join[] = [];
 
-    lanes.forEach((h, i) => {
-      if (h === c.hash && i !== col) {
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] === c.hash && i !== col) {
         joins.push({ from: i, color: colorAt(i) });
         lanes[i] = null;
       }
-    });
+    }
 
     const color = colorAt(col);
     const [first, ...others] = c.parents;
@@ -97,9 +103,14 @@ export function layoutGraph(commits: readonly GraphCommit[]): Graph {
       const fresh = k < 0;
 
       if (fresh) {
-        k = lanes.findIndex((h, i) => h === null && i > col);
+        k = Math.max(lanes.length, col + 1);
 
-        if (k < 0) k = Math.max(lanes.length, col + 1);
+        for (let i = col + 1; i < lanes.length; i++) {
+          if (lanes[i] === null) {
+            k = i;
+            break;
+          }
+        }
 
         lanes[k] = p;
         colorOf[k] = next++ % LANE_COLORS;
@@ -110,16 +121,14 @@ export function layoutGraph(commits: readonly GraphCommit[]): Graph {
 
     // A first parent another lane already waits for: this lane ends here and
     // joins that one lower down (two children of one commit); keep both lines.
-    while (lanes.length && lanes[lanes.length - 1] == null) lanes.pop();
+    while (lanes.length > 0 && !taken(lanes.length - 1)) lanes.pop();
 
-    const after: Lane[] = [];
-
-    for (let i = 0; i < lanes.length; i++) after[i] = lanes[i] ? colorAt(i) : null;
+    const after = colorsNow();
 
     rows.push({ col, color, before, after, joins, forks, merge: c.parents.length > 1 });
   }
 
-  const width = rows.reduce((w, r) => Math.max(w, r.before.length, r.after.length, r.col + 1, ...r.forks.map((f) => f.to + 1)), 1);
+  const width = Arr.reduce(rows, 1, (w, r) => Math.max(w, r.before.length, r.after.length, r.col + 1, ...Arr.map(r.forks, (f) => f.to + 1)));
 
   return { rows, width };
 }
@@ -151,24 +160,25 @@ export interface Segments {
  *  scales them to pixels. */
 export function segments(r: GraphRow): Segments {
   const v: VSegment[] = [], h: HSegment[] = [];
-  const joined = new Set(r.joins.map((j) => j.from));
-  const forkedFresh = new Set(r.forks.flatMap((f) => (r.before[f.to] == null ? [f.to] : [])));
+  const joined = new Set(Arr.map(r.joins, (j) => j.from));
+  const forkedFresh = new Set(Arr.flatMap(r.forks, (f) => (r.before[f.to] == null ? [f.to] : [])));
 
-  r.before.forEach((c, i) => {
-    if (c == null) return;
+  for (const [i, c] of r.before.entries()) {
+    if (c == null) continue;
 
     if (i === r.col) v.push({ lane: i, from: 0, to: 0.5, color: r.color });
     else if (joined.has(i)) v.push({ lane: i, from: 0, to: 0.5, color: c });
     else if (r.after[i] != null) v.push({ lane: i, from: 0, to: 1, color: c });
     else v.push({ lane: i, from: 0, to: 0.5, color: c });
-  });
-  r.after.forEach((c, i) => {
-    if (c == null) return;
+  }
+
+  for (const [i, c] of r.after.entries()) {
+    if (c == null) continue;
 
     if (i === r.col) v.push({ lane: i, from: 0.5, to: 1, color: c });
     else if (forkedFresh.has(i)) v.push({ lane: i, from: 0.5, to: 1, color: c });
     else if (r.before[i] == null || joined.has(i)) v.push({ lane: i, from: 0.5, to: 1, color: c });
-  });
+  }
 
   for (const j of r.joins) h.push({ from: Math.min(j.from, r.col), to: Math.max(j.from, r.col), color: j.color });
 
@@ -178,26 +188,22 @@ export function segments(r: GraphRow): Segments {
 }
 
 /** The lanes one row really draws in (empty lanes on the right left out). */
-export function usedWidth(r: GraphRow) {
+export function usedWidth(r: GraphRow): number {
   const last = (a: readonly Lane[]) => {
     for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i + 1;
 
     return 0;
   };
 
-  return Math.max(1, last(r.before), last(r.after), r.col + 1, ...r.forks.map((f) => f.to + 1), ...r.joins.map((j) => j.from + 1));
+  return Math.max(1, last(r.before), last(r.after), r.col + 1, ...Arr.map(r.forks, (f) => f.to + 1), ...Arr.map(r.joins, (j) => j.from + 1));
 }
 
 /** The lanes rows a..b (exclusive) draw in: the graph column of the rows in
  *  view, so a wide stretch elsewhere in history doesn't push the text right. */
-export function widthOf(rows: readonly GraphRow[], a = 0, b = rows.length) {
+export function widthOf(rows: readonly GraphRow[], a = 0, b = rows.length): number {
   let w = 1;
 
-  for (let i = Math.max(0, a); i < Math.min(rows.length, b); i++) {
-    const r = rows[i];
-
-    if (r) w = Math.max(w, usedWidth(r));
-  }
+  for (let i = Math.max(0, a); i < Math.min(rows.length, b); i++) w = Option.match(Arr.get(rows, i), { onNone: () => w, onSome: (r) => Math.max(w, usedWidth(r)) });
 
   return w;
 }

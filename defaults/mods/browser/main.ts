@@ -118,6 +118,7 @@ import { INSPECTOR, isInspected, initInspector, toggleInspector, inspectorKey } 
 import { unhide } from "./away.ts";
 import type { Hidden } from "./away.ts";
 import { restoreTabs, addressInput, listen } from "./startup.ts";
+import { scrollOf } from "./scroll.ts";
 import { keyOf, ACTIVE, CONTEXT, TAB, TAB_BACK, tabEvent, browserProps, available } from "./props.ts";
 import type { TabMenu, CallArgs, Control } from "./props.ts";
 
@@ -130,6 +131,7 @@ export const KEYS: readonly KeyRow[] = [["enter i", "into the page"], ["⌘esc",
   ["r  ⌘r", "reload"], ["+ - 0", "zoom"], ["p", "picture in picture"], ["d  ⌘⌥i", "inspector"], ["O", "system browser"],
   ["t", "new tab"], ["x", "close the tab"], ["J K", "tab left / right"], ["1-9", "tab 1 to 8, 9 the last"],
   ["< >", "move the tab left / right (or drag it)"], ["m", "the tab's menu: pin it to the shelf, move, close"],
+  ["↑↓←→ pgup pgdn", "scroll the page"], ["home end  space ⇧space", "top / bottom, a screen"],
   ["tab ⇧tab", "buttons and tabs (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 
 export default class Browser extends View {
@@ -487,6 +489,8 @@ export default class Browser extends View {
 
     const k = keyOf(e);
     const ready = Boolean(this.start && available());
+    // The page's own scroll keys, while it hasn't the keyboard (scroll.ts).
+    const scroll = ready ? scrollOf(k, m.shift) : null;
     // ? opens the keys in the page's place, ? esc q close them; meanwhile they take every key (keyhelp.ts).
     const help = keysKey(e, this.keysShown);
 
@@ -528,6 +532,7 @@ export default class Browser extends View {
     else if (k === "m") this.command("tab_menu", cx);
     else if (k === "<") this.command("tab_move_left", cx);
     else if (k === ">") this.command("tab_move_right", cx);
+    else if (scroll) this.call("browser.scroll", scroll);
     else return false;
 
     return true;

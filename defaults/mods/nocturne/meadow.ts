@@ -3,14 +3,13 @@
 // (open and on the rail) and its glint; the meadow that places them all.
 
 import { div, svg } from "gpui-kit";
-import { flyMark, wingedMark } from "./winged.ts";
+import { doneBadge, flyMark, wingedMark } from "./winged.ts";
 import type { Beat } from "./winged.ts";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { terminals, run, hc, settings } from "herdr";
+import { run, hc, settings } from "herdr";
 import type { AgentInfo, Theme } from "herdr";
-import { isTerminal } from "./guards.ts";
-import { ART, WORD, cursorMark, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
+import { ART, WORD, cursorMark, dither, hash, givenName, navRing, cornerTicks, terminalsNow, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { field } from "./inline.ts";
@@ -18,15 +17,10 @@ import { calm, flash, dust, fly as flyPath } from "./flight.ts";
 import { stop, laneReach, meadowPlan, MORE_H, CHECK, SWEEP, FLAP, LAND, JAR, JAR_SIDE, JAR_INSET, NECK, RAIL_NECK, BODY, LID, JAR_BODY, GLINT, heldKey } from "./sky-plan.ts";
 import type { Reach, Landing } from "./sky-plan.ts";
 import { flyActs } from "./sky-keys.ts";
+import { machineTag } from "./machines.ts";
 import { shelfView } from "./shelf.ts";
 import type Sky from "./sky.ts";
 import { edge as edgeTone } from "@fireflies/tones";
-
-/** A 12 px check on a dark plate, set on a done firefly's mark. */
-export function doneBadge(t: Theme): Element {
-  return div().size(12).flex().items_center().justify_center().bg(t.background).border(1).border_color(t.done)
-    .child(svg(CHECK).size(8).text_color(t.done));
-}
 
 /** How the sidebar's wings beat (sky-plan.ts FLAP): by status, a landing one
  *  as a working one; 3 cells deep; resting ones and a calm sky hold them still. */
@@ -109,6 +103,9 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
   const elsewhere = a.space_name && a.space !== sky.shownSpace ? a.space_name : null;
   const whereColor = a.focused || on ? t.foreground : a.status === "blocked" ? t.blocked : t.muted;
   const sub = [elsewhere, a.status === "idle" ? null : WORD[a.status]].flatMap((x) => (x ? [x] : [])).join(" · ");
+  // In "all" with more than one machine, its machine's tag before the name (machines.ts).
+  const tag = sky.machines?.tag(a) ?? null;
+  const tagged = (el: Element) => (tag ? h_flex().min_w(0).gap(4).items_center().child(machineTag(t, tag)).child(el.min_w(0)) : el);
 
   // A press, a right-click or a double-click (naming) anywhere on the lane:
   // its full width and half the gap to each neighbour (`reach`), not only
@@ -142,9 +139,9 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
       : v_flex().ml(-2).max_w(w - x - 44).min_w(0).relative().pl(6).pr(4).py(1).gap(1)
         .child(resting
           ? h_flex().min_w(0).gap(6).items_baseline()
-            .child(div().flex_none().max_w(w - x - 54).truncate().text_size(11).text_color(whereColor).child(title))
+            .child(tagged(div().flex_none().max_w(w - x - 54 - (tag ? 16 : 0)).truncate().text_size(11).text_color(whereColor).child(title)))
             .when(Boolean(elsewhere), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(elsewhere ?? "")))
-          : div().truncate().text_size(11).text_color(whereColor).child(title))
+          : tagged(div().truncate().text_size(11).text_color(whereColor).child(title)))
         .when(!resting && Boolean(sub), (el) => el.child(a.status === "done"
           // Done reads at a glance: a check and the word, bright, not dim.
           ? h_flex().min_w(0).gap(4).items_center()
@@ -321,7 +318,8 @@ export function stamp(sky: Sky): void {
 
   for (const [k, v] of sky.stamped) if (now - v > 5000) sky.stamped.delete(k);
 
-  for (const [terminal, kv] of stamps(terminals().filter((x) => isTerminal(x)), now)) {
+  // The draw's one listing (kit.ts oneListing), not a second one.
+  for (const [terminal, kv] of stamps(terminalsNow(), now)) {
     const key = `${terminal} ${kv.replace(/=.*/, "")}`;
 
     if (sky.stamped.has(key)) continue;

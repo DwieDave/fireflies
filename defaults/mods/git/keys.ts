@@ -13,7 +13,7 @@
 // stage / stage all / stash stay on the Files tab. See REVIEW_CLASHES.
 
 import type { KeyEvent } from "gpui-kit";
-import { literal } from "./guard.ts";
+import { Array as Arr, Option, Schema, String as Str } from "effect";
 
 /** Where a key applies: the panel (or popup) with the keyboard; "global" and
  *  "list" under every panel. */
@@ -287,7 +287,7 @@ export type Action = (typeof BINDINGS)[number][2];
 /** A binding's flags (see the top). */
 export type Flag = "bar" | "menu" | "danger" | "hidden";
 
-const isFlag = literal("bar", "menu", "danger", "hidden");
+const isFlag = Schema.is(Schema.Literals(["bar", "menu", "danger", "hidden"]));
 
 /** One binding of the table: `key` the first of its keys (the one shown). */
 export interface Binding {
@@ -312,10 +312,12 @@ export const REVIEW_CLASHES: readonly (readonly [key: string, review: string, fi
 ];
 
 /** The contexts that are lists (j/k, paging, filter apply): each panel's tabs and drill-ins. */
-export type ListContext = "status" | "files" | "review" | "worktrees" | "branches" | "remotes" | "remoteBranches" | "tags" | "commits" | "reflog" | "subCommits" | "commitFiles" | "stash";
+export const ListContextSchema = Schema.Literals(["status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash"]);
+
+export type ListContext = typeof ListContextSchema.Type;
 
 /** Whether a context is a list. */
-export const isListContext = literal("status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash");
+export const isListContext = Schema.is(ListContextSchema);
 
 /** Contexts that are lists (j/k, paging, filter apply). */
 export const LISTS: ReadonlySet<KeyContext> = new Set<KeyContext>(["status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash"]);
@@ -326,9 +328,9 @@ export function lookup(context: KeyContext, key: string): Binding | null {
   const order: KeyContext[] = [context, ...(LISTS.has(context) ? ["list" as const] : []), ...(isPopup(context) ? [] : ["global" as const])];
 
   for (const c of order) {
-    const b = TABLE.find(([ctx, keys]) => ctx === c && keys.includes(key));
+    const b = Arr.findFirst(TABLE, ([ctx, keys]) => ctx === c && Arr.contains(keys, key));
 
-    if (b) return toBinding(b);
+    if (Option.isSome(b)) return toBinding(b.value);
   }
 
   return null;
@@ -337,26 +339,27 @@ export function lookup(context: KeyContext, key: string): Binding | null {
 export const isPopup = (c: KeyContext) => c === "menu" || c === "confirm" || c === "prompt" || c === "commit";
 
 const toBinding = ([context, keys, action, label, flags]: (typeof TABLE)[number]): Binding => ({
-  context, keys, key: keys[0] ?? "", action, label, flags: new Set(flags.split(" ").filter(isFlag)),
+  context, keys, key: Option.getOrElse(Arr.head(keys), () => ""), action, label, flags: new Set(Arr.filter(Str.split(flags, " "), isFlag)),
 });
 
 /** A context's own bindings (no list / global ones), in table order. */
 export function bindings(context: KeyContext): Binding[] {
-  return TABLE.flatMap((b) => (b[0] === context ? [toBinding(b)] : []));
+  return Arr.flatMap(TABLE, (b) => (b[0] === context ? [toBinding(b)] : []));
 }
 
 /** The options bar: the context's "bar" keys, then a few global ones. */
 export function barKeys(context: KeyContext): Binding[] {
-  const own = bindings(context).filter((b) => b.flags.has("bar"));
+  const bar = (b: Binding) => b.flags.has("bar");
+  const own = Arr.filter(bindings(context), bar);
 
   if (isPopup(context)) return own;
 
-  return [...own, ...bindings("global").filter((b) => b.flags.has("bar"))];
+  return [...own, ...Arr.filter(bindings("global"), bar)];
 }
 
 /** The right-click menu of a row: its context's "menu" bindings. */
 export function menuKeys(context: KeyContext): Binding[] {
-  return bindings(context).filter((b) => b.flags.has("menu"));
+  return Arr.filter(bindings(context), (b) => b.flags.has("menu"));
 }
 
 /** What keyName reads of a key event. */
@@ -370,7 +373,7 @@ export function keyName(e: KeyPress) {
 
   if (m.platform || m.function) return null;
 
-  const k = e.key.toLowerCase();
+  const k = Str.toLowerCase(e.key);
 
   if (m.control) return m.shift ? `ctrl-shift-${k}` : `ctrl-${k}`;
 
@@ -378,7 +381,7 @@ export function keyName(e: KeyPress) {
 
   const c = e.key_char;
 
-  if (c && c.length === 1 && c.trim()) return c;
+  if (c !== undefined && c.length === 1 && Str.isNonEmpty(Str.trim(c))) return c;
 
   if (m.shift && (k === "up" || k === "down" || k === "tab")) return `shift-${k}`;
 

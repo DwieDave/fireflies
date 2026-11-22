@@ -59,7 +59,7 @@ types:
 
 # The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
 # converted mod joins this list in its conversion's commit.
-effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts"
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts defaults/mods/git"
 
 # oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
@@ -71,7 +71,7 @@ lint *args:
     node_modules/.bin/effect-tsgo oxlint --type-aware --deny-warnings -c oxlint.effect.config.ts {{args}} {{effect_sources}}
 
 test:
-    bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/github.test.ts scripts/github-graph.test.ts scripts/github-cache.test.ts scripts/github-remotes.test.ts scripts/github-create.test.ts scripts/equalize-panes.test.ts scripts/scripts.test.ts scripts/scripts-runs.test.ts scripts/scripts-nix.test.ts scripts/markdown.test.ts scripts/notifications.test.ts scripts/preview.test.ts scripts/preview-table.test.ts scripts/preview-diff.test.ts scripts/preview-native.test.ts scripts/github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/git.test.ts scripts/editor.test.ts scripts/finder.test.ts scripts/nocturne-vim.test.ts scripts/file-tree.test.ts scripts/browser.test.ts
+    bun test scripts/changes.test.ts scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/mod-storage.test.ts scripts/worktree.test.ts scripts/settings.test.ts scripts/tabs.test.ts scripts/github.test.ts scripts/github-graph.test.ts scripts/github-cache.test.ts scripts/github-remotes.test.ts scripts/github-create.test.ts scripts/equalize-panes.test.ts scripts/scripts.test.ts scripts/scripts-runs.test.ts scripts/scripts-nix.test.ts scripts/markdown.test.ts scripts/notifications.test.ts scripts/preview.test.ts scripts/preview-table.test.ts scripts/preview-diff.test.ts scripts/preview-native.test.ts scripts/github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/git.test.ts scripts/editor.test.ts scripts/finder.test.ts scripts/nocturne-vim.test.ts scripts/file-tree.test.ts scripts/browser.test.ts
     # Its own process: it stands in for "herdr" (mock.module is process-wide).
     bun test scripts/github-projects-tab.test.ts
     # The GitHub window's new pull request and run workflow forms by their keys, gh and git faked (writes recorded, never sent).
@@ -80,16 +80,26 @@ test:
     bun test scripts/github-form-layout.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/git-view.test.ts
+    # The git window on a large change set: a scroll step highlights only the lines it brings into view, the file tree is built once, no git runs; a range over all of a folder's files highlights the folder.
+    bun test scripts/git-large.test.ts
     # The git window as a normal pane: no frame or ✕, esc stays, narrow widths, moved window -> pane -> window, two copies, a restart's props.
     bun test scripts/git-pane.test.ts
+    # The git window's look by layout: nocturne's dithered frames; in main (herdr-app's default) cards on the canvas, the shared title bar (none in a pane), popovers, no checker.
+    bun test scripts/git-look.test.ts
     # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.
     bun test scripts/github-scroll.test.ts
+    # The Actions log's groups fold as on GitHub (enter / space / z and a click on a title open and fold them, GitHub's line numbers), with herdr and gpui stand-ins.
+    bun test scripts/github-log-fold.test.ts
     # The GitHub window as a normal pane: no frame or ✕, esc stays, narrow tabs, moved window -> pane -> window, two copies, a restart's props.
     bun test scripts/github-pane.test.ts
+    # The GitHub window keeps itself current: an opening reads behind the cache, a dispatched run, re-run or cancel is read again with a bounded backoff until GitHub shows it, a closed window reads nothing (fake gh, virtual clock, a cx refused after its call as the engine does).
+    bun test scripts/github-refresh.test.ts
     # A panel's long title ends in an ellipsis inside its panel (GitHub window, git window), with recording gpui stand-ins.
     bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
     bun test scripts/nocturne-chrome-keys.test.ts
+    # Nocturne's toast grows to show its whole text when the window fits it (fitHeight), else one line each, cut off.
+    bun test scripts/nocturne-toast-fit.test.ts
     # The floating tool windows' keys, with herdr and gpui stand-ins.
     bun test scripts/nocturne-windows-keys.test.ts
     # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.
@@ -104,6 +114,10 @@ test:
     bun test scripts/nocturne-launchers.test.ts
     # Mod panes' marks and names (Databases, a launcher's mod) in the header, the parked chip, the tab and the shelf's tile.
     bun test scripts/nocturne-modmarks.test.ts
+    # An agent's tab wears its winged mark, done with the sidebar's check; several agents: the one the tab's status comes from.
+    bun test scripts/nocturne-tab-done.test.ts
+    # The fireflies' machine filter: no row with one machine, chips filter sky, jar and rail, tags only in all, the kept choice, one listing a draw.
+    bun test scripts/nocturne-machines.test.ts
     # A middle click on a pane's header bar or parked chip closes it as its close button does (asks kept); not from a button.
     bun test scripts/nocturne-middle-close.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
@@ -150,23 +164,27 @@ test:
     bun test scripts/file-tree-preview.test.ts
     # Where the files pane opens a file: a picture in its own preview pane, else its editor's tab; a text file turning that preview pane into the editor (file-tree routing.ts, preview main.ts), with stand-ins.
     bun test scripts/file-tree-open.test.ts
-    # file-tree ships the preview's viewer and what it imports: each copy is preview's byte for byte.
+    # The viewer is a library (@fireflies/viewer): no mod carries a copy of its files.
     bun test scripts/preview-shared.test.ts
+    # The viewer's reads under the engine's turn budget: the first bytes a kind needs, a long head a slice a turn, a cut-off read says so (mocks herdr: alone).
+    bun test scripts/preview-turns.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
     # Git, GitHub and Scripts opened as normal panes: nocturne.<mod>:pane | :tab | :window | {as, folder?, on?}, the "+ new" tiles, the palette's "… in a pane".
     bun test scripts/nocturne-inpane.test.ts
+    # Paths for every mod: nocturne.copy-path and nocturne.reveal (the system's file manager, the path one argument), with a herdr stand-in.
+    bun test scripts/nocturne-paths.test.ts
     # The editor's Markdown commands (bold … rule, enter in a list), each text and selection in and out, and off again.
     bun test scripts/editor-mdedit.test.ts
     # The editor's rendered view model: units by source line, the caret's walk, a round trip on a Markdown corpus.
     bun test scripts/editor-live.test.ts
     # The editor's rendered view and the scratchpad as a whole pane (mocks herdr): the block written back byte for byte, arrows across blocks, cmd-. and a letter, vim, undo, autosave and close.
     bun test scripts/editor-rendered.test.ts
-    # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
+    # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer (the "+" kept shown on the way from the text to it), vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
     # A file changed on disk read again: the line at the top of the text, the preview and the rendered view (a scratchpad's too), the caret and selection kept on their text, moved by lines added above; the keyboard not taken.
     bun test scripts/editor-reload.test.ts
-    # The scratchpad edited as one document, by keys on a note like Developer's: the caret across blocks (wrapped rows, marks), enter in a list and a task list, enter at a block's start, backspace / delete joins, an untouched new block leaves no blank lines, a long paragraph's box, untouched bytes; its quiet bar (format, more and its menu); the keyboard kept from copies out of sight and stale editor.open records.
+    # The scratchpad edited as one document, by keys on a note like Developer's: the caret across blocks (wrapped rows, marks), enter in a list and a task list, enter at a block's start, backspace / delete joins, an untouched new block leaves no blank lines, a long paragraph's box, untouched bytes; its quiet bar (format, more and its menu); its path from more, a right-click menu at the pointer, the tab menu and editor.copy-path; the keyboard kept from copies out of sight and stale editor.open records, and through typing in insert mode, the save and another copy reloading what was saved (the file's undrawn editor never takes it).
     bun test scripts/editor-scratchpad-edit.test.ts
     # Pictures in Markdown: image blocks drawn (broken and web ones too), a pasted screenshot or copied image file saved beside the file once and put in as a block, vim's p, undo, round trip (fake clipboard, a real PNG).
     bun test scripts/editor-images.test.ts
@@ -184,6 +202,8 @@ test:
     bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits (@fireflies/usage-limits): a scratch app asks nothing; no mod carries a copy.
     bun test scripts/usage-limits.test.ts
+    # The notifications hook's records: written under ~/.local/state/fireflies/notify, Herdr's herdr-app/notify still read.
+    bun test scripts/notifications-hook.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/usage-poll.test.ts
     # The mods' Effect kit (@fireflies/kit): decoding, exec, shared keys, the HTTP policy (fake server; curl against a local one), a view's runs and close.
@@ -216,6 +236,8 @@ test:
     bun test scripts/nocturne-shelf.test.ts
     # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
     bun test scripts/nocturne-tab-seam.test.ts
+    # More tabs than fit nocturne's strip: the wheel scrolls it, the shown tab is always in view (switch, new, close, move, narrower), ‹ n / n › mark a cut-off end, a drag held on one scrolls on.
+    bun test scripts/nocturne-tab-scroll.test.ts
     # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.
     bun test scripts/nocturne-move-menu.test.ts
     # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
@@ -254,6 +276,8 @@ test:
     bun test scripts/databases-k8s.test.ts
     # The Databases window, mouse and keyboard first: columns resized (o/O/{/} and the header's edge), hidden, moved and kept per table; ORDER BY shown and quoted, a result's own sort; ranges copied as TSV, rows as JSON / CSV / INSERT; every context menu and the keys it shows; names dragged into a query, tabs and connections reordered, files dropped; rename, disconnect, duplicate; the new keys type in fields.
     bun test scripts/databases-ux.test.ts
+    # Enter opens a table in the Databases window from every state a double click does (Developer's report): the find line left by enter or ↓ or a click, a password, rename or ask closed by a key, chip or click beside it (the keyboard back to the view), a cell edit left for [2], databases.table:<name> under a schema or a find, a list read again shorter.
+    bun test scripts/databases-enter.test.ts
     # The Databases window's reads: nothing sits in "reading" without something running (a missing client said before anything is read, a throw, a read delivered twice); a read's seconds, esc and its stop chip, its deadline; the client from the space folder's direnv first; the Log names each run; no exact count unasked.
     bun test scripts/databases-reads.test.ts
     # Pinned connections and a connection's port-forward: one list for the machine, every window told, a restart, no secret in the file; the forward's facts checked; its port looked at first, the ask with its overview, the forward started as the k8s mod starts one (the shared fixture), a pod that's gone, a port another program holds, stopping it.
@@ -266,6 +290,12 @@ test:
     bun test scripts/look.test.ts
     # A connection's sslmode: kept in connections.json, a picked database and a pin; psql's -d conninfo, MySQL's --ssl-mode and MariaDB's --skip-ssl / --ssl-verify-server-cert (its --version tells them apart); the form's ssl toggle by key (a pasted require kept, shown beside it); a pasted URL, a found DATABASE_URL and PGSSLMODE; databases.connect carrying it, refusing an unknown one.
     bun test scripts/databases-ssl.test.ts
+    # The Databases window back where it was left in its space (lastview.ts): written on change under the space's id, a sent connection kept as its request; another space opens as before; a reconnect that fails shows the list with why.
+    bun test scripts/databases-lastview.test.ts
+    # The GitHub window back where it was left in its space (github/lastview.ts): its tab, selection and filters per space id, written by the tick when changed; another space and another folder open as before; a pane's own place still wins.
+    bun test scripts/github-lastview.test.ts
+    # The fireflies command in the manual and installers: every call written fireflies (never herdr-app or hc), each fireflies <word> a window command, app, core or a core command, ls the core's (fireflies app ls the window's); ff linked.
+    bun test scripts/fireflies-cli.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

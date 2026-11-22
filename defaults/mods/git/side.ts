@@ -1,11 +1,13 @@
 // The git window's side panels: a numbered panel with its tabs or drill-in
 // title, its screen-mode chip, its list and filter, and the column they stack in.
 
+import { Array as Arr, String as Str } from "effect";
 import { div } from "gpui-kit";
-import type { Element } from "gpui-kit";
+import type { Context, Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import { panel, unzoom } from "./draw.ts";
+import { byLook, isDithered, mark, panel, unzoom } from "./draw.ts";
+import { GUTTER, segmented } from "@fireflies/look";
 import type { Panel, Tab, SideOptions } from "./state.ts";
 import { PANELS, isTabbed, TABS, WIDE_ROW, ROW } from "./state.ts";
 import { drawRow } from "./rows.ts";
@@ -15,12 +17,21 @@ import { loadMain } from "./content.ts";
 import { cycleScreen } from "./navigate.ts";
 import { edge } from "@fireflies/tones";
 
+/** A drill-in's name in its panel's title. */
+const SUB_TITLES = { subCommits: "Commits", remoteBranches: "Remote branches", commitFiles: "Files" } as const;
+
+/** A tabbed panel's name on a plain layout's card. */
+const PANEL_NAMES = { files: "Files", branches: "Branches", commits: "Commits" } as const;
+
+/** The filter's input box: square in nocturne, rounded with the accent ring in a plain layout. */
+const filterBox = (el: Element): Element => (isDithered() ? el : el.rounded(6));
+
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];
   const s = v.sub(p);
 
-  if (s) {
-    parts.push(div().text_color(t.foreground).child(s.kind === "subCommits" ? "Commits" : s.kind === "remoteBranches" ? "Remote branches" : "Files"));
+  if (s !== null) {
+    parts.push(div().text_color(t.foreground).child(SUB_TITLES[s.kind]));
     parts.push(div().text_color(t.dim).child(`· ${s.title}`));
 
     return parts;
@@ -34,8 +45,23 @@ export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: 
 
   const tabs: readonly (readonly [Tab, string])[] = TABS[p];
 
-  tabs.forEach(([id, label], k) => {
-    if (k) parts.push(div().text_color(edge(t)).child("-"));
+  // A plain layout's card: the panel's name, its tabs as a segmented control.
+  if (!isDithered()) {
+    const pick = (id: Tab) => (cx: Context) => {
+      v.panel = p;
+      v.focus = "side";
+      v.setTab(id);
+      cx.notify();
+    };
+
+    parts.push(div().text_color(active ? t.foreground : t.muted).child(PANEL_NAMES[p]));
+    parts.push(segmented(t, Arr.map(tabs, ([id, label]) => ({ id: `tab-${p}-${id}`, label, on: v.tabOf[p] === id, go: pick(id) }))));
+
+    return parts;
+  }
+
+  Arr.forEach(tabs, ([id, label], k) => {
+    if (k > 0) parts.push(div().text_color(edge(t)).child("-"));
 
     const on = v.tabOf[p] === id;
 
@@ -75,7 +101,7 @@ export function modeChip(v: GitView, t: Theme, p: Panel) {
       loadMain(v);
       cx.notify();
     })
-    .child(big ? "⤡" : "⤢");
+    .child(mark(big ? "⤡" : "⤢", big ? "minimize-2" : "maximize-2", 12));
 }
 
 export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions = {}) {
@@ -87,16 +113,16 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
   const isCommits = ctx === "commits" || ctx === "subCommits";
   const rowH = wide && isCommits ? WIDE_ROW : ROW;
   const filtering = v.filtering?.ctx === ctx ? v.filtering : null;
-  const count = n ? `${Math.min((v.sel[ctx] ?? 0) + 1, n)} of ${n}${v.cut(ctx) ? "+" : ""}` : null;
-  const reviewed = ctx === "review" && v.review.files.length ? `${v.review.scopeName()} · ${v.review.summary()}` : count;
+  const count = n > 0 ? `${Math.min((v.sel[ctx] ?? 0) + 1, n)} of ${n}${v.cut(ctx) ? "+" : ""}` : null;
+  const reviewed = ctx === "review" && Arr.isReadonlyArrayNonEmpty(v.review.files) ? `${v.review.scopeName()} · ${v.review.summary()}` : count;
   const filter = v.filters[ctx];
-  const foot = filter && !filtering ? `/${filter} · ${reviewed ?? "0"}` : reviewed;
+  const foot = filter !== undefined && Str.isNonEmpty(filter) && filtering === null ? `/${filter} · ${reviewed ?? "0"}` : reviewed;
 
   const list = v_flex().size_full()
     .child(div().flex_1().min_h(0).child(sideList(v, t, ctx, rowH, drawRow(v, t, ctx, wide), active)));
 
-  const body = filtering
-    ? list.child(h_flex().h(22).mx(4).mb(2).px(6).gap(6).items_center().border(1).border_color(t.accent).text_size(11)
+  const body = filtering !== null
+    ? list.child(filterBox(h_flex().h(22).mx(4).mb(2).px(6).gap(6).items_center().border(1).border_color(t.accent).text_size(11))
       .child(div().text_color(t.accent).child("/")).child(Input.new(filtering.input).flex_1().text_size(11).text_color(t.foreground)))
     : list;
 
@@ -132,13 +158,13 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
 }
 
 export function sideColumn(v: GitView, t: Theme, panels: readonly Panel[], compact = false) {
-  return v_flex().size_full().gap(12).pt(7).children(panels.map((p) => {
+  return v_flex().size_full().gap(byLook(12, GUTTER)).pt(byLook(7, 0)).children(Arr.map(panels, (p) => {
     const el = sidePanel(v, t, p, { compact });
     const focusedHere = v.panel === p;
 
     if (p === "status") return el.h(30).flex_none();
 
-    if (p === "stash" && !focusedHere) return el.h(v.data.stash.length ? Math.min(3, v.data.stash.length) * ROW + 20 : 30).flex_none();
+    if (p === "stash" && !focusedHere) return el.h(Arr.isReadonlyArrayNonEmpty(v.data.stash) ? Math.min(3, v.data.stash.length) * ROW + 20 : 30).flex_none();
 
     return el.flex_grow(focusedHere && !compact ? 2.2 : 1).flex_basis(0).min_h(30);
   }));

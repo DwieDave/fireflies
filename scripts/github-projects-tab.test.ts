@@ -59,7 +59,7 @@ function makeApp() {
   return {
     repo: { owner: "DwieDave", name: "fireflies", full: "DwieDave/fireflies", host: "github.com", root: "/src", on: null, parent: "herdrdev/herdr-app" },
     note: null as any, next: Infinity, asked: null as any, opened: null as any,
-    focusSelf() {}, refresh() {}, spawn(c: any, fn: Function) { c.spawn(async () => { try { await fn(); } catch {} }); },
+    focusSelf() {}, refresh() {}, spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch {} }); },
     ask(text: string, go: Function) { this.asked = { text, go }; }, openUrl(url: string) { this.opened = url; },
   };
 }
@@ -238,7 +238,7 @@ test("x asks, then archives", async () => {
   press(tab, "l", "l", "x");
   expect(app.asked.text).toContain("Archive #240");
   expect(column(tab, "Ready")).toContain(240);
-  app.asked.go();
+  app.asked.go(cx); // y: its own cx
   expect(column(tab, "Ready")).not.toContain(240);
   expect(tab.current().content.number).toBe(212);
   await settle();
@@ -331,7 +331,7 @@ test("a mutation refused for scope says to grant project", async () => {
   const { tab, app } = await open();
   gh.noScope = true;
   press(tab, "x");
-  app.asked.go();
+  app.asked.go(cx); // y: its own cx
   await settle();
   expect(app.note.text).toContain("gh auth refresh -s project");
   expect(tab.board().items.length).toBe(15);

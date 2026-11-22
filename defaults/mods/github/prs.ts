@@ -478,7 +478,7 @@ export default class Prs {
     else if (k === "n") this.newPr(cx);
     else if (k === "d" && p) this.app.openDiff(p.number);
     else if (k === "c" && p) this.startComment(cx);
-    else if (k === "C" && p) this.app.ask(`Check out #${p.number} (${p.headRefName ?? ""}) in ${this.app.repo?.root ?? ""}?`, () => this.checkout(p, cx));
+    else if (k === "C" && p) this.app.ask(`Check out #${p.number} (${p.headRefName ?? ""}) in ${this.app.repo?.root ?? ""}?`, (cx) => this.checkout(p, cx));
     else if (k === "o" && p) this.app.openUrl(this.urlOf(p), cx);
     else if (k === "a" && p) this.app.showRuns({ branch: p.headRefName ?? "", label: `#${p.number}` }, cx);
     else return false;

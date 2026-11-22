@@ -6,7 +6,7 @@
 // @fireflies/kit's test layers: no module is mocked.
 import { test, expect, beforeEach } from "bun:test";
 import { copiesOf } from "./mod-source.ts";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, utimesSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, utimesSync, renameSync, symlinkSync, lstatSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Effect, Layer } from "effect";
@@ -63,7 +63,7 @@ for (const p of ["claude", "codex"] as const satisfies readonly ProviderId[]) {
   });
 
   test(`${p}: the real app (no HERDR_APP_HOME, or the default home) asks`, async () => {
-    for (const e of [{}, { HERDR_APP_HOME: join(home, ".config/herdr-app") }, { HERDR_APP_HOME: join(home, ".config/herdr-app/") }, { XDG_CONFIG_HOME: join(root, "xdg"), HERDR_APP_HOME: join(root, "xdg/herdr-app") }]) {
+    for (const e of [{}, { HERDR_APP_HOME: join(home, ".config/herdr-app") }, { HERDR_APP_HOME: join(home, ".config/herdr-app/") }, { XDG_CONFIG_HOME: join(root, "xdg"), HERDR_APP_HOME: join(root, "xdg/herdr-app") }, { HERDR_APP_HOME: join(home, ".config/fireflies/app") }, { XDG_CONFIG_HOME: join(root, "xdg"), HERDR_APP_HOME: join(root, "xdg/fireflies/app/") }]) {
       rmSync(calls, { force: true });
       env = { HERDR_USAGE_DIR: cache, ...e };
       expect((await a.run(readUsage(p))).state).toBe("ok");
@@ -174,14 +174,31 @@ test("the lock: held by another app, nobody else asks; left behind for minutes, 
   expect(existsSync(join(cache, "usage-claude.json.lock"))).toBe(false);
 });
 
-test("the default place is ~/.cache/herdr-app (XDG_CACHE_HOME respected)", async () => {
+test("the default place is ~/.cache/fireflies (XDG_CACHE_HOME respected)", async () => {
   env = {};
   await a.run(refreshUsage());
-  expect(existsSync(join(home, ".cache/herdr-app/usage-claude.json"))).toBe(true);
+  expect(existsSync(join(home, ".cache/fireflies/usage-claude.json"))).toBe(true);
   a = app();
   env = { XDG_CACHE_HOME: join(root, "xdgc") };
   await a.run(refreshUsage());
-  expect(existsSync(join(root, "xdgc/herdr-app/usage-claude.json"))).toBe(true);
+  expect(existsSync(join(root, "xdgc/fireflies/usage-claude.json"))).toBe(true);
+});
+
+test("Herdr's ~/.cache/herdr-app stays in use until the app moves it, then its link is followed", async () => {
+  const base = join(root, "xdgh");
+  mkdirSync(join(base, "herdr-app"), { recursive: true });
+  env = { XDG_CACHE_HOME: base };
+  await a.run(refreshUsage());
+  expect(existsSync(join(base, "herdr-app/usage-claude.json"))).toBe(true);
+  expect(existsSync(join(base, "fireflies"))).toBe(false);
+  // The app's move: the folder goes to fireflies, a link stays at herdr-app.
+  renameSync(join(base, "herdr-app"), join(base, "fireflies"));
+  symlinkSync("fireflies", join(base, "herdr-app"));
+  rmSync(join(base, "fireflies/usage-claude.json"));
+  a = app();
+  await a.run(refreshUsage());
+  expect(existsSync(join(base, "fireflies/usage-claude.json"))).toBe(true);
+  expect(lstatSync(join(base, "herdr-app")).isSymbolicLink()).toBe(true);
 });
 
 test("a record file in another shape is written over, not a crash or a stuck reading", async () => {

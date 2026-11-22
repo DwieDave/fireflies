@@ -1,7 +1,9 @@
 // Notifications ({ role: "toast" }), in Nocturne's look: a square card with
 // a dithered edge in the level's color, a pip, the title and one body line.
 // Fireflies opens one per notify() with the notification as props
-// ({ title, body, level, icon, action, overlay }), 340 x 72, bottom right.
+// ({ title, body, level, icon, action, overlay, fitHeight }), 340 wide,
+// bottom right; with `fitHeight` (Fireflies sizes it to its text, at least
+// 72 high) the title and body wrap, so the whole text shows.
 // Click runs its action (e.g. go to the agent) and dismisses it.
 // An agent's own toast (Fireflies' "… needs you", going to the agent) says what
 // it asks when the notifications mod knows (shared ITEMS: "wants to run a
@@ -17,7 +19,7 @@ import type { Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
-import { isNumber, isString, nullable, object, readSharedList, sharedKey, sharedListKey, writeShared } from "./guard.ts";
+import { isBoolean, isNumber, isString, nullable, object, readSharedList, sharedKey, sharedListKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import { argsOf, commandOf, isStoredCommand, storedCommand } from "./guards.ts";
 import type { Command } from "./guards.ts";
@@ -30,7 +32,7 @@ const COLOR: ReadonlyMap<string, "blocked" | "working" | "done" | "accent"> = ne
 /** The props a toast is opened with: the notification (Fireflies' notify()); its level is
  *  info, success, warning or error (another reads as info). */
 const isToastProps = object({}, {
-  title: isString, body: isString, level: isString, icon: isString, action: nullable(isStoredCommand), overlay: isString,
+  title: isString, body: isString, level: isString, icon: isString, action: nullable(isStoredCommand), overlay: isString, fitHeight: isBoolean,
 });
 
 /** A toast's notification, as the mod reads it: its action a command. */
@@ -41,6 +43,8 @@ export interface ToastProps {
   readonly icon?: string;
   readonly action: Command | null;
   readonly overlay?: string;
+  /** The window sizes the toast to its text: wrap instead of cutting off. */
+  readonly fitHeight?: boolean;
 }
 
 /** A toast's props, read. */
@@ -153,18 +157,26 @@ export default class Toast {
         .when(urgent, (el) => el.loop("opacity", { from: 0.25, to: 1, period: p.level === "error" ? 700 : 1400, easing: "linear" }));
 
     const line = ask?.line ?? p.body;
+    // Sized to its text (fitHeight): every line shows; else one line each, cut off.
+    const fit = p.fitHeight === true;
+    const text = (value: string) => (fit ? div().child(value) : div().truncate().child(value.split("\n", 1)[0] ?? ""));
 
-    return h_flex().id("nocturne-toast").relative().size_full().bg(t.background).border(1).border_color(edge(t))
+    return h_flex().id("nocturne-toast").relative().bg(t.background).border(1).border_color(edge(t))
+      .when(fit, (el) => el.w_full().min_h(70).flex_none().pl(6))
+      .when(!fit, (el) => el.size_full())
       .cursor_pointer()
       .on_click(() => act(p))
-      // A dithered stripe down the left edge in the level's color.
-      .child(div().relative().w(6).h_full().flex_none().child(dither(color, 1)))
-      .child(h_flex().relative().flex_1().min_w(0).h_full().px(12).gap(12).items_center()
+      // A dithered stripe down the left edge in the level's color (as tall as the text, fitted).
+      .when(fit, (el) => el.child(div().absolute().left(0).top(0).bottom(0).w(6).child(dither(color, 1))))
+      .when(!fit, (el) => el.child(div().relative().w(6).h_full().flex_none().child(dither(color, 1))))
+      .child(h_flex().relative().flex_1().min_w(0).px(12).gap(12).items_center()
+        .when(fit, (el) => el.py(12).min_h(68))
+        .when(!fit, (el) => el.h_full())
         .hover((s) => s.bg(`${edge(t)}55`))
         .child(div().w(16).flex_none().flex().items_center().justify_center().child(mark))
         .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(div().truncate().text_size(12).text_color(urgent ? color : t.foreground).child(ask?.title ?? p.title ?? ""))
-          .when(Boolean(line), (el) => el.child(div().truncate().text_size(11).text_color(t.muted).child(line ?? "")))))
+          .child(text(ask?.title ?? p.title ?? "").text_size(12).text_color(urgent ? color : t.foreground))
+          .when(Boolean(line), (el) => el.child(text(line ?? "").text_size(11).text_color(t.muted)))))
       // The horizon line, like the tab strip's.
       .child(div().absolute().left(6).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
   }

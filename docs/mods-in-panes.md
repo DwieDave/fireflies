@@ -39,7 +39,7 @@ another's); `defaults/mods/github/place.ts` is the shortest to copy from.
   main view), GitHub's tabs not shown say only their number and its lists
   stack their panels below 820, the script deck's list takes the pane's
   height.
-- Commands (`<mod>.<action>`, keys.json or `herdr-app do`) reach every copy;
+- Commands (`<mod>.<action>`, keys.json or `fireflies do`) reach every copy;
   one acts: the window while one is open (its fresh `<mod>.window` note,
   written by the window only), else the pane with the keyboard, else none.
 - Links and "beside" from a pane open beside that pane; nothing closes it.
@@ -52,7 +52,7 @@ another's); `defaults/mods/github/place.ts` is the shortest to copy from.
   (`defaults/mods/nocturne/inpane.ts`). "+ new" has a tile per mod (beside or
   a tab, by its landing switch), the palette "Git in a pane" and the like.
 - Anywhere: `pane.split {direction: "auto", mod, props: {slot, folder}}`, from
-  a shell `herdr-app do pane.split '{"direction":"auto","mod":"git","props":{"slot":"s1","folder":"/abs"}}'`.
+  a shell `fireflies do pane.split '{"direction":"auto","mod":"git","props":{"slot":"s1","folder":"/abs"}}'`.
   An optional mod Nocturne doesn't know is opened this way.
 
 ## Moving a live copy

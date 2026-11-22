@@ -1,7 +1,9 @@
 // Windows: a window app, but tests inherit Cargo's console for their child processes.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
+mod badge;
 mod bench;
+mod cli;
 mod commands;
 mod control;
 mod core_bin;
@@ -16,11 +18,13 @@ mod lsp;
 mod markdown;
 mod model;
 mod pane_resize;
+mod paths;
 mod mirror;
 mod mirror_sync;
 mod place;
 mod persist;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod macos;
 #[cfg(target_os = "macos")]
 mod macos_check;
@@ -48,29 +52,42 @@ mod window;
 
 use gpui::*;
 
+/// The window's commands; `{cmd}` is how the person called them
+/// (`herdr-app`, or `fireflies app`).
 const HELP: &str = "\
-fireflies: the Fireflies desktop app. With no arguments it opens the window.
-`herdr-app` is the same command and keeps working.
+{cmd}: the Fireflies desktop app. With no arguments it opens the window.
 
 Usage:
-  fireflies                        open the window
-  fireflies ls                     spaces, their tabs and terminals, in the open window
-  fireflies do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
-  fireflies feedback <text>        draft a GitHub issue for the person to review and submit
-  fireflies commands               every command, its arguments, what it does
-  fireflies status                 what the window shows, and any errors
-  fireflies shot [file.png]        save the last window frame (default: herdr-shot.png)
-  fireflies check <mod folder>     load a mod once and report what's wrong
-  fireflies types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
-  fireflies --skill                Agent Skill: driving the window, and where hc fits
-  fireflies --version
+  {cmd}                        open the window
+  {cmd} ls                     spaces, their tabs and terminals, in the open window
+  {cmd} do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
+  {cmd} feedback <text>        draft a GitHub issue for the person to review and submit
+  {cmd} commands               every command, its arguments, what it does
+  {cmd} status                 what the window shows, and any errors
+  {cmd} shot [file.png]        save the current window frame (default: herdr-shot.png)
+  {cmd} check <mod folder>     load a mod once and report what's wrong
+  {cmd} types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
+  {cmd} --skill                Agent Skill: driving the window, and where the core fits
+  {cmd} --version
 
-The terminals run in herdr-core (`hc`), which keeps them alive when the
-window closes. `hc --help`: start, read, wait on and talk to terminals and
-agents. The app shows them and arranges them in spaces and tabs.
+The terminals run in herdr-core, which keeps them alive when the window
+closes. `fireflies` (short: `ff`) is this command and hc's in one: the
+window's commands as above (`fireflies app ls` for the window's ls),
+every other one hc's (`fireflies run`, `fireflies send`, `fireflies ls`).
+`fireflies --help` lists both.
 
-Home: ~/.config/herdr-app (HERDR_APP_HOME picks another).
+Home: {home} (HERDR_APP_HOME picks another).
 ";
+
+fn help(cmd: &str) -> String {
+    HELP.replace("{cmd}", cmd).replace("{home}", &mods::app_dir().display().to_string())
+}
+
+/// The folder tests put their scratch data in: `HERDR_TEST_TMPDIR` if set, else /var/tmp.
+#[cfg(test)]
+fn test_tmp() -> std::path::PathBuf {
+    std::env::var_os("HERDR_TEST_TMPDIR").map_or_else(|| "/var/tmp".into(), Into::into)
+}
 
 /// A Windows window app has no console: answers to `herdr-app ls` and the
 /// like go to the terminal it was started from. Output already piped (agents,
@@ -85,14 +102,26 @@ fn attach_console() {
     }
 }
 
+fn link_check_path(args: &[String]) -> Option<&std::path::Path> {
+    let mut paths = args.iter().filter(|arg| !matches!(arg.as_str(), "--print-spec" | "--watch" | "--dev"));
+    let path = paths.next()?;
+    (!path.starts_with('-') && paths.next().is_none()).then(|| std::path::Path::new(path))
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    #[cfg(target_os = "macos")]
-    macos_check::startup(&args);
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
     #[cfg(windows)]
-    if args.len() > 1 {
+    if raw.len() > 1 {
         attach_console();
     }
+    // `fireflies` / `ff`: hc's commands go to the core as they are.
+    let (name, args) = match cli::route(&raw) {
+        cli::Route::Core(args) => std::process::exit(cli::exec_core(&args)),
+        cli::Route::Help => std::process::exit(cli::help(&help("fireflies app"))),
+        cli::Route::App { name, args } => (name, args),
+    };
+    #[cfg(target_os = "macos")]
+    macos_check::startup(&args);
     // `herdr-app check <mod>` / `herdr-app types <mod>`: gpui-shell's own checker, with Fireflies' module installed.
     if matches!(args.get(1).map(String::as_str), Some("check" | "types")) {
         // HERDR: beside the typings, the mods' libraries (@fireflies/*) as this build serves them.
@@ -103,6 +132,20 @@ fn main() {
             eprintln!("herdr-app types: the mods' libraries were not written: {e}");
         }
         mods::install_check_policy();
+        if args[1] == "check" && let Some(path) = link_check_path(&args[2..]) {
+            let dir = if path.is_file() { path.parent().unwrap_or(path) } else { path };
+            match mods::check_link_mod(dir) {
+                Ok(true) if dir.join("link.js").is_file() && !dir.join("main.js").is_file() => {
+                    println!("check passed: {}", dir.display());
+                    return;
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("herdr-app check: {error:#}");
+                    std::process::exit(1);
+                }
+            }
+        }
         gpui_shell::host::main_with_components(gpui_shell::FrozenComponentRegistry::default());
         return;
     }
@@ -114,11 +157,13 @@ fn main() {
         // Already open on this home: that window comes to the front.
         None if control::raise_running() => return,
         None => {}
-        Some("-h" | "--help" | "help") => return print!("{HELP}"),
+        Some("-h" | "--help" | "help") => return print!("{}", help(name)),
         Some("--skill") => return print!("{}", include_str!("SKILL.md")),
-        Some("-V" | "--version" | "version") => return println!("herdr-app {}", env!("CARGO_PKG_VERSION")),
+        Some("-V" | "--version" | "version") => {
+            return println!("{} {}", name.split(' ').next().unwrap_or(name), env!("CARGO_PKG_VERSION"));
+        }
         Some(other) => {
-            eprint!("herdr-app: unknown argument {other:?}\n\n{HELP}");
+            eprint!("{name}: unknown argument {other:?}\n\n{}", help(name));
             std::process::exit(2);
         }
     }
@@ -131,6 +176,8 @@ fn main() {
                 .unwrap_or_else(|_| "warn,herdr_app=info,gpui_shell=info".into()),
         )
         .init();
+    // Herdr's ~/.config/herdr-app and ~/.cache/herdr-app move to Fireflies' own, once.
+    paths::migrate();
 
     update::leave_install_folder();
     if update::apply_on_startup() {
@@ -158,8 +205,8 @@ fn main() {
     };
     #[cfg(target_os = "macos")]
     core_bin::install_cli_link();
-    if core.is_ok() {
-        update::after_update();
+    if let Ok(core) = &core {
+        update::after_update(core.clone());
     }
     update::start();
     bench::start();
@@ -196,7 +243,7 @@ fn main() {
                     }
                 }
                 mods::finish_shared();
-                update::apply();
+                let _ = update::apply();
                 async {}
             })
             .detach();

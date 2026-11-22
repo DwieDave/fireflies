@@ -12,6 +12,7 @@ import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
 import { dither, FIND, focusOn } from "./pane-kit.ts";
 import { closeCard, showCard } from "./card.ts";
+import { caretTo } from "./md-text.ts";
 import { edge } from "@fireflies/tones";
 
 // The find line's stops in tab order (form-keys.ts): the find field, Aa, ‹, ›
@@ -22,9 +23,11 @@ export const REPLACE_STOPS: readonly Stop[] = [...FIND_STOPS, { id: "with", kind
 
 export function gotoPlace(ed: EditorPane, line: number, col: number, cx: Context): void {
   closeCard(ed, cx);
-  ed.editor.set_cursor(line, col);
+  // The keyboard goes where it's handed below (the rendered view's block, else the text), not by
+  // the caret: a moment later the file's editor would take it back from the block.
+  caretTo(ed.editor, line, col);
   // Before the first layout there's nothing to scroll: try again once drawn.
-  cx.timer.after(60, () => ed.editor.set_cursor(line, col));
+  cx.timer.after(60, () => caretTo(ed.editor, line, col));
 
   // The rendered view lights the block holding that line.
   const d = ed.cur;

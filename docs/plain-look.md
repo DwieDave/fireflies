@@ -583,7 +583,15 @@ checks each row off in its report.
 | `strip.ts:stripView` | rule ×2, fill ×2, box ×2 | `rule()`, `fill()`, `boxed()` / `frameBox()` / `button()` |
 | `tab-menu.ts:renderMenu` | lit ×1, fill ×2, box ×1 | `lit()`, `fill()`, `boxed()` / `frameBox()` / `button()` |
 
-#### git (8745 lines of its own, 28 functions)
+#### git (8745 lines of its own, 28 functions): done
+
+Done on 2026-11-22: every row below. Nocturne's element tree is unchanged
+(recorded whole in ten states, before and after: identical);
+scripts/git-look.test.ts proves both looks. The look is read once per draw
+(draw.ts `isDithered`, `byLook`, `mark`, `ageWidth`: look's `pick`,
+`glyph` and `textWidth` asked the app per call); the age column is the
+widest age measured in the plain font. The shots are owed while scratch apps
+are off.
 
 | file: function | draws | becomes |
 | --- | --- | --- |

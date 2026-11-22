@@ -431,7 +431,7 @@ export class Form<R> {
   send(cx: Context): void {
     this.stage = "sending";
     this.sendError = "";
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       let r: Outcome<R>;
 
       try {

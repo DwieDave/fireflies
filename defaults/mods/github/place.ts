@@ -17,6 +17,7 @@ import { isNumber, isString, literal, nullable, object, parseJson, readShared, s
 import { isPrsKept } from "./prs.ts";
 import { isActionsKept } from "./actions.ts";
 import { isProjectsKept } from "./projects.ts";
+import { keepSpace, shownSpace, spaceKept } from "./lastview.ts";
 import type { default as GitHub } from "./main.ts";
 
 /** What the window keeps in shared state (its folder, tab and each tab's own), so it comes back
@@ -100,15 +101,31 @@ function store(): Store | null {
   }
 }
 
-/** A pane keeps what it shows (per slot), for the next start. */
-export function saveCopy(v: GitHub, kept: Kept): void {
+/** The space each copy opened in (lastview.ts keeps a record per space). */
+const spaceOf = new WeakMap<GitHub, string | null>();
+
+/** A pane keeps what it shows (per slot), for the next start; its space keeps the window's (every
+ *  change: `all` false, the window's tick) or this copy's (`all`: a close, a move, a review). */
+export function saveCopy(v: GitHub, kept: Kept, all = true): void {
+  if (all || !inPane(v)) keepSpace(spaceOf.get(v) ?? null, kept);
+
   if (!inPane(v) || !v.slot) return;
 
-  try { store()?.setItem("kept", JSON.stringify(kept)); } catch { /* not kept */ }
+  try {
+    const text = JSON.stringify(kept);
+    const s = store();
+
+    if (s && s.getItem("kept") !== text) s.setItem("kept", text);
+  } catch { /* not kept */ }
 }
 
-/** What this copy starts on: a pane's own (a restart), else what the window kept. */
+/** What this copy starts on: a pane's own (a restart), else what was kept in its space, else what
+ *  the window kept last. */
 export function keptFor(v: GitHub): Kept {
+  const space = shownSpace();
+
+  spaceOf.set(v, space);
+
   if (inPane(v) && v.slot) {
     let text: string | null = null;
 
@@ -119,7 +136,9 @@ export function keptFor(v: GitHub): Kept {
     if (own && own.folder === v.folder) return own;
   }
 
-  return readShared(shared, STATE, {});
+  const here = spaceKept(space);
+
+  return here && here.folder === v.folder ? here : readShared(shared, STATE, {});
 }
 
 /** The props a copy of this folder opens with (slot: a pane's). */

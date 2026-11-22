@@ -8,6 +8,8 @@
 // the oldest one touched must be one straight line (no merges), as lazygit
 // asks for its own rewrites.
 
+import { Array as Arr, Option, String as Str } from "effect";
+
 export const UNDO = "[git undo]";
 export const REDO = "[git redo]";
 
@@ -49,9 +51,7 @@ function verbOf(action: Rewrite) {
  *  null for --root), todo (text), oldest } or { error }. A reword's exec
  *  line reads the new message from $NOCTURNE_GIT_MSG. */
 export function rewrite(commits: readonly HistoryCommit[], i: number, action: Rewrite): Plan | Refused {
-  const c = commits[i];
-
-  if (!c) return { error: "No commit selected." };
+  if (Option.isNone(Arr.get(commits, i))) return { error: "No commit selected." };
 
   let oldest = i;
 
@@ -59,48 +59,44 @@ export function rewrite(commits: readonly HistoryCommit[], i: number, action: Re
 
   if (action === "move-up" && i === 0) return { error: "It's the newest commit already." };
 
-  const last = commits[oldest];
+  const lastOne = Arr.get(commits, oldest);
 
-  if (!last) {
+  if (Option.isNone(lastOne)) {
     return { error: action === "move-down" ? "It's the oldest commit shown." : "There's no commit below to meld it into." };
   }
 
-  for (let k = 0; k <= oldest; k++) {
-    const x = commits[k];
+  const touched = Arr.take(commits, oldest + 1);
 
-    if (!x) continue;
+  for (const [k, x] of touched.entries()) {
+    if (x.parents.length > 1) return { error: `${Str.slice(0, 7)(x.hash)} is a merge commit: rewrite above it, or rebase by hand.` };
 
-    if (x.parents.length > 1) return { error: `${x.hash.slice(0, 7)} is a merge commit: rewrite above it, or rebase by hand.` };
-
-    if (k < oldest && x.parents[0] !== commits[k + 1]?.hash) return { error: "These commits aren't one straight line of history." };
+    if (k < oldest && Option.getOrNull(Arr.head(x.parents)) !== Option.getOrNull(Option.map(Arr.get(commits, k + 1), (c) => c.hash))) return { error: "These commits aren't one straight line of history." };
   }
 
-  const base = last.parents[0] ?? null;
-  const lines: string[] = [];
-  const order = commits.slice(0, oldest + 1).map((x, k) => ({ x, k })).reverse(); // oldest first
+  const base = Option.getOrNull(Arr.head(lastOne.value.parents));
+  const order = Arr.reverse(Arr.map(touched, (x, k) => ({ x, k }))); // oldest first
+  const indexOf = (k: number) => Option.getOrElse(Arr.findFirstIndex(order, (o) => o.k === k), () => -1);
 
   const swap = (a: number, b: number) => {
-    const x = order[a], y = order[b];
+    const x = Arr.get(order, a), y = Arr.get(order, b);
 
-    if (x && y) {
-      order[a] = y;
-      order[b] = x;
+    if (Option.isSome(x) && Option.isSome(y)) {
+      order[a] = y.value;
+      order[b] = x.value;
     }
   };
 
   if (action === "move-down") swap(0, 1);
 
-  if (action === "move-up") swap(order.findIndex((o) => o.k === i), order.findIndex((o) => o.k === i - 1));
+  if (action === "move-up") swap(indexOf(i), indexOf(i - 1));
 
-  for (const { x, k } of order) {
-    const verb = k !== i ? "pick" : verbOf(action);
+  const lines = Arr.flatMap(order, ({ x, k }) => {
+    const line = Str.trimEnd(`${k !== i ? "pick" : verbOf(action)} ${x.hash} ${x.subject ?? ""}`);
 
-    lines.push(`${verb} ${x.hash} ${x.subject ?? ""}`.trimEnd());
+    return k === i && action === "reword" ? [line, `exec ${REWORD_EXEC}`] : [line];
+  });
 
-    if (k === i && action === "reword") lines.push(`exec ${REWORD_EXEC}`);
-  }
-
-  return { base, todo: lines.join("\n") + "\n", oldest };
+  return { base, todo: Arr.join(lines, "\n") + "\n", oldest };
 }
 
 /** The exec line after a reworded commit: amends it with the new message. */
@@ -126,16 +122,17 @@ export interface Done {
  *  from, to } or a move of HEAD { kind: "reset", from, to }; null for the
  *  steps inside a rebase. `undo` / `redo`: made by this window's z / Z. */
 export function reflogAction(reflog: readonly Step[], i: number): Done | null {
-  const e = reflog[i];
+  const got = Arr.get(reflog, i);
 
-  if (!e) return null;
+  if (Option.isNone(got)) return null;
 
+  const e = got.value;
   const s = e.subject ?? "";
-  const undo = s.startsWith(UNDO), redo = s.startsWith(REDO);
+  const undo = Str.startsWith(UNDO)(s), redo = Str.startsWith(REDO)(s);
   const m = /moving from (\S+) to (\S+)$/.exec(s);
-  const [, from, to] = m ?? [];
+  const from = m?.[1], to = m?.[2];
 
-  if (from !== undefined && to !== undefined && (undo || redo || s.startsWith("checkout:"))) return { kind: "checkout", from, to, undo, redo, i };
+  if (from !== undefined && to !== undefined && (undo || redo || Str.startsWith("checkout:")(s))) return { kind: "checkout", from, to, undo, redo, i };
 
   if (/^rebase( -i| \(\w+\))?.*\((start|pick|squash|fixup|reword|edit|continue|abort|skip)\)/.test(s) || /^rebase (-i )?\((start|pick|squash|fixup|reword|edit|continue|abort|skip)\)/.test(s)) return null;
 
@@ -143,21 +140,16 @@ export function reflogAction(reflog: readonly Step[], i: number): Done | null {
     // Back to before the rebase started: the entry under its "(start)".
     let j = i + 1;
 
-    while (j < reflog.length && !/^rebase.*\(start\)/.test(reflog[j]?.subject ?? "")) j++;
+    const subjectAt = (k: number) => Option.getOrElse(Option.flatMap(Arr.get(reflog, k), (x) => Option.fromUndefinedOr(x.subject)), () => "");
 
-    const before = reflog[j + 1];
+    while (j < reflog.length && !/^rebase.*\(start\)/.test(subjectAt(j))) j++;
 
     // "(finish): returning to refs/heads/x" keeps the hash of the last step.
-    return before ? { kind: "reset", from: before.hash, to: e.hash, undo, redo, i } : null;
+    return Option.match(Arr.get(reflog, j + 1), { onNone: () => null, onSome: (before): Done => ({ kind: "reset", from: before.hash, to: e.hash, undo, redo, i }) });
   }
 
-  const prev = reflog[i + 1];
-
-  if (!prev) return null;
-
-  if (prev.hash === e.hash) return null; // nothing moved
-
-  return { kind: "reset", from: prev.hash, to: e.hash, undo, redo, i };
+  // Nothing moved: no step.
+  return Option.match(Arr.get(reflog, i + 1), { onNone: () => null, onSome: (prev): Done | null => (prev.hash === e.hash ? null : { kind: "reset", from: prev.hash, to: e.hash, undo, redo, i }) });
 }
 
 /** The git command that undoes or redoes a step, what the note says, whether it resets --hard. */
@@ -176,7 +168,7 @@ export function nextUndo(reflog: readonly Step[]): Undo | null {
   for (let i = 0; i < reflog.length; i++) {
     const a = reflogAction(reflog, i);
 
-    if (!a) continue;
+    if (a === null) continue;
 
     if (a.undo) { counter++; continue; }
 
@@ -197,7 +189,7 @@ export function nextRedo(reflog: readonly Step[]): Undo | null {
   for (let i = 0; i < reflog.length; i++) {
     const a = reflogAction(reflog, i);
 
-    if (!a) continue;
+    if (a === null) continue;
 
     if (a.undo) {
       counter--;
@@ -218,5 +210,5 @@ export function nextRedo(reflog: readonly Step[]): Undo | null {
 function undoOf(a: Done, what: "undo" | "redo"): Undo {
   if (a.kind === "checkout") return { args: ["checkout", a.from], says: `${what === "undo" ? "Undo" : "Redo"}: checkout ${a.from}`, action: what, hard: false };
 
-  return { args: ["reset", "--hard", a.from], says: `${what === "undo" ? "Undo" : "Redo"}: reset --hard ${a.from.slice(0, 7)}`, action: what, hard: true };
+  return { args: ["reset", "--hard", a.from], says: `${what === "undo" ? "Undo" : "Redo"}: reset --hard ${Str.slice(0, 7)(a.from)}`, action: what, hard: true };
 }

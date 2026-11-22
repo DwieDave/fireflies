@@ -6,6 +6,7 @@
 // joins their tables and runs one.
 
 import type { Context } from "gpui-kit";
+import { Array as Arr, Option, Record as Rec } from "effect";
 import type { Action } from "./keys.ts";
 import type { default as GitView } from "./main.ts";
 import type { Handler } from "./acting.ts";
@@ -17,19 +18,13 @@ import { COMMIT_ACTIONS } from "./act-commits.ts";
 
 /** Runs `action` for the window's current context. Returns false when the
  *  action doesn't apply here (the key falls through), or isn't one. */
-export function act(v: GitView, action: string, cx: Context) {
-  const fn = handlerOf(action);
-
-  if (!fn) return false;
-
-  return fn(v, cx) !== false;
+export function act(v: GitView, action: string, cx: Context): boolean {
+  return Option.match(handlerOf(action), { onNone: () => false, onSome: (fn) => fn(v, cx) !== false });
 }
 
 /** An action's handler, when `action` names one. */
-function handlerOf(action: string): Handler | null {
-  for (const [name, fn] of Object.entries(ACTIONS)) if (name === action) return fn;
-
-  return null;
+function handlerOf(action: string): Option.Option<Handler> {
+  return Option.map(Arr.findFirst(Rec.toEntries<string, Handler>(ACTIONS), ([name]) => name === action), ([, fn]) => fn);
 }
 
 /** Every action of the key table, by its name. */

@@ -48,10 +48,12 @@ import type { AsyncContext, Context, FocusHandle, KeyEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex } from "gpui-base";
-import { props, theme, shared, setShared, nextCommand, home } from "herdr";
+import { theme, shared, setShared, home } from "herdr";
 import type { Theme } from "herdr";
-import { readShared, readSharedMap, writeShared, writeSharedMap } from "./guard.ts";
-import type { Git, LogEntry } from "./git.ts";
+import { Array as Arr, Clock, Effect, Match, Option, Record as Rec, String as Str } from "effect";
+import { readShared, writeShared } from "@fireflies/kit";
+import type { RunOptions } from "@fireflies/kit";
+import type { Git, GitError, LogEntry } from "./git.ts";
 import { LOG_LIMIT } from "./git.ts";
 import type { Graph } from "./graph.ts";
 import type { Commit } from "./parse.ts";
@@ -65,21 +67,30 @@ import type { Anchor } from "@fireflies/menu-place";
 import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
-import { empty, unzoom, unzoomSize } from "./draw.ts";
-import type { Back, Data, Panel, TabOf, Subs, Mode, Copied, MainContent, More, Staging, Note, Resizing, Show, Intent, MainHeights, OtherTops, Kept, SpawnOptions, Sub, ExecOptions, ViewContext, Tab } from "./state.ts";
-import { Queue } from "./queue.ts";
-import { NO_PROPS, isGitProps, isGroups, NO_GROUPS, here, STATE, WINDOW_KEY, GITHUB_WINDOW, PANELS } from "./state.ts";
-import type { Job } from "./queue.ts";
+import { drawing, empty, isDithered, unzoomSize } from "./draw.ts";
+import { frameBox } from "@fireflies/look";
+import type { Back, Data, Panel, TabOf, Subs, Mode, Copied, MainContent, More, Staging, Note, Resizing, Show, Intent, MainHeights, OtherTops, SpawnOptions, Sub, ExecOptions, ViewContext, Tab } from "./state.ts";
+import { Lane } from "./queue.ts";
+import { openedWith, here, STATE, WINDOW_KEY, GITHUB_WINDOW, PANELS } from "./state.ts";
+import { runtime } from "./fx.ts";
+import type { GitFx, GitServices } from "./fx.ts";
 import { isReviewFile, listItems, pathOf, rowKey } from "./items.ts";
 import type { Item } from "./items.ts";
-import { historyCut, listTail, rowMenu } from "./lists.ts";
+import { dragSplitter, historyCut, listTail, rowMenu } from "./lists.ts";
 import { windowBody } from "./main-view.ts";
 import { optionsBar, windowHeader } from "./bars.ts";
 import { goBack, quit, showNow } from "./panes.ts";
 import { loadMain } from "./content.ts";
 import { focusMain, giveWay, moveTo, scrollMain, setPanel, setTab } from "./navigate.ts";
-import { loadAll, reload, reloadNow, reloadReview, start } from "./reads.ts";
-import { actsOnCommands, saveCopy, takeCopy, toPane, toWindow } from "./place.ts";
+import { loadAll, reload, reloadReview, start } from "./reads.ts";
+import { inPane, nowMs, saveCopy, takeCopy } from "./place.ts";
+import { listen } from "./commands.ts";
+
+/** How long a note stays on the options bar. */
+const NOTE_FOR = "6 seconds";
+
+/** When the window's own keyboard comes back after it opens (ms after init): the overlay takes a moment to be focusable. */
+const REFOCUS = [60, 190, 350];
 
 export default class GitView extends View {
   overlay: string | null = null;
@@ -90,6 +101,8 @@ export default class GitView extends View {
   /** The GitHub window to put back. */
   backTo: Back | null = null;
   state: "loading" | "norepo" | "ready" = "loading";
+  /** Why the folder couldn't be opened, when git itself couldn't run (shown with "Not a git repository"). */
+  openError: string | null = null;
   git: Git | null = null;
   data: Data = { status: null, branches: [], remotes: [], remoteBranches: [], tags: [], commits: [], reflog: [], stash: [], worktrees: [], state: null, main: null, unpushed: new Set(), notMain: new Set() };
   graph: Graph | null = null;
@@ -151,13 +164,21 @@ export default class GitView extends View {
   wtIntent: Intent | null = null;
   wtPicked = new Set<string>(); // worktree paths picked for d (M, U, A)
   userHome: string | null = null;
+  /** Where new worktrees go (settings.json's worktrees.directory), once read. */
+  wtRoot: string | null = null;
   handle: FocusHandle | null = null;
-  acts = new Queue();
-  reads = new Queue();
+  /** The copy's handle on the mod's runtime, and init's context (made to be held) for the commands' handlers. */
+  fx: GitFx | null = null;
+  acx: AsyncContext | null = null;
+  /** Git actions run one at a time, in order; so do reads (queue.ts). */
+  acts = new Lane();
+  reads = new Lane();
   closed = false;
   watching = false;
   reloadQueued = false;
   pickedPath = false;
+  /** The time a render draws at, in unix seconds (one clock read per render: every age agrees). */
+  nowS = 0;
   listPx: { [C in ListContext]?: number } = {};
   /** Each list's row height as last drawn, and each side panel's size (layout px): where a key's
    *  menu finds the selected row (menu-anchor.ts). */
@@ -172,7 +193,7 @@ export default class GitView extends View {
   wheelAcc = 0;
   mainWheel = 0;
 
-  override init(p: Props | undefined, cx: AsyncContext) {
+  override init(p: Props | undefined, cx: AsyncContext): void {
     this.takeProps(p);
     takeCopy(this);
 
@@ -183,49 +204,47 @@ export default class GitView extends View {
 
     handle.focus();
 
-    if (this.overlay) {
-      for (const ms of [60, 250, 600]) {
-        cx.timer.after(ms, () => {
-          if (!this.closed && !this.popups.open && !this.filtering) handle.focus();
-        });
-      }
+    const fx = runtime.attach(cx, (message) => this.error(message));
+
+    this.fx = fx;
+    this.acx = cx;
+
+    if (this.overlay !== null) {
+      // The window's keyboard back once the overlay can take it (a popup or the filter that opened meanwhile keeps it).
+      fx.run(Effect.forEach(REFOCUS, (ms) => Effect.sleep(ms).pipe(Effect.andThen(Effect.sync(() => {
+        if (!this.popups.open && this.filtering === null) handle.focus();
+      }))), { concurrency: 1, discard: true }), { redraw: false });
+      fx.run(Effect.forever(Effect.sleep("4 seconds").pipe(Effect.andThen(Effect.sync(() => this.beat())))), { redraw: false });
     }
 
     this.beat();
-
-    if (this.overlay) cx.timer.every(4000, () => this.beat());
-
-    this.drainQueues(cx);
+    fx.run(listen(this, handle));
     start(this);
-    cx.timer.every(this.on ? 15000 : 30000, () => reload(this));
-    cx.timer.every(1000, (cx) => {
-      if (this.noteText && Date.now() - this.noteText.at > 6000) {
-        this.noteText = null;
-        cx.notify();
-      }
-    });
-    this.listen(handle, cx);
+    fx.run(Effect.forever(Effect.sleep(this.on === null ? "30 seconds" : "15 seconds").pipe(Effect.andThen(Effect.sync(() => reload(this))))), { redraw: false });
   }
 
   /** The props (or the shown space) and what the window kept for its folder. */
-  takeProps(p: Props | undefined) {
-    const given = props() ?? p ?? NO_PROPS;
-    const pr = isGitProps(given) ? given : NO_PROPS;
-    const groups = isGroups(given) ? given : NO_GROUPS;
+  takeProps(p: Props | undefined): void {
+    const { plain: pr, groups } = openedWith(p);
 
     this.overlay = pr.overlay ?? null;
     this.slot = pr.slot ?? null;
 
-    const h = pr.folder ? { folder: pr.folder, on: pr.on ?? null } : here();
+    const folder = pr.folder ?? null;
+    const h = folder === null || Str.isEmpty(folder) ? here() : { folder, on: pr.on ?? null };
 
     this.folder = h.folder;
-    this.on = h.on ?? null;
+    this.on = h.on;
     this.backTo = groups.back ?? null; // { mod, props }: the GitHub window to put back
 
-    const kept: Kept = this.folder === null ? {} : readSharedMap(shared, STATE).get(this.folder) ?? {};
+    const kept = this.folder === null ? {} : readShared(shared, STATE, new Map()).get(this.folder) ?? {};
 
-    this.panel = kept.panel ?? "files";
-    this.tabOf = { files: kept.tabOf?.files ?? "files", branches: kept.tabOf?.branches ?? "branches", commits: kept.tabOf?.commits ?? "commits" };
+    // Opening starts in the Files panel's files tab, whatever panel the folder's
+    // window had last (Developer: "Opening it should favor the files section");
+    // a move between window and pane and a pane's restart bring back their
+    // own (takeCopy, place.ts).
+    this.panel = "files";
+    this.tabOf = { files: "files", branches: kept.tabOf?.branches ?? "branches", commits: kept.tabOf?.commits ?? "commits" };
     this.mode = kept.mode ?? "normal";
     this.tree = kept.tree ?? true;
     this.showLog = kept.showLog ?? true;
@@ -241,120 +260,86 @@ export default class GitView extends View {
 
     this.review = new Review(this, { scope: rv.scope ?? "work", pr: rv.pr ?? null, repo: rv.repo ?? null });
 
-    if (pr.review || pr.pr || pr.scope || this.show?.kind === "review") {
+    if (pr.review === true || pr.pr !== undefined || pr.scope !== undefined || this.show?.kind === "review") {
       this.panel = "files";
       this.tabOf.files = "review";
     }
 
     this.wtIntent = groups.worktrees ?? null;
-    this.userHome = this.on ? null : home();
+    this.userHome = this.on === null ? home() : null;
 
-    if (this.wtIntent) {
+    if (this.wtIntent !== null) {
       this.panel = "files";
       this.tabOf.files = "worktrees";
       this.mode = "normal";
     }
 
-    if (this.show) {
+    if (this.show !== null) {
       this.mode = "normal";
       this.showLog = false;
 
       if (this.show.kind !== "review") this.focus = "main";
     }
-
-  }
-
-  /** Runs the queues' jobs, each on its own long-lived task (queue.ts). */
-  drainQueues(cx: AsyncContext) {
-    for (const q of [this.acts, this.reads]) {
-      cx.spawn(async (cx) => {
-        for (;;) {
-          const job = await q.next();
-
-          if (this.closed) return;
-
-          try { await job(cx); } catch (cause: unknown) { this.error(cause instanceof Error ? cause.message : String(cause)); }
-
-          if (this.closed) return;
-
-          cx.notify();
-        }
-      });
-    }
-  }
-
-  /** The commands sent to the window (keys.json's git.<action>, the toggle's focus). */
-  listen(handle: FocusHandle, cx: AsyncContext) {
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const c = (await nextCommand()).replace(/^git\./, "");
-
-        if (c === "focus") handle.focus();
-        else if (c === "refresh") reload(this, true);
-        else if (c === "review") {
-          this.setPanel("files");
-          this.setTab("review");
-        }
-        // keys.json can bind any key table action: git.<action>
-        // (panel-commits for panel:commits).
-        // One copy acts: the window while one is open, else the pane with the keyboard (place.ts).
-        else if (!actsOnCommands(this)) { /* another copy's */ }
-        else if (c === "to-pane") toPane(this);
-        else if (c === "to-window") toWindow(this);
-        else if (this.popups.open) {
-          if (c === "back") this.popups.close();
-          else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.ok(cx);
-        } else if (this.state === "ready") act(this, c.replace(/^panel-/, "panel:"), cx);
-
-        cx.notify();
-      }
-    });
   }
 
   // ---- life
 
-  beat() {
-    if (!this.overlay || this.closed) return;
+  beat(): void {
+    if (this.overlay === null || this.closed) return;
 
     // In the GitHub window's place (its d), this window is the one cmd-shift-g closes.
-    if (this.backTo) writeShared(setShared, GITHUB_WINDOW, { id: this.overlay, beat: Date.now() });
-    else writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: Date.now(), folder: this.folder });
+    if (this.backTo === null) writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: nowMs(), folder: this.folder });
+    else writeShared(setShared, GITHUB_WINDOW, { id: this.overlay, beat: nowMs() });
   }
 
-  override async close() {
+  override close(): Promise<void> | undefined {
     this.closed = true;
     this.saveState();
 
     const w = readShared(shared, WINDOW_KEY, null);
 
-    if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
+    if (this.overlay !== null && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
+
+    // Every read, action, timer and watch this copy started ends with it.
+    return this.fx?.close();
   }
 
-  saveState() {
-    if (!this.folder || this.show) return;
+  saveState(): void {
+    if (this.folder === null || this.show !== null) return;
 
-    const all = new Map(readSharedMap(shared, STATE));
+    const all = new Map(readShared(shared, STATE, new Map()));
 
     all.set(this.folder, { panel: this.panel, tabOf: this.tabOf, mode: this.mode, tree: this.tree, showLog: this.showLog, sideW: this.sideW, railW: this.railW, midW: this.midW, logH: this.logH });
-    writeSharedMap(setShared, STATE, all);
+    writeShared(setShared, STATE, all);
     saveCopy(this);
   }
 
-  focusSelf() { if (!this.closed) this.handle?.focus(); }
+  focusSelf(): void { if (!this.closed) this.handle?.focus(); }
 
-  /** Queues an operation. While it's queued and running, the row it acts on
+  /** Queues a git action on the actions lane. While it's queued and running, the row it acts on
    *  (`row`: a rowKey; by default the shown panel's selected row, taken now,
-   *  at the key; null: none, as fetch all) shows a spinner in the row. */
-  spawn(fn: Job, options: SpawnOptions = {}) {
+   *  at the key; null: none, as fetch all) shows a spinner in the row. A
+   *  failure opens the error popup (the runtime's report). */
+  spawn<E>(job: Effect.Effect<void, E, GitServices>, options: SpawnOptions = {}): void {
     const done = this.hold(options.row === undefined ? this.selectedRow() : options.row);
 
-    this.acts.push(async (cx) => {
-      try { await fn(cx); } finally { done(); }
-    });
+    this.run$(this.acts.serial(job).pipe(Effect.ensuring(Effect.sync(done))));
+  }
+
+  /** Queues a read on the reads lane (`key`: a newer read under it replaces one not done yet).
+   *  A read git refuses (or can't run) says why on the options bar: the next
+   *  change or tick reads again, so it isn't a popup to dismiss each time. */
+  read<E extends { readonly message: string }>(job: Effect.Effect<void, E, GitServices>, options: RunOptions = {}): void {
+    this.run$(this.reads.serial(job).pipe(Effect.catch((e) => Effect.sync(() => this.note(e.message, "failed")))), options);
+  }
+
+  /** Runs `effect` for this copy (nothing once it's closed, or before it's attached). */
+  run$<E>(effect: Effect.Effect<void, E, GitServices>, options: RunOptions = {}): void {
+    this.fx?.run(effect, options);
   }
 
   /** The shown panel's selected row, as a rowKey (null for Status). */
-  selectedRow() {
+  selectedRow(): string | null {
     const ctx = this.ctxOf(this.panel);
 
     return rowKey(ctx, this.item(ctx));
@@ -362,8 +347,8 @@ export default class GitView extends View {
 
   /** Marks a row busy until the returned function is called (counted: two
    *  operations on one row keep it busy until both are done). */
-  hold(key: string | null) {
-    if (!key) return () => {};
+  hold(key: string | null): () => void {
+    if (key === null || Str.isEmpty(key)) return () => {};
 
     this.busyRows.set(key, (this.busyRows.get(key) ?? 0) + 1);
 
@@ -382,66 +367,80 @@ export default class GitView extends View {
   }
 
   /** `fn(cx)` shortly after the next frame (focusing a new input). */
-  later(fn: (cx: Context) => void, ms = 40) { this.reads.push(async (cx) => { cx.timer.after(ms, (cx2) => fn(cx2)); }); }
-
-  async reloadNow() {
-    return reloadNow(this);
+  later(fn: (cx: Context) => void, ms = 40): void {
+    this.run$(Effect.sleep(ms).pipe(Effect.andThen(Effect.sync(() => { if (this.acx !== null) fn(this.acx); }))));
   }
 
-  reloadReview() {
-    return reloadReview(this);
+  /** Reads everything again (an action's last step). */
+  reloadNow(): Effect.Effect<void, GitError, GitServices> {
+    return loadAll(this);
+  }
+
+  reloadReview(): void {
+    reloadReview(this);
   }
 
   // ---- notes, errors, the log
 
-  note(text: string, tone: Note["tone"] = "done") { this.noteText = { text, tone, at: Date.now() }; }
+  /** A note on the options bar; it goes after NOTE_FOR (a newer note restarts the wait). */
+  note(text: string, tone: Note["tone"] = "done"): void {
+    const n: Note = { text, tone };
 
-  busy(text: string | null) { this.busyText = text; }
+    this.noteText = n;
+    this.run$(Effect.sleep(NOTE_FOR).pipe(Effect.andThen(Effect.sync(() => { if (this.noteText === n) this.noteText = null; }))), { key: "note" });
+  }
 
-  error(text: string) { this.popups.confirm({ title: "Error", text: (text || "git failed").trim().split("\n").slice(-6).join("\n"), error: true }); }
+  busy(text: string | null): void { this.busyText = text; }
 
-  logged(entry: LogEntry) {
-    if (!this.logs.includes(entry)) this.logs.push(entry);
+  error(text: string): void {
+    const said = Str.trim(Str.isEmpty(text) ? "git failed" : text);
+
+    this.popups.confirm({ title: "Error", text: Arr.join(Arr.takeRight(Str.split(said, "\n"), 6), "\n"), error: true });
+  }
+
+  logged(entry: LogEntry): void {
+    if (!Arr.contains(this.logs, entry)) this.logs.push(entry);
 
     if (this.logs.length > 200) this.logs.splice(0, this.logs.length - 200);
   }
 
-  showOutput(cmd: string, text: string, ok: boolean) {
-    this.popups.confirm({ title: cmd, text: text.split("\n").slice(-14).join("\n") || "(no output)", error: !ok });
+  showOutput(cmd: string, text: string, ok: boolean): void {
+    const tail = Arr.join(Arr.takeRight(Str.split(text, "\n"), 14), "\n");
+
+    this.popups.confirm({ title: cmd, text: Str.isEmpty(tail) ? "(no output)" : tail, error: !ok });
   }
 
   /** A git action: runs, then reads everything again; a failure opens lazygit's error popup. */
-  exec(title: string, args: readonly string[], options: ExecOptions = {}) {
+  exec(title: string, args: readonly string[], options: ExecOptions = {}): void {
     const { row, ...opts } = options;
+    const g = this.git;
 
-    this.spawn(async () => {
-      const g = this.git;
+    if (g === null) return;
 
-      if (!g) return;
-
-      const r = await g.run(title, args, opts);
+    this.spawn(Effect.gen({ self: this }, function* () {
+      const r = yield* g.run(title, args, opts);
 
       if (!r.ok) this.error(r.err);
 
-      await loadAll(this);
-    }, row === undefined ? {} : { row });
+      yield* loadAll(this);
+    }), row === undefined ? {} : { row });
   }
 
-  copy(text: string, cx: Context) {
+  copy(text: string, cx: Context): void {
     cx.write_to_clipboard(text);
-    this.note(`Copied ${text.length > 40 ? `${text.slice(0, 40)}…` : text}`);
+    this.note(`Copied ${text.length > 40 ? `${Str.slice(0, 40)(text)}…` : text}`);
   }
 
-  ask(o: ConfirmOptions) { this.popups.confirm(o); }
+  ask(o: ConfirmOptions): void { this.popups.confirm(o); }
 
-  prompt(o: PromptOptions) { this.popups.prompt(o); }
+  prompt(o: PromptOptions): void { this.popups.prompt(o); }
 
-  menu(o: MenuOptions) { this.popups.menu(o.at === undefined ? { ...o, at: this.menuNear ?? null } : o); }
+  menu(o: MenuOptions): void { this.popups.menu(o.at === undefined ? { ...o, at: this.menuNear ?? null } : o); }
 
-  commitPopup(o: CommitOptions) { this.popups.commit(o); }
+  commitPopup(o: CommitOptions): void { this.popups.commit(o); }
 
-  commitWhat() {
-    const n = (this.data.status?.files ?? []).filter((f) => f.staged).length;
+  commitWhat(): string {
+    const n = Arr.filter(this.data.status?.files ?? [], (f) => f.staged).length;
 
     return `${n} file${n === 1 ? "" : "s"} staged · ${this.data.status?.head ?? "detached"}`;
   }
@@ -464,7 +463,7 @@ export default class GitView extends View {
   ctxOf(p: Panel): ListContext {
     const s = this.sub(p);
 
-    if (s) return s.kind;
+    if (s !== null) return s.kind;
 
     if (p === "status" || p === "stash") return p;
 
@@ -474,15 +473,15 @@ export default class GitView extends View {
   ctx(): ViewContext {
     if (this.popups.open) return this.popups.kind ?? "menu";
 
-    if (this.filtering) return "filter";
+    if (this.filtering !== null) return "filter";
 
-    if (this.focus === "main" || (this.show && this.show.kind !== "review")) return this.staging ? "staging" : "main";
+    if (this.focus === "main" || (this.show !== null && this.show.kind !== "review")) return this.staging === null ? "main" : "staging";
 
     return this.ctxOf(this.panel);
   }
 
   /** The newest drill-in list of a kind (enter on a branch: its commits). */
-  subOfKind(kind: Sub["kind"]) { return Object.values(this.subs).flat().reverse().find((x) => x.kind === kind) ?? null; }
+  subOfKind(kind: Sub["kind"]): Sub | null { return Option.getOrNull(Arr.findLast(Arr.flatten(Rec.values(this.subs)), (x) => x.kind === kind)); }
 
   /** The rows a list context shows (filtered). */
   items(ctx: ListContext): readonly Item[] {
@@ -505,7 +504,7 @@ export default class GitView extends View {
   }
 
   itemPath() {
-    if (this.staging) return this.staging.file.path;
+    if (this.staging !== null) return this.staging.file.path;
 
     const x = this.item();
 
@@ -520,7 +519,7 @@ export default class GitView extends View {
 
     const x = list[i];
 
-    return x ? [x] : [];
+    return x === undefined ? [] : [x];
   }
 
   selectRange(a: number, b: number) {
@@ -594,7 +593,7 @@ export default class GitView extends View {
     // cmd-enter submits a popup's form (keyName leaves cmd chords to the app).
     const k = this.popups.open && e.key === "enter" && e.modifiers.platform ? "cmd-enter" : keyName(e);
 
-    if (!k) return;
+    if (k === null || Str.isEmpty(k)) return;
 
     if (this.popups.open) {
       if (this.popups.key(k, e, cx)) {
@@ -605,7 +604,7 @@ export default class GitView extends View {
       return;
     }
 
-    if (this.filtering) {
+    if (this.filtering !== null) {
       if (k === "escape") {
         giveWay(this);
         cx.stop_propagation();
@@ -636,7 +635,7 @@ export default class GitView extends View {
 
     const b = lookup(ctx, k);
 
-    if (!b) return;
+    if (b === null) return;
 
     // A row's own action (one its right-click menu lists) opens its menu beside the row.
     this.menuNear = b.flags.has("menu") && isListContext(ctx) ? rowAnchor(this, ctx) : undefined;
@@ -675,14 +674,24 @@ export default class GitView extends View {
   // ---- drawing: panels
 
   override render() {
+    return drawing(() => this.drawWindow());
+  }
+
+  /** The window's tree, inside drawing() (draw.ts): what its rows share is read once. */
+  private drawWindow() {
     const t = theme();
 
-    const body = this.state === "loading" ? empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })
-      : this.state === "norepo" ? empty(t, "Not a git repository", `${this.folder ?? "This space has no folder"}: the git window shows the repo of the shown space's folder.`, { moon: 0 })
-      : windowBody(this, t);
+    this.nowS = runtime.now(Clock.currentTimeMillis) / 1000;
+
+    const body = Match.value(this.state).pipe(
+      Match.when("loading", () => empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })),
+      // git that couldn't run at all says why; otherwise what the window shows.
+      Match.when("norepo", () => empty(t, "Not a git repository", this.openError ?? `${this.folder ?? "This space has no folder"}: the git window shows the repo of the shown space's folder.`, { moon: 0 })),
+      Match.orElse(() => windowBody(this, t)),
+    );
 
     const endResize = (cx: Context) => {
-      if (this.resizing) {
+      if (this.resizing !== null) {
         this.resizing = null;
         this.saveState();
         cx.notify();
@@ -690,11 +699,12 @@ export default class GitView extends View {
     };
 
     const root = v_flex().id("git").relative().size_full().bg(t.background);
-    const framed = this.overlay ? root.border(1).border_color(t.muted) : root;
+    // The window's own frame: nocturne's 1 px edge, or upstream's rounded popover in a plain layout.
+    const framed = this.overlay === null ? root : (isDithered() ? root.border(1).border_color(t.muted) : frameBox(t, root));
     const handle = this.handle;
     const r = this.resizing;
 
-    const sized = (handle ? framed.track_focus(handle) : framed)
+    const sized = (handle === null ? framed : framed.track_focus(handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((drawn, cx) => {
@@ -706,24 +716,17 @@ export default class GitView extends View {
         }
       });
 
-    const cursor = r ? (r.axis === "x" ? sized.cursor_col_resize() : sized.cursor_row_resize()) : sized;
+    const cursor = r === null ? sized : r.axis === "x" ? sized.cursor_col_resize() : sized.cursor_row_resize();
 
-    const view = cursor
-      .on_mouse_move((e, cx) => {
-        this.mouse = { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) };
-
-        const now = this.resizing;
-
-        if (!now) return;
-
-        const moved = unzoom((now.axis === "x" ? e.position.x : e.position.y) - now.at) * now.sign;
-
-        now.set(Math.round(Math.min(now.max, Math.max(now.min, now.from + moved))));
-        cx.notify();
-      })
+    const moving = cursor
+      .on_mouse_move((e, cx) => { if (dragSplitter(this, e)) cx.notify(); })
       .on_mouse_up("left", (_e, cx) => endResize(cx))
-      .on_hover((h, cx) => { if (!h) endResize(cx); })
-      .child(windowHeader(this, t))
+      .on_hover((h, cx) => { if (!h) endResize(cx); });
+
+    // A plain layout's pane has a header naming the mod already: no title bar of its own there.
+    const headed = isDithered() || !inPane(this) ? moving.child(windowHeader(this, t)) : moving;
+
+    const view = headed
       .child(div().id("git-body").relative().flex_1().min_h(0).pt(4)
         .on_mouse_down("left", (_e, cx) => { this.handle?.focus(); cx.stop_propagation(); })
         .child(body))
@@ -731,7 +734,7 @@ export default class GitView extends View {
 
     const popup = this.popups.open ? this.popups.render(t, this.size) : null;
 
-    return popup ? view.child(popup) : view;
+    return popup === null ? view : view.child(popup);
   }
 }
 

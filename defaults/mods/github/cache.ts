@@ -9,16 +9,18 @@
 // nothing that looks like a credential is ever written (scrub).
 //
 // The file is JSON objects keyed by data (folders, repos, list filters, PR
-// numbers, run ids, boards): decoded by StoredDocSchema where it's read (parse)
+// numbers, run ids, boards): proven by isStoredDoc where it's read (parse)
 // and turned into Maps there (docOf); written back as objects (textOf). In
 // between the document is Maps. A piece of an entry (a list, a PR's view, a
 // run's jobs, a board) is known here only by when it was read (`at`): what
 // it holds is proven where a tab reads it back (prs.ts, actions.ts,
 // projects.ts hydrate), one piece at a time.
 
-import { Array as Arr, Option, Order, Predicate, Record as Rec, Schema, String as Str } from "effect";
+import type { Guarded } from "./guard.ts";
+import { isNumber, isString, literal, nullable, object, parseJson } from "./guard.ts";
+import type { Json, JsonMap } from "./guards.ts";
+import { isJson, isJsonList, isJsonObject, mapOf, maybe, toJson, toMap } from "./guards.ts";
 import type { Actor, Check, Job, Label, PrRow, PrView, ReviewComment, Run, Step } from "./model.ts";
-import { maybe } from "./model.ts";
 
 // 2: the repo is picked from the folder's remotes (remotes.ts); v1 could hold a fork's parent for it.
 export const VERSION = 2;
@@ -30,26 +32,22 @@ export const MAX_BYTES = 768 * 1024;
 export const LIMITS = { repos: 8, details: 16, jobs: 10, needs: 12, lists: 3, runs: 4, boards: 3 } as const;
 
 /** A piece of a repo's entry (a list, a PR's view, a run's jobs, a board): when it was read.
- *  What else it holds is decoded where it's read back (its other fields are kept as they are). */
-const PieceSchema = Schema.StructWithRest(Schema.Struct({ at: maybe(Schema.Finite) }), [Schema.Record(Schema.String, Schema.Unknown)]);
+ *  What else it holds is proven where it's read back. */
+export const isPiece = object({}, { at: maybe(isNumber) });
 
-/** A piece as the cache handles it: only its `at` is known here. */
-export interface Piece {
-  readonly at?: number | null | undefined;
-}
+export type Piece = Guarded<typeof isPiece>;
 
 /** A part's pieces by key (a filter, a PR number, a run id, a project id). */
 export type Pieces = ReadonlyMap<string, Piece>;
 
 /** A repo as the cache keeps it (slimRepo): parent, the repo it forks; child, the fork the window
  *  came from (p switched to the parent). */
-export const RepoRecordSchema = Schema.Struct({
-  owner: Schema.String, name: Schema.String, full: Schema.String, host: Schema.String, root: Schema.String, on: Schema.NullOr(Schema.String),
-  url: Schema.NullOr(Schema.String), base: Schema.NullOr(Schema.String), branch: Schema.NullOr(Schema.String), parent: Schema.NullOr(Schema.String),
-  child: Schema.NullOr(Schema.String),
+export const isRepoRecord = object({
+  owner: isString, name: isString, full: isString, host: isString, root: isString, on: nullable(isString), url: nullable(isString),
+  base: nullable(isString), branch: nullable(isString), parent: nullable(isString), child: nullable(isString),
 });
 
-export type RepoRecord = typeof RepoRecordSchema.Type;
+export type RepoRecord = Guarded<typeof isRepoRecord>;
 
 /** A repo's entry: when it was last opened, the repo, and each tab's pieces by key. */
 export interface Entry {
@@ -69,37 +67,27 @@ export interface Doc {
 
 // ---- the file: objects keyed by data, as they are on disk
 
-/** A JSON object keyed by data (ids, numbers, folders), each value a piece. */
-const stored = maybe(Schema.Record(Schema.String, PieceSchema));
+const stored = maybe(mapOf(isPiece));
 
 /** An entry as the file holds it. */
-const StoredEntrySchema = Schema.Struct({
-  at: maybe(Schema.Finite),
-  repo: maybe(RepoRecordSchema),
-  prs: maybe(Schema.Struct({ lists: stored, details: stored })),
-  actions: maybe(Schema.Struct({ runs: stored, jobs: stored, needs: stored })),
-  projects: maybe(Schema.Struct({ list: maybe(PieceSchema), boards: stored })),
+const isStoredEntry = object({}, {
+  at: maybe(isNumber),
+  repo: maybe(isRepoRecord),
+  prs: maybe(object({}, { lists: stored, details: stored })),
+  actions: maybe(object({}, { runs: stored, jobs: stored, needs: stored })),
+  projects: maybe(object({}, { list: maybe(isPiece), boards: stored })),
 });
 
-type StoredEntry = typeof StoredEntrySchema.Type;
+type StoredEntry = Guarded<typeof isStoredEntry>;
 
 /** The file. */
-const StoredDocSchema = Schema.Struct({
-  v: Schema.Literal(VERSION), folders: Schema.Record(Schema.String, Schema.String), repos: Schema.Record(Schema.String, StoredEntrySchema),
-});
+const isStoredDoc = object({ v: literal(VERSION), folders: mapOf(isString), repos: mapOf(isStoredEntry) });
 
-type StoredDoc = typeof StoredDocSchema.Type;
+type StoredDoc = Guarded<typeof isStoredDoc>;
 
-/** A JSON object keyed by data. */
-type JsonMap<T> = { readonly [key: string]: T };
+const maps = (json: JsonMap<Piece> | null | undefined): Pieces | undefined => (json ? toMap(json) : undefined);
 
-const toMap = <T>(json: JsonMap<T>): Map<string, T> => new Map(Rec.toEntries(json));
-
-const toJson = <T>(map: ReadonlyMap<string, T>): JsonMap<T> => Rec.fromEntries(Arr.fromIterable(map));
-
-const maps = (json: JsonMap<Piece> | null | undefined): Pieces | undefined => (json === null || json === undefined ? undefined : toMap(json));
-
-const jsons = (map: Pieces | undefined): JsonMap<Piece> | undefined => (map === undefined ? undefined : toJson(map));
+const jsons = (map: Pieces | undefined): JsonMap<Piece> | undefined => (map ? toJson(map) : undefined);
 
 /** An entry read from the file. */
 function entryOf(e: StoredEntry): Entry {
@@ -111,8 +99,8 @@ function entryOf(e: StoredEntry): Entry {
   };
 }
 
-/** An entry as the file holds it (its pieces as they are: JSON text keeps what they hold). */
-function storedEntry(e: Entry) {
+/** An entry as the file holds it. */
+function storedEntry(e: Entry): StoredEntry {
   return {
     at: e.at, repo: e.repo,
     prs: e.prs && { lists: jsons(e.prs.lists), details: jsons(e.prs.details) },
@@ -121,27 +109,19 @@ function storedEntry(e: Entry) {
   };
 }
 
-const docOf = (d: StoredDoc): Doc => ({ v: d.v, folders: toMap(d.folders), repos: new Map(Arr.map(Rec.toEntries(d.repos), ([k, e]) => [k, entryOf(e)] as const)) });
-
-/** A value as JSON text (what JSON.stringify writes: undefined fields left out); none for a value JSON can't hold. */
-const jsonText = Schema.encodeOption(Schema.fromJsonString(Schema.Unknown));
-
-/** JSON text as a JSON value; none for text that isn't JSON. */
-const jsonValue = Schema.decodeOption(Schema.fromJsonString(Schema.Json));
+const docOf = (d: StoredDoc): Doc => ({ v: d.v, folders: toMap(d.folders), repos: new Map([...toMap(d.repos)].map(([k, e]) => [k, entryOf(e)])) });
 
 /** The document as the file's text. */
-export const textOf = (d: Doc): string => Option.getOrElse(jsonText({
-  v: d.v, folders: toJson(d.folders), repos: toJson(new Map(Arr.map(Arr.fromIterable(d.repos), ([k, e]) => [k, storedEntry(e)] as const))),
-}), () => `{"v":${VERSION},"folders":{},"repos":{}}`);
+export const textOf = (d: Doc): string => JSON.stringify({ v: d.v, folders: toJson(d.folders), repos: toJson(new Map([...d.repos].map(([k, e]) => [k, storedEntry(e)]))) });
 
 /** An empty cache document. */
 export const blank = (): Doc => ({ v: VERSION, folders: new Map(), repos: new Map() });
 
-const storedDoc = Schema.decodeOption(Schema.fromJsonString(StoredDocSchema));
-
 /** A cache document read from disk, or a blank one when it's missing, broken or old. */
 export function parse(text: string | null | undefined): Doc {
-  return Option.match(storedDoc(text ?? ""), { onNone: blank, onSome: docOf });
+  const d = parseJson(text ?? "", isStoredDoc);
+
+  return d ? docOf(d) : blank();
 }
 
 /** What a key is made of: the machine and the repo (or the folder). */
@@ -158,7 +138,7 @@ export const folderKey = (folder: string | null | undefined, on: string | null |
 export function lookup(doc: Doc | null | undefined, folder: string | null | undefined, on: string | null | undefined): Entry | null {
   const key = doc?.folders.get(folderKey(folder, on));
 
-  return key === undefined ? null : doc?.repos.get(key) ?? null;
+  return key ? doc?.repos.get(key) ?? null : null;
 }
 
 /** A repo as gh.ts hands it over (what slimRepo keeps of it). */
@@ -184,12 +164,12 @@ export const entryFor = (repo: RepoLike): Entry => ({
 
 // ---- slim: only the fields the window shows
 
-const login = (a: Actor | null | undefined): Actor | null => (a === null || a === undefined ? null : { login: a.login ?? null });
+const login = (a: Actor | null | undefined): Actor | null => (a ? { login: a.login ?? null } : null);
 
 const label = (l: Label): Label => ({ name: l.name, color: l.color });
 
 export function slimRepo(r: RepoLike | null | undefined): RepoRecord | null {
-  if (r === null || r === undefined) return null;
+  if (!r) return null;
 
   // parent: the repo this one forks; child: the fork the window came from (p switched to the parent).
   return {
@@ -202,7 +182,7 @@ export function slimRepo(r: RepoLike | null | undefined): RepoRecord | null {
 export function slimPrRow(p: PrRow): PrRow {
   return {
     number: p.number, title: p.title, isDraft: p.isDraft, headRefName: p.headRefName, additions: p.additions, deletions: p.deletions,
-    reviewDecision: p.reviewDecision, updatedAt: p.updatedAt, rollup: p.rollup, tone: p.tone, author: login(p.author), labels: Arr.map(p.labels, label),
+    reviewDecision: p.reviewDecision, updatedAt: p.updatedAt, rollup: p.rollup, tone: p.tone, author: login(p.author), labels: p.labels.map(label),
   };
 }
 
@@ -213,17 +193,17 @@ const slimCheck = (c: Check): Check => ({
 
 /** A pull request as the right panel draws it (gh pr view's JSON). */
 export function slimPr(pr: PrView | null | undefined): PrView | null {
-  if (pr === null || pr === undefined) return null;
+  if (!pr) return null;
 
   return {
     number: pr.number, title: pr.title, body: pr.body, isDraft: pr.isDraft, baseRefName: pr.baseRefName, headRefName: pr.headRefName,
     reviewDecision: pr.reviewDecision, url: pr.url, createdAt: pr.createdAt, updatedAt: pr.updatedAt, additions: pr.additions,
     deletions: pr.deletions, changedFiles: pr.changedFiles,
     author: login(pr.author),
-    labels: Arr.map(pr.labels ?? [], label),
-    statusCheckRollup: Arr.map(pr.statusCheckRollup ?? [], slimCheck),
-    comments: Arr.map(pr.comments ?? [], (c) => ({ body: c.body, createdAt: c.createdAt, url: c.url, author: login(c.author) })),
-    reviews: Arr.map(pr.reviews ?? [], (r) => ({ state: r.state, body: r.body, submittedAt: r.submittedAt, author: login(r.author) })),
+    labels: (pr.labels ?? []).map(label),
+    statusCheckRollup: (pr.statusCheckRollup ?? []).map(slimCheck),
+    comments: (pr.comments ?? []).map((c) => ({ body: c.body, createdAt: c.createdAt, url: c.url, author: login(c.author) })),
+    reviews: (pr.reviews ?? []).map((r) => ({ state: r.state, body: r.body, submittedAt: r.submittedAt, author: login(r.author) })),
   };
 }
 
@@ -251,7 +231,7 @@ const slimStep = (s: Step): Step => ({
 export function slimJob(j: Job): Job {
   return {
     id: j.id, name: j.name, status: j.status, conclusion: j.conclusion, started_at: j.started_at, completed_at: j.completed_at,
-    html_url: j.html_url, steps: Arr.map(j.steps ?? [], slimStep),
+    html_url: j.html_url, steps: (j.steps ?? []).map(slimStep),
   };
 }
 
@@ -260,34 +240,27 @@ export function slimJob(j: Job): Job {
 const SECRET_KEY = /^(token|access_?token|refresh_?token|oauth_?token|authorization|auth|password|passwd|secret|client_?secret|private_?key|api_?key|cookie)$/i;
 const SECRET_TEXT = /\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g;
 
-const withoutUser = Str.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/i, "$1");
-
 /** A URL without user:password@ in it. */
 export function scrubUrl(u: string | null | undefined): string | null {
-  return u === null || u === undefined ? null : withoutUser(u);
+  return isString(u) ? u.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/i, "$1") : u ?? null;
 }
 
 /** A copy without credential-named keys, GitHub tokens or URL credentials. */
-export function scrub(v: Schema.Json): Schema.Json {
-  if (Str.isString(v)) return Str.replace(SECRET_TEXT, "[redacted]")(withoutUser(v));
+export function scrub(v: Json): Json {
+  if (isString(v)) return (scrubUrl(v) ?? "").replace(SECRET_TEXT, "[redacted]");
 
-  if (isJsonArray(v)) return Arr.map(v, scrub);
+  if (isJsonList(v)) return v.map(scrub);
 
-  if (v === null || Predicate.isNumber(v) || Predicate.isBoolean(v)) return v;
+  if (!isJsonObject(v)) return v;
 
-  return Rec.fromEntries(Arr.flatMap(Rec.toEntries(v), ([k, x]): [string, Schema.Json][] => (SECRET_KEY.test(k) ? [] : [[k, scrub(x)]])));
+  return Object.fromEntries(Object.entries(v).flatMap(([k, x]): [string, Json][] => (x === undefined || SECRET_KEY.test(k) ? [] : [[k, scrub(x)]])));
 }
-
-const isJsonArray = (v: Schema.Json): v is Schema.JsonArray => Arr.isArray(v);
 
 // ---- bounds
 
-/** Newest first, by when each was read. */
-const byNewest = <K, T extends Piece>(): Order.Order<readonly [K, T]> => Order.flip(Order.mapInput(Order.Number, (x: readonly [K, T]) => x[1].at ?? 0));
-
 /** Keeps the newest `n` entries of a map of { at } values. */
 export function newest<K, T extends Piece>(map: ReadonlyMap<K, T> | null | undefined, n: number): Map<K, T> {
-  return new Map(Arr.take(Arr.sort(Arr.fromIterable(map ?? []), byNewest<K, T>()), Math.max(0, n)));
+  return new Map([...(map ?? [])].sort((a, b) => (b[1].at ?? 0) - (a[1].at ?? 0)).slice(0, Math.max(0, n)));
 }
 
 /** How many of each piece prune keeps. */
@@ -301,13 +274,13 @@ function pruneEntry(e: Entry, limits: Limits): Entry {
   };
 
   // Projects (projects.ts): the picker's list and the last boards opened.
-  return e.projects === null || e.projects === undefined ? kept : { ...kept, projects: { list: e.projects.list ?? null, boards: newest(e.projects.boards, limits.boards) } };
+  return e.projects ? { ...kept, projects: { list: e.projects.list ?? null, boards: newest(e.projects.boards, limits.boards) } } : kept;
 }
 
 /** Bounds every part of the document by count: the last repos opened, and in each the newest details, jobs, needs, lists. */
 export function prune(doc: Doc, limits: Limits = LIMITS): Doc {
-  const repos = new Map(Arr.map(Arr.fromIterable(newest(doc.repos, limits.repos)), ([k, e]) => [k, pruneEntry(e, limits)] as const));
-  const folders = new Map(Arr.filter(Arr.fromIterable(doc.folders), ([, k]) => repos.has(k)));
+  const repos = new Map([...newest(doc.repos, limits.repos)].map(([k, e]) => [k, pruneEntry(e, limits)]));
+  const folders = new Map([...doc.folders].filter(([, k]) => repos.has(k)));
 
   return { v: VERSION, folders, repos };
 }
@@ -336,7 +309,7 @@ function withPieces(e: Entry, which: Which, map: Pieces): Entry {
   switch (which) {
     case "prs.details": return { ...e, prs: { ...e.prs, details: map } };
     case "prs.lists": return { ...e, prs: { ...e.prs, lists: map } };
-    case "projects.boards": return e.projects === null || e.projects === undefined ? e : { ...e, projects: { ...e.projects, boards: map } };
+    case "projects.boards": return e.projects ? { ...e, projects: { ...e.projects, boards: map } } : e;
     case "actions.jobs": return { ...e, actions: { ...e.actions, jobs: map } };
     case "actions.needs": return { ...e, actions: { ...e.actions, needs: map } };
     case "actions.runs": return { ...e, actions: { ...e.actions, runs: map } };
@@ -351,8 +324,7 @@ interface Droppable {
   readonly id?: string;
 }
 
-/** A droppable's key: its repo, kind and id, apart from each other whatever they hold. */
-const dropKey = (repo: string, which: Which | "", id: string): string => `${repo}\u0000${which}\u0000${id}`;
+const dropKey = (repo: string, which: Which | "", id: string) => JSON.stringify([repo, which, id]);
 
 /** The document without what was dropped. */
 function without(doc: Doc, dropped: ReadonlySet<string>): Doc {
@@ -365,7 +337,7 @@ function without(doc: Doc, dropped: ReadonlySet<string>): Doc {
 
     for (const which of WHICH) {
       const all = piecesOf(e, which);
-      const left = new Map(Arr.filter(Arr.fromIterable(all), ([id]) => !dropped.has(dropKey(k, which, id))));
+      const left = new Map([...all].filter(([id]) => !dropped.has(dropKey(k, which, id))));
 
       if (left.size !== all.size) kept = withPieces(kept, which, left);
     }
@@ -376,22 +348,6 @@ function without(doc: Doc, dropped: ReadonlySet<string>): Doc {
   return { ...doc, repos };
 }
 
-/** Everything fit could drop, oldest first: whole repos other than `keep`, and every piece. */
-function droppable(d: Doc, keep: string | null): Droppable[] {
-  const pieces: Droppable[] = [];
-
-  for (const [k, e] of d.repos) {
-    if (k !== keep) pieces.push({ at: e.at ?? 0, repo: k });
-
-    for (const which of WHICH) for (const [id, x] of piecesOf(e, which)) pieces.push({ at: x.at ?? 0, repo: k, which, id });
-  }
-
-  return Arr.sort(pieces, Order.mapInput(Order.Number, (p: Droppable) => p.at));
-}
-
-/** A text's length in UTF-8 bytes. */
-const bytes = (s: string): number => new TextEncoder().encode(s).length;
-
 /** The document as text under `max` bytes: drops the oldest pieces (whole repos
  *  other than `keep`, then details, jobs, needs, lists) until it fits. */
 export function fit(doc: Doc, max = MAX_BYTES, keep: string | null = null): string {
@@ -400,14 +356,22 @@ export function fit(doc: Doc, max = MAX_BYTES, keep: string | null = null): stri
 
   if (bytes(text) <= max) return text;
 
-  const pieces = droppable(d, keep);
+  const pieces: Droppable[] = [];
+
+  for (const [k, e] of d.repos) {
+    if (k !== keep) pieces.push({ at: e.at ?? 0, repo: k });
+
+    for (const which of WHICH) for (const [id, x] of piecesOf(e, which)) pieces.push({ at: x.at ?? 0, repo: k, which, id });
+  }
+
+  pieces.sort((a, b) => a.at - b.at);
 
   // Drop in growing batches: each round costs one stringify.
   const dropped = new Set<string>();
   const batch = Math.max(1, Math.ceil(pieces.length / 16));
 
   for (let i = 0; i < pieces.length; i += batch) {
-    for (const p of Arr.take(Arr.drop(pieces, i), batch)) dropped.add(dropKey(p.repo, p.which ?? "", p.id ?? ""));
+    for (const p of pieces.slice(i, i + batch)) dropped.add(dropKey(p.repo, p.which ?? "", p.id ?? ""));
 
     d = prune(without(d, dropped));
     text = textOf(d);
@@ -418,20 +382,38 @@ export function fit(doc: Doc, max = MAX_BYTES, keep: string | null = null): stri
   return textOf(blank());
 }
 
-const storedEntryOf = Schema.decodeUnknownOption(StoredEntrySchema);
+/** A text's length in UTF-8 bytes. */
+function bytes(s: string): number {
+  let n = 0;
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c < 0xdc00) {
+      // A surrogate pair: one character of 4 bytes.
+      n += 4;
+      i++;
+    } else n += 3;
+  }
+
+  return n;
+}
 
 /** Puts this window's entry for `repo` (seen in `folder`) into the document read from disk:
  *  other repos (other windows') stay as they are. Returns the text to write. */
-export function merge(disk: string | Doc | null | undefined, folder: string | null | undefined, entry: Entry, now: number, max = MAX_BYTES): string {
-  const d = Str.isString(disk) ? parse(disk) : disk ?? blank();
+export function merge(disk: string | Doc | null | undefined, folder: string | null | undefined, entry: Entry, now = Date.now(), max = MAX_BYTES): string {
+  const d = isString(disk) ? parse(disk) : disk ?? blank();
   const key = repoKey(entry.repo);
-  // Written as the file holds it, read back as JSON, scrubbed, and decoded as an entry before it goes in.
-  const clean = Option.flatMap(Option.flatMap(Option.flatMap(jsonText({ ...storedEntry(entry), at: now }), jsonValue), (json) => Option.some(scrub(json))), storedEntryOf);
+  // Written as the file holds it, read back as JSON, scrubbed, and proven an entry before it goes in.
+  const json = parseJson(JSON.stringify({ ...storedEntry(entry), at: now }), isJson);
+  const clean = json === undefined ? undefined : scrub(json);
 
-  if (Option.isNone(clean)) return fit(d, max, key);
+  if (!isStoredEntry(clean)) return fit(d, max, key);
 
-  const repos = new Map(d.repos).set(key, entryOf(clean.value));
-  const folders = folder === null || folder === undefined || folder === "" ? d.folders : new Map(d.folders).set(folderKey(folder, entry.repo?.on), key);
+  const repos = new Map(d.repos).set(key, entryOf(clean));
+  const folders = folder ? new Map(d.folders).set(folderKey(folder, entry.repo?.on), key) : d.folders;
 
   return fit({ v: VERSION, folders, repos }, max, key);
 }

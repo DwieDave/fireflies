@@ -171,12 +171,12 @@ export function addDraft(proj: Projects, cx: Context): void {
   }, `Added “${title}”${col ? ` to ${col.name}` : ""}`, cx);
 }
 
-export function archive(proj: Projects, item: Item, cx: Context): void {
+export function archive(proj: Projects, item: Item, _cx: Context): void {
   const b = proj.board();
 
   if (!b) return;
 
-  proj.app.ask(`Archive ${label(item)} “${item.content.title}” from ${b.project.title}?`, () => {
+  proj.app.ask(`Archive ${label(item)} “${item.content.title}” from ${b.project.title}?`, (cx) => {
     const lay = proj.lay();
     const g = lay ? proj.grid(lay) : [], a = find(g, item.id);
     const next = a ? g[a.col]?.[a.row + 1] ?? g[a.col]?.[a.row - 1] : null;

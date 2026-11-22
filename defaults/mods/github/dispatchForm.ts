@@ -15,7 +15,7 @@ import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
 import { ghJson, ghRun, api, fileAt, plain } from "./gh.ts";
 import type { Run } from "./model.ts";
-import { isEnvironments, isNamedList, isRunList, isWorkflows } from "./model.ts";
+import { isEnvironments, isNamedList, isRunList, isWorkflows, soon } from "./model.ts";
 import { slug } from "./remotes.ts";
 import type { Input, InputType } from "./dispatch.ts";
 import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.ts";
@@ -26,7 +26,7 @@ import type { Note } from "./kit.ts";
 import { panel, empty, band, noteOf } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
-const WAIT = 2000, WAIT_FOR = 120000; // how often, and how long, to look for the new run
+const WAIT_FOR = 120000; // how long to look for the new run (how often: model.ts soon, a backoff)
 
 /** A field's kind for an input's type. */
 function kindOf(type: InputType): "text" | "number" | "toggle" | "choice" {
@@ -199,7 +199,7 @@ export class DispatchForm {
   load(cx: Context): void {
     const repo = this.repo;
 
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       try {
         const list = (await ghJson(repo, ["workflow", "list", "--json", "id,name,path,state", "--limit", "100"], isWorkflows)) ?? [];
 
@@ -227,7 +227,7 @@ export class DispatchForm {
       }
     });
 
-    this.app.spawn(cx, async () => {
+    this.app.spawn(cx, async (cx) => {
       const [b, t] = await Promise.all([
         api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
         api(repo, `repos/${repo.full}/tags?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
@@ -372,16 +372,22 @@ export class DispatchForm {
     return r.ok ? { ok: true, workflow: w, ref, since, known } : { ok: false, err: r.err };
   }
 
-  /** Sent: the form goes; the run is looked for every couple of seconds and selected when GitHub lists it. */
+  /** Sent: the form goes; the run is looked for with a backoff (1, 2, 3, 5, 8 s, then every 10 s,
+   *  for WAIT_FOR at most, never once the window closed) and selected when GitHub lists it. */
   wait(r: Dispatched, cx: Context): void {
     const a = this.actions;
 
     a.closeForm();
     a.waiting = { name: r.workflow.name, ref: r.ref, since: r.since };
     this.app.note = noteOf(`Started ${r.workflow.name} on ${r.ref}; waiting for its run…`, "working");
-    this.app.spawn(cx, async () => {
-      while (Date.now() - r.since < WAIT_FOR && !this.app.closed && a.waiting?.since === r.since) {
-        await new Promise<void>((ok) => cx.timer.after(WAIT, () => ok()));
+    // The task's own cx: the one handed in belongs to a call that has returned by the first await.
+    this.app.spawn(cx, async (cx) => {
+      for (let n = 0; Date.now() - r.since < WAIT_FOR && !this.app.closed && a.waiting?.since === r.since; n++) {
+        const wait = Math.min(soon(n), WAIT_FOR - (Date.now() - r.since)); // the last look at the bound
+
+        await new Promise<void>((ok) => cx.timer.after(wait, () => ok()));
+
+        if (this.app.closed || a.waiting?.since !== r.since) return;
 
         const run = newRun(await this.runsOf(r.workflow), r);
 
