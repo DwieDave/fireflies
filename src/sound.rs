@@ -26,7 +26,7 @@ const PLAYERS: &[(&str, &[&str])] = &[
 #[cfg(not(windows))]
 const PLAYER_LIMIT: Duration = Duration::from_secs(15);
 
-/// `done`, `blocked`, or a file (absolute, or relative to ~/.config/herdr-app). Off the UI thread.
+/// `done`, `blocked`, or a file (absolute, or relative to ~/.config/fireflies/app). Off the UI thread.
 pub fn play(sound: &str) {
     if std::env::var_os("HERDR_APP_NO_SOUND").is_some() {
         return;

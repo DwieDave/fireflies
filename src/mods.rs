@@ -1,4 +1,4 @@
-//! Mods: folders of JavaScript under ~/.config/herdr-app/mods that agents write and
+//! Mods: folders of JavaScript under ~/.config/fireflies/app/mods that agents write and
 //! Fireflies runs live (gpui-shell), plus the `herdr` module they import.
 
 use crate::{layout::Node, links};

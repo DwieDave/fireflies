@@ -56,7 +56,7 @@ const BAR_DROP = ["⇥ but…", "g go to", "p peek", "x put away", "↑↓ choos
 
 const TITLE = { permission: "Permissions", question: "Questions", other: "Needs a look" } as const satisfies { readonly [K in ItemType]: string };
 const KIND_COLOR = { yes: "done", always: "accent", auto: "working", no: "blocked" } as const satisfies { readonly [K in OptionKind]: keyof Theme };
-const HOOK_DOC = "Claude Code's hook: see ~/.config/herdr-app/AGENTS.md, Notifications";
+const HOOK_DOC = "Claude Code's hook: see ~/.config/fireflies/app/AGENTS.md, Notifications";
 
 /** The overview's props: the terminal it opens on, its most height, its overlay. */
 const isOverviewProps = object({}, { terminal: nullable(isString), most: isNumber, overlay: isString });

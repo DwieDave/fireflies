@@ -14,6 +14,12 @@ mod. Nothing in the default interface is special: the spaces sidebar, the
 agents list, the tab bar, menus, dialogs and notifications are built
 from the same parts you have.
 
+This folder is `~/.config/fireflies/app` (`$HERDR_APP_HOME` when that is
+set). Herdr kept it in `~/.config/herdr-app`: Fireflies moves it here on its
+first start and leaves a link at the old name, so scripts, older tools and
+the Herdr iOS app that name the old folder reach the same files. Write new
+paths with the new name.
+
 ## Two programs
 
 - **`herdr-app`**, the window: spaces, tabs, layouts, panels.
@@ -728,9 +734,10 @@ the highlighted line shows where it will land.
   agents run on; elsewhere, copy the script there):
   ```json
   { "hooks": { "PermissionRequest": [ { "hooks": [ { "type": "command",
-    "command": "~/.config/herdr-app/mods/notifications/bin/claude-hook", "timeout": 5 } ] } ] } }
+    "command": "~/.config/fireflies/app/mods/notifications/bin/claude-hook", "timeout": 5 } ] } ] } }
   ```
-  It writes `${XDG_STATE_HOME:-~/.local/state}/herdr-app/notify/<terminal>.claude.json`.
+  It writes `${XDG_STATE_HOME:-~/.local/state}/fireflies/notify/<terminal>.claude.json`
+  (Herdr's copy of the hook wrote `.../herdr-app/notify/`; the app reads both).
   Without it, and for other agents (Codex, pi, opencode, ...), a request shows
   herdr-core's words for it and the end of the agent's screen, with peek and
   go to; an agent family gets exact answers by an adapter in the mod's
@@ -1249,7 +1256,7 @@ the highlighted line shows where it will land.
   and says so). One note per repository, found by git's common dir
   (`git rev-parse --git-common-dir`), so every worktree of a repository opens
   the same note; a folder outside git gets its own. It lives at
-  `~/.config/herdr-app/scratchpad/<repo>-<hash>.md` (the app's folder;
+  `~/.config/fireflies/app/scratchpad/<repo>-<hash>.md` (the app's folder;
   `scratchpad/index.json` maps each file to its repository: `{ name, dir,
   repo, machine? }`). It saves itself: 600 ms after the last key, and at once
   when its pane or tab closes; it never shows unsaved or asks on close, and
@@ -1987,7 +1994,7 @@ sidebar, tabstrip, header, parked, toasts, menus, panes).
 Nocturne's usage (the sidebar's USAGE section and the usage pane)
 reads Claude's or Codex's limits with this machine's login: one reading per
 machine, whatever number of panes, windows or apps show it. The answer, its
-time and any back-off are kept in `~/.cache/herdr-app/usage-<provider>.json`
+time and any back-off are kept in `~/.cache/fireflies/usage-<provider>.json`
 (`$XDG_CACHE_HOME`, or `HERDR_USAGE_DIR`), and one app at a time asks. Only
 the picked provider is asked: every 3 min while a usage pane is shown in the
 active window, every 10 min while an agent works or the window is active,
@@ -2607,7 +2614,7 @@ list or a machine's rename first.
   When an agent needs the person, or finishes while they aren't looking at
   it, Fireflies plays a sound and (unless they're looking) posts a toast that
   goes there when clicked. `done` / `blocked` replace the bundled MP3s
-  (path absolute or relative to `~/.config/herdr-app`). Changes apply live,
+  (path absolute or relative to `~/.config/fireflies/app`). Changes apply live,
   including the Play buttons in Settings > Alerts.
 - `core`: the herdr-core binary to use, when it isn't where Fireflies looks
   (PATH, the login shell's PATH, `~/.local/bin`, Homebrew, mise, Nix,
@@ -2801,7 +2808,7 @@ has 124 programs (agents, editors, runtimes, tools, databases, infra);
 ## Mods: `mods/<name>/`
 
 ```
-~/.config/herdr-app/mods/<name>/
+~/.config/fireflies/app/mods/<name>/
   main.js       the mod's view, if it has one (or main.ts, TypeScript: see below; main.js wins if both)
   link.js       the terminal link handler, if it has one
   mod.json      where it first appears: { "place": "right" | "left" | "top" | "bottom" | "none", "size": 320 }
@@ -2881,7 +2888,7 @@ has 124 programs (agents, editors, runtimes, tools, databases, infra);
   timers keep running while hidden, so poll gently. Another layout starts its
   mods fresh (pane mods belong to their tab and stay); a block removed or given
   another mod or props starts over. `<mod>.<command>` reaches shown copies only.
-- Images and SVGs are referenced from `~/.config/herdr-app`:
+- Images and SVGs are referenced from `~/.config/fireflies/app`:
   `image("mods/<name>/logo.svg")` (full color), `svg("mods/<name>/icon.svg")`
   (tinted with the text color). Saving an asset under `mods/` updates every
   mod showing it, including images that were missing or invalid on first load.
@@ -2930,7 +2937,7 @@ the click, shows a toast and appears in `herdr-app status`.
 ### Check before you finish
 
 ```sh
-herdr-app check ~/.config/herdr-app/mods/<name>
+herdr-app check ~/.config/fireflies/app/mods/<name>
 ```
 
 Loads and renders the mod's view if it has one. It checks link rules and
@@ -3325,7 +3332,7 @@ All of it is in `herdr.d.ts`. In short:
 Mods are trusted code: commands and network access (including `fetch`) are unrestricted.
 Other built-ins: `localStorage` (per mod and props, shared by its copies with the same props: a copy
 opened again with the same props, in any key order, after a restart too, finds what it kept), `console.log`, `fetch`,
-`import * as fs from "fs/promises"` (read in home, write under `~/.config/herdr-app`).
+`import * as fs from "fs/promises"` (read in home, write under `~/.config/fireflies/app`).
 
 ## herdr-core (`hc`)
 

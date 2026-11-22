@@ -34,7 +34,7 @@ import { edge } from "@fireflies/tones";
 
 const W = (name: string) => `mods/workspace-chrome/${name}.svg`;
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
-const ASK = "Read ~/.config/herdr-app/AGENTS.md, then tell me what you can change in Fireflies.";
+const ASK = "Read ~/.config/fireflies/app/AGENTS.md, then tell me what you can change in Fireflies.";
 
 /** shared() key: the update note's `dismissal` someone closed. */
 export const UPDATE_DISMISSED = "nocturne.update-dismissed";
