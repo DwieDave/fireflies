@@ -50,7 +50,7 @@ import type { InputState } from "gpui-base";
 import { v_flex } from "gpui-base";
 import { theme, shared, setShared, home } from "herdr";
 import type { Theme } from "herdr";
-import { Array as Arr, Clock, Effect, String as Str } from "effect";
+import { Array as Arr, Clock, Effect, Match, Option, Record as Rec, String as Str } from "effect";
 import { readShared, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
 import type { Git, GitError, LogEntry } from "./git.ts";
@@ -462,7 +462,7 @@ export default class GitView extends View {
   ctxOf(p: Panel): ListContext {
     const s = this.sub(p);
 
-    if (s) return s.kind;
+    if (s !== null) return s.kind;
 
     if (p === "status" || p === "stash") return p;
 
@@ -472,15 +472,15 @@ export default class GitView extends View {
   ctx(): ViewContext {
     if (this.popups.open) return this.popups.kind ?? "menu";
 
-    if (this.filtering) return "filter";
+    if (this.filtering !== null) return "filter";
 
-    if (this.focus === "main" || (this.show && this.show.kind !== "review")) return this.staging ? "staging" : "main";
+    if (this.focus === "main" || (this.show !== null && this.show.kind !== "review")) return this.staging === null ? "main" : "staging";
 
     return this.ctxOf(this.panel);
   }
 
   /** The newest drill-in list of a kind (enter on a branch: its commits). */
-  subOfKind(kind: Sub["kind"]) { return Object.values(this.subs).flat().reverse().find((x) => x.kind === kind) ?? null; }
+  subOfKind(kind: Sub["kind"]): Sub | null { return Option.getOrNull(Arr.findLast(Arr.flatten(Rec.values(this.subs)), (x) => x.kind === kind)); }
 
   /** The rows a list context shows (filtered). */
   items(ctx: ListContext): readonly Item[] {
@@ -503,7 +503,7 @@ export default class GitView extends View {
   }
 
   itemPath() {
-    if (this.staging) return this.staging.file.path;
+    if (this.staging !== null) return this.staging.file.path;
 
     const x = this.item();
 
@@ -518,7 +518,7 @@ export default class GitView extends View {
 
     const x = list[i];
 
-    return x ? [x] : [];
+    return x === undefined ? [] : [x];
   }
 
   selectRange(a: number, b: number) {
@@ -592,7 +592,7 @@ export default class GitView extends View {
     // cmd-enter submits a popup's form (keyName leaves cmd chords to the app).
     const k = this.popups.open && e.key === "enter" && e.modifiers.platform ? "cmd-enter" : keyName(e);
 
-    if (!k) return;
+    if (k === null || Str.isEmpty(k)) return;
 
     if (this.popups.open) {
       if (this.popups.key(k, e, cx)) {
@@ -603,7 +603,7 @@ export default class GitView extends View {
       return;
     }
 
-    if (this.filtering) {
+    if (this.filtering !== null) {
       if (k === "escape") {
         giveWay(this);
         cx.stop_propagation();
@@ -634,7 +634,7 @@ export default class GitView extends View {
 
     const b = lookup(ctx, k);
 
-    if (!b) return;
+    if (b === null) return;
 
     // A row's own action (one its right-click menu lists) opens its menu beside the row.
     this.menuNear = b.flags.has("menu") && isListContext(ctx) ? rowAnchor(this, ctx) : undefined;
@@ -682,12 +682,15 @@ export default class GitView extends View {
 
     this.nowS = runtime.now(Clock.currentTimeMillis) / 1000;
 
-    const body = this.state === "loading" ? empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })
-      : this.state === "norepo" ? empty(t, "Not a git repository", `${this.folder ?? "This space has no folder"}: the git window shows the repo of the shown space's folder.`, { moon: 0 })
-      : windowBody(this, t);
+    const body = Match.value(this.state).pipe(
+      Match.when("loading", () => empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })),
+      // git that couldn't run at all says why; otherwise what the window shows.
+      Match.when("norepo", () => empty(t, "Not a git repository", this.openError ?? `${this.folder ?? "This space has no folder"}: the git window shows the repo of the shown space's folder.`, { moon: 0 })),
+      Match.orElse(() => windowBody(this, t)),
+    );
 
     const endResize = (cx: Context) => {
-      if (this.resizing) {
+      if (this.resizing !== null) {
         this.resizing = null;
         this.saveState();
         cx.notify();
@@ -695,11 +698,11 @@ export default class GitView extends View {
     };
 
     const root = v_flex().id("git").relative().size_full().bg(t.background);
-    const framed = this.overlay ? root.border(1).border_color(t.muted) : root;
+    const framed = this.overlay === null ? root : root.border(1).border_color(t.muted);
     const handle = this.handle;
     const r = this.resizing;
 
-    const sized = (handle ? framed.track_focus(handle) : framed)
+    const sized = (handle === null ? framed : framed.track_focus(handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((drawn, cx) => {
@@ -711,7 +714,7 @@ export default class GitView extends View {
         }
       });
 
-    const cursor = r ? (r.axis === "x" ? sized.cursor_col_resize() : sized.cursor_row_resize()) : sized;
+    const cursor = r === null ? sized : r.axis === "x" ? sized.cursor_col_resize() : sized.cursor_row_resize();
 
     const view = cursor
       .on_mouse_move((e, cx) => {
@@ -719,7 +722,7 @@ export default class GitView extends View {
 
         const now = this.resizing;
 
-        if (!now) return;
+        if (now === null) return;
 
         const moved = unzoom((now.axis === "x" ? e.position.x : e.position.y) - now.at) * now.sign;
 
@@ -736,7 +739,7 @@ export default class GitView extends View {
 
     const popup = this.popups.open ? this.popups.render(t, this.size) : null;
 
-    return popup ? view.child(popup) : view;
+    return popup === null ? view : view.child(popup);
   }
 }
 

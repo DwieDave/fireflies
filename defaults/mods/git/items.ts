@@ -157,7 +157,7 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
 
         if (s?.kind === "commitFiles") {
           return treeOf(v, s.items, () => {
-            const rows: readonly TreeRow<CommitFile>[] = v.tree ? fileTree<CommitFile>(s.items, v.collapsed) : s.items.map((f: CommitFile) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
+            const rows: readonly TreeRow<CommitFile>[] = v.tree ? fileTree<CommitFile>(s.items, v.collapsed) : Arr.map(s.items, (f: CommitFile) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
 
             return rows;
           });
