@@ -412,6 +412,9 @@ Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
 Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
 graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
+It opens with the keyboard in Files (a move between window and pane, and a
+pane's restart, bring back what that copy showed). In the Files tree a range
+(`v`) over every file of a folder highlights the folder's row too.
 Its keys are lazygit's defaults (`?` lists them in the window; `+` / `_`
 widen the focused panel: half gives Commits a wide graph column, then full).
 History comes in pages, as in lazygit: Commits (and a branch's commits)

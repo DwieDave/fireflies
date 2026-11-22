@@ -226,8 +226,12 @@ export default class GitView extends View {
 
     const kept: Kept = this.folder === null ? {} : readSharedMap(shared, STATE).get(this.folder) ?? {};
 
-    this.panel = kept.panel ?? "files";
-    this.tabOf = { files: kept.tabOf?.files ?? "files", branches: kept.tabOf?.branches ?? "branches", commits: kept.tabOf?.commits ?? "commits" };
+    // Opening starts in the Files panel's files tab, whatever panel the folder's
+    // window had last (Developer: "Opening it should favor the files section");
+    // a move between window and pane and a pane's restart bring back their
+    // own (takeCopy, place.ts).
+    this.panel = "files";
+    this.tabOf = { files: "files", branches: kept.tabOf?.branches ?? "branches", commits: kept.tabOf?.commits ?? "commits" };
     this.mode = kept.mode ?? "normal";
     this.tree = kept.tree ?? true;
     this.showLog = kept.showLog ?? true;
