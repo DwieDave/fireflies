@@ -11,8 +11,8 @@ import { div } from "gpui-kit";
 import type { Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
+import { Predicate } from "effect";
 import type { Effect } from "effect";
 import type { GithubServices } from "./fx.ts";
 import { readRefs, readWorkflows, reread, sendDispatch, waitForRun } from "./dispatch-form-reads.ts";
@@ -184,7 +184,7 @@ export class DispatchForm {
 
       if (kind === "toggle") return { id, label: i.name, kind, required: false, group, half: true, value: start === true, note: i.description || "on / off", hint: "" };
 
-      const value = isString(start) ? start : "";
+      const value = Predicate.isString(start) ? start : "";
 
       if (kind === "text" || kind === "number") return { id, label: i.name, kind, required: i.required, group, half: kind !== "text", value, hint };
 
