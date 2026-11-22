@@ -203,3 +203,32 @@ priority = -1
 [lints.rust.unexpected_cfgs]
 level = "allow"
 priority = 0
+
+[target.'cfg(target_os = "ios")'.dependencies.futures]
+version = "0.3"
+
+[target.'cfg(target_os = "ios")'.dependencies.raw-window-handle]
+version = "0.6"
+
+[target.'cfg(target_os = "ios")'.dependencies.uuid]
+version = "1"
+
+[target.'cfg(target_os = "ios")'.dependencies.core-text]
+version = "21"
+
+[target.'cfg(target_os = "ios")'.dependencies.font-kit]
+version = "0.14.1-zed"
+package = "zed-font-kit"
+
+[target.'cfg(target_os = "ios")'.dependencies.pathfinder_geometry]
+version = "0.5"
+
+[target.'cfg(target_os = "ios")'.dependencies.smallvec]
+version = "1.6"
+
+[target.'cfg(target_os = "ios")'.dependencies.collections]
+version = "=0.3.8"
+package = "gpui-pre-collections"
+
+[target.'cfg(target_os = "ios")'.dependencies.core-foundation-sys]
+version = "0.8"
