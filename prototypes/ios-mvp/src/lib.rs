@@ -17,6 +17,44 @@ mod app {
 
     struct Counter {
         taps: usize,
+        /// The Effect mod's view, or why it failed, and how long its load took.
+        effect_mod: Result<gpui::Entity<gpui_shell::ScriptView>, String>,
+        load_ms: u128,
+    }
+
+    /// `defaults/lib` (copied into the bundle by build.sh) served to mods by
+    /// name, as src/mods.rs `export_libraries` does on the desktop.
+    fn export_libraries(lib: &std::path::Path) {
+        fn walk(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<(String, String)>) {
+            for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, root, out);
+                    continue;
+                }
+                let name = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                let code = (name.ends_with(".ts") && !name.ends_with(".d.ts")) || name.ends_with(".js");
+                if code {
+                    out.push((name, std::fs::read_to_string(&path).unwrap_or_default()));
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(lib, lib, &mut files);
+        gpui_shell::library_modules::export_libraries(files);
+    }
+
+    fn mount_effect_mod(window: &mut Window, cx: &mut App) -> (Result<gpui::Entity<gpui_shell::ScriptView>, String>, u128) {
+        let bundle = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+        export_libraries(&bundle.join("lib"));
+        let started = std::time::Instant::now();
+        let result = (|| {
+            let runtime = gpui_shell::ShellRuntime::new(cx)?;
+            let app = runtime.load_application(&bundle.join("mod"), "main.ts")?;
+            runtime.mount_application(&app, window, cx)
+        })()
+        .map_err(|e| format!("{e:#}"));
+        (result, started.elapsed().as_millis())
     }
 
     impl Render for Counter {
@@ -45,6 +83,11 @@ mod app {
                         })),
                 )
                 .child(div().text_size(px(20.)).child(format!("taps: {}", self.taps)))
+                .child(match &self.effect_mod {
+                    Ok(view) => div().w(px(330.)).child(view.clone()),
+                    Err(e) => div().w(px(330.)).text_size(px(12.)).text_color(rgb(0xff6b6b)).child(e.clone()),
+                })
+                .child(div().text_size(px(13.)).text_color(rgb(0x8b93a7)).child(format!("effect + kit + mod loaded in {} ms", self.load_ms)))
                 .child(
                     div()
                         .flex()
@@ -61,7 +104,10 @@ mod app {
         unsafe { host::attach_layer(layer, width, height, scale) };
         let platform = Rc::new(IosPlatform::new(Arc::new(IosTextSystem::new())));
         let handle = Application::with_platform(platform).run_embedded(move |cx: &mut App| {
-            cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| Counter { taps }))
+            cx.open_window(WindowOptions::default(), |window, cx| {
+                let (effect_mod, load_ms) = mount_effect_mod(window, cx);
+                cx.new(|_| Counter { taps, effect_mod, load_ms })
+            })
                 .expect("open the window");
         });
         APP.with(|a| *a.borrow_mut() = Some(handle));
