@@ -17,6 +17,7 @@ mod lsp;
 mod markdown;
 mod model;
 mod pane_resize;
+mod paths;
 mod mirror;
 mod mirror_sync;
 mod place;

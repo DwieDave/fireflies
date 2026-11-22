@@ -91,11 +91,9 @@ pub fn note_fonts(cx: &gpui::App) {
     *FONTS.lock().unwrap() = names;
 }
 
-/// The app's home: `$HERDR_APP_HOME` (tests, experiments), else
-/// `$XDG_CONFIG_HOME/herdr-app`, else `~/.config/herdr-app`, on every OS.
+/// The app's home (crate::paths decides where it is).
 pub fn app_dir() -> PathBuf {
-    let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
-    env("HERDR_APP_HOME").unwrap_or_else(|| env("XDG_CONFIG_HOME").unwrap_or_else(|| home().join(".config")).join("herdr-app"))
+    crate::paths::app_home()
 }
 
 pub fn mods_dir() -> PathBuf {
