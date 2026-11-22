@@ -17,6 +17,7 @@ import type { DiffRow } from "./patch.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "@fireflies/layout-look";
+import { dithered, kbd, panel as card, rule, veil } from "@fireflies/look";
 
 /** A changed line's tint: added green, removed red; none for the rest. */
 function tintOf(t: Theme, kind: DiffRow["kind"]): Color | null {
@@ -72,6 +73,10 @@ export function zoom() {
 
 export const unzoom = (v: number) => v / zoom();
 
+/** Whether this draw is nocturne's dithered look (read once per draw), else
+ *  the plain one (herdr-app's default layout: docs/plain-look.md). */
+export const isDithered = (): boolean => frame?.dithered ?? dithered();
+
 export const unzoomSize = (size: { readonly width: number; readonly height: number }) => ({ width: unzoom(size.width), height: unzoom(size.height) });
 
 /** A layer filling its parent with a 50% checker dither (Retina on macOS). */
@@ -94,6 +99,8 @@ export const POPUP_SCRIM: Color = "#0000008c";
 
 /** The layer that dims the window under an in-window popup (POPUP_SCRIM). */
 export function popupScrim(id: string) {
+  if (!isDithered()) return veil(id);
+
   return div().id(id).absolute().inset_0().child(dither(POPUP_SCRIM, 1));
 }
 
@@ -153,6 +160,9 @@ export interface PanelOptions {
  *  accent when it has the keyboard; `right` (a chip) and `foot` cut into the
  *  top and bottom edges on the right. */
 export function panel(t: Theme, id: string, title: readonly Element[], active: boolean, body: Element, options: PanelOptions = {}) {
+  // A plain layout's panel is a card (@fireflies/look).
+  if (!isDithered()) return card(t, id, title, active, body, options);
+
   const { foot = null, right = null, onTitle = null } = options;
   const edge = active ? t.accent : edgeTone(t);
   // A long title ends in an ellipsis inside the frame, before the right chip.
@@ -167,6 +177,9 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
 
 /** A selected row's band: dither with an accent edge (dimmer off focus). */
 export function band(t: Theme, active: boolean) {
+  // Plain: the theme's selected fill (hover's off focus), rounded, as look's lit().
+  if (!isDithered()) return [div().absolute().inset_0().rounded(6).bg(active ? t.selected : t.hover)];
+
   return [dither(active ? edgeTone(t) : `${edgeTone(t)}88`, 1), div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted)];
 }
 
@@ -177,8 +190,9 @@ export function chip(t: Theme, id: string, label: string | Element, on: boolean,
     .on_mouse_down("left", stop)
     .on_click((e, cx) => { cx.stop_propagation(); action(e, cx); cx.notify(); });
 
-  return (on ? el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : el)
-    .child(div().relative().child(label));
+  const pressed = (): Element => (isDithered() ? el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : el.rounded(5).bg(t.selected));
+
+  return (on ? pressed() : el).child(div().relative().child(label));
 }
 
 /** One entry of the options bar: [key, what it does] or, with a third item, a context's quiet name. */
@@ -205,12 +219,12 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, on
       .hover((s) => s.bg(`${edgeTone(t)}66`))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { onPress?.(key, cx); cx.notify(); })
-      .child(div().text_color(t.accent).child(key))
+      .child(isDithered() ? div().text_color(t.accent).child(key) : kbd(t, key))
       .child(div().text_color(t.dim).child(what));
   };
 
   const bar = h_flex().id("git-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
+    .child(isDithered() ? div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)) : rule(t, "top"))
     .children(Arr.map(list, hint("hint")))
     .child(div().flex_1())
     .children(Arr.map(ends, hint("end")));
@@ -232,7 +246,8 @@ export function empty(t: Theme, title: string, hint: string | null = null, optio
   const { moon = 8, small = false } = options;
   const note = v_flex().size_full().items_center().justify_center().gap(small ? 4 : 10).px(16).text_size(11);
 
-  const lit = small ? note : note.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.muted).opacity(0.6)
+  // The moon is nocturne's art: a plain layout's note is the words alone.
+  const lit = small || !isDithered() ? note : note.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.muted).opacity(0.6)
     .loop("opacity", { from: 0.35, to: 0.7, period: 5200 }));
 
   const titled = lit.child(div().text_center().text_color(small ? t.dim : t.foreground).child(title));
@@ -281,10 +296,14 @@ export function graphCell(t: Theme, row: GraphRow, width: number, options: CellO
   const size = big ? 9 : 7;
   const nx = cx(n.lane) + 1 - Math.floor(size / 2), ny = mid + 1 - Math.floor(size / 2);
 
-  if (n.merge) kids.push(div().absolute().left(nx).top(ny).size(size).bg(t.background).border(2).border_color(color));
-  else kids.push(big ? svg(`${ART}/pip.svg`).absolute().left(nx).top(ny).size(size).text_color(color) : div().absolute().left(nx).top(ny).size(size).bg(color));
+  // Plain: round nodes and ring, no pixel art (the lanes stay as they are).
+  const round = (el: Element, d: number): Element => (isDithered() ? el : el.rounded(d));
 
-  if (head) kids.push(div().absolute().left(nx - 2).top(ny - 2).size(size + 4).border(1).border_color(color));
+  if (n.merge) kids.push(round(div().absolute().left(nx).top(ny).size(size).bg(t.background).border(2).border_color(color), size));
+  else if (big && isDithered()) kids.push(svg(`${ART}/pip.svg`).absolute().left(nx).top(ny).size(size).text_color(color));
+  else kids.push(round(div().absolute().left(nx).top(ny).size(size).bg(color), size));
+
+  if (head) kids.push(round(div().absolute().left(nx - 2).top(ny - 2).size(size + 4).border(1).border_color(color), size + 4));
 
   return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
 }
@@ -471,7 +490,7 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
 
   return cursor
     ? numbered.child(div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted))
-      .child(div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.muted}aa`))
+      .child(isDithered() ? div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.muted}aa`) : div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.muted}aa`).rounded(4))
     : numbered;
 }
 

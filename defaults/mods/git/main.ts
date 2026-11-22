@@ -67,7 +67,8 @@ import type { Anchor } from "@fireflies/menu-place";
 import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
-import { drawing, empty, unzoom, unzoomSize } from "./draw.ts";
+import { drawing, empty, isDithered, unzoomSize } from "./draw.ts";
+import { frameBox, titleShown } from "@fireflies/look";
 import type { Back, Data, Panel, TabOf, Subs, Mode, Copied, MainContent, More, Staging, Note, Resizing, Show, Intent, MainHeights, OtherTops, SpawnOptions, Sub, ExecOptions, ViewContext, Tab } from "./state.ts";
 import { Lane } from "./queue.ts";
 import { openedWith, here, STATE, WINDOW_KEY, GITHUB_WINDOW, PANELS } from "./state.ts";
@@ -75,14 +76,14 @@ import { runtime } from "./fx.ts";
 import type { GitFx, GitServices } from "./fx.ts";
 import { isReviewFile, listItems, pathOf, rowKey } from "./items.ts";
 import type { Item } from "./items.ts";
-import { historyCut, listTail, rowMenu } from "./lists.ts";
+import { dragSplitter, historyCut, listTail, rowMenu } from "./lists.ts";
 import { windowBody } from "./main-view.ts";
 import { optionsBar, windowHeader } from "./bars.ts";
 import { goBack, quit, showNow } from "./panes.ts";
 import { loadMain } from "./content.ts";
 import { focusMain, giveWay, moveTo, scrollMain, setPanel, setTab } from "./navigate.ts";
 import { loadAll, reload, reloadReview, start } from "./reads.ts";
-import { nowMs, saveCopy, takeCopy } from "./place.ts";
+import { inPane, nowMs, saveCopy, takeCopy } from "./place.ts";
 import { listen } from "./commands.ts";
 
 /** How long a note stays on the options bar. */
@@ -698,7 +699,8 @@ export default class GitView extends View {
     };
 
     const root = v_flex().id("git").relative().size_full().bg(t.background);
-    const framed = this.overlay === null ? root : root.border(1).border_color(t.muted);
+    // The window's own frame: nocturne's 1 px edge, or upstream's rounded popover in a plain layout.
+    const framed = this.overlay === null ? root : (isDithered() ? root.border(1).border_color(t.muted) : frameBox(t, root));
     const handle = this.handle;
     const r = this.resizing;
 
@@ -716,22 +718,15 @@ export default class GitView extends View {
 
     const cursor = r === null ? sized : r.axis === "x" ? sized.cursor_col_resize() : sized.cursor_row_resize();
 
-    const view = cursor
-      .on_mouse_move((e, cx) => {
-        this.mouse = { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) };
-
-        const now = this.resizing;
-
-        if (now === null) return;
-
-        const moved = unzoom((now.axis === "x" ? e.position.x : e.position.y) - now.at) * now.sign;
-
-        now.set(Math.round(Math.min(now.max, Math.max(now.min, now.from + moved))));
-        cx.notify();
-      })
+    const moving = cursor
+      .on_mouse_move((e, cx) => { if (dragSplitter(this, e)) cx.notify(); })
       .on_mouse_up("left", (_e, cx) => endResize(cx))
-      .on_hover((h, cx) => { if (!h) endResize(cx); })
-      .child(windowHeader(this, t))
+      .on_hover((h, cx) => { if (!h) endResize(cx); });
+
+    // A plain layout's pane has a header naming the mod already: no title bar of its own there.
+    const headed = titleShown(inPane(this)) ? moving.child(windowHeader(this, t)) : moving;
+
+    const view = headed
       .child(div().id("git-body").relative().flex_1().min_h(0).pt(4)
         .on_mouse_down("left", (_e, cx) => { this.handle?.focus(); cx.stop_propagation(); })
         .child(body))

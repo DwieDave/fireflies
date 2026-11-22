@@ -16,7 +16,8 @@ import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui
 import type { Theme } from "herdr";
 import { window as appWindow } from "herdr";
 import type { PopupHost, MenuItem, Suggestion, KeysOptions, MenuOptions, ConfirmOptions, PromptOptions, CommitOptions, Popup, ConfirmPopup, PromptPopup, CommitPopup, FormPopup, Size, FrameOptions } from "./popup-types.ts";
-import { dither, ink, stop, edgeRow, popupScrim } from "./draw.ts";
+import { dither, ink, isDithered, stop, edgeRow, popupScrim } from "./draw.ts";
+import { CARD_HEAD, button, frameBox, heading, menuBox } from "@fireflies/look";
 import { keyLabel } from "./keys.ts";
 import type { FormModifiers, Stop } from "@fireflies/form-keys";
 import { formKey, formHints, ring } from "@fireflies/form-keys";
@@ -28,6 +29,19 @@ import { edge as edgeTone } from "@fireflies/tones";
 export type { PopupHost, MenuItem, Check, Line, Suggestion, KeysOptions, MenuOptions, ConfirmOptions, PromptOptions, CommitOptions } from "./popup-types.ts";
 
 const mac = () => appWindow().platform === "macos";
+
+/** A chosen row (a menu's, a suggestion's): nocturne's dithered band with its accent edge, or the selected fill, rounded. */
+function chosen(t: Theme, row: Element): Element {
+  if (!isDithered()) return row.rounded(6).bg(t.selected);
+
+  return row.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent));
+}
+
+/** An input's box: square in nocturne, rounded in a plain layout. */
+const inputBox = (el: Element): Element => (isDithered() ? el : el.rounded(6));
+
+/** An input's edge off focus: nocturne's edge tone, or the input border. */
+const fieldEdge = (t: Theme): Color => (isDithered() ? edgeTone(t) : t.input);
 
 /** A menu entry's text color: a dangerous one red, an unavailable one dim, the selected one bright. */
 function itemInk(t: Theme, it: { readonly danger?: boolean; readonly off?: boolean }, sel: boolean): Color {
@@ -459,6 +473,17 @@ export class Popups {
     const { danger = false, right = null } = options;
     const edge = danger ? t.ansi1 : t.accent;
 
+    // Plain: upstream's popover (a menu's box for a menu), its title in a header row.
+    if (!isDithered()) {
+      const head = h_flex().h(CARD_HEAD + 4).flex_none().px(12).gap(8).items_center().text_size(12.5).border_b(1).border_color(t.border)
+        .child(div().flex_1().min_w(0).truncate().font_semibold().text_color(danger ? t.ansi1 : t.foreground).child(title))
+        .child(right === null ? div() : div().flex_none().text_size(11).text_color(t.dim).child(right));
+
+      const box = v_flex().id(id).absolute().left(x).top(y).w(w).on_mouse_down("left", stop).child(head).child(body);
+
+      return id === "git-menu" ? menuBox(t, box) : frameBox(t, box);
+    }
+
     return v_flex().id(id).absolute().left(x).top(y).w(w).bg(t.background).border_l(1).border_r(1).border_color(edge)
       .on_mouse_down("left", stop)
       .child(body)
@@ -495,7 +520,7 @@ export class Popups {
       const i = first + n, sel = i === p.sel;
 
       if (it.section !== undefined) {
-        return h_flex().id(`mi-${i}`).h(ROW).px(10).items_center().text_size(10).text_color(t.muted).child(Str.toUpperCase(it.section));
+        return h_flex().id(`mi-${i}`).h(ROW).px(10).items_center().text_size(10).text_color(t.muted).child(isDithered() ? Str.toUpperCase(it.section) : heading(t, it.section));
       }
 
       const row = h_flex().id(`mi-${i}`).relative().h(ROW).px(10).gap(10).items_center().text_size(11)
@@ -509,7 +534,7 @@ export class Popups {
         })
         .on_click((_e, cx) => { cx.stop_propagation(); this.runItem(it, cx); cx.notify(); });
 
-      const marked = sel ? row.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
+      const marked = sel ? chosen(t, row) : row;
 
       const labelled = marked
         .child(div().relative().w(keyW).flex_none().text_color(t.accent).child(keyLabel(it.key ?? "")))
@@ -560,9 +585,17 @@ export class Popups {
       if (id === undefined || Str.isEmpty(id)) return pair.id(`hint-${i}`);
 
       const go = id === ids[0] ? yes : no;
-      const button = ring(pair.id(id).h(18).px(4).hover((s) => s.bg(`${edgeTone(t)}66`)), on === id, t.accent);
 
-      return (on === id ? button.bg(edgeTone(t)) : button)
+      if (!isDithered()) {
+        // Plain: upstream's raised buttons, the focused one ringed in the accent.
+        return ring(button(t, pair.id(id).h(26).px(10)), on === id, t.accent)
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => { cx.stop_propagation(); go(cx); cx.notify(); });
+      }
+
+      const pressed = ring(pair.id(id).h(18).px(4).hover((s) => s.bg(`${edgeTone(t)}66`)), on === id, t.accent);
+
+      return (on === id ? pressed.bg(edgeTone(t)) : pressed)
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => { cx.stop_propagation(); go(cx); cx.notify(); });
     }));
@@ -575,7 +608,7 @@ export class Popups {
     const keyPair = (key: string, what: string) => h_flex().gap(5).child(div().text_color(t.accent).child(key)).child(div().text_color(t.dim).child(what));
 
     const field = v_flex().px(12).pt(14).pb(10).gap(8)
-      .child(div().border(1).border_color(t.accent).px(6).h(26).flex().items_center()
+      .child(inputBox(div().border(1).border_color(t.accent).px(6).h(26).flex().items_center())
         .child(Input.new(p.input).w_full().text_size(12).text_color(t.foreground)));
 
     const noted = p.note === null ? field : field.child(div().text_size(11).text_color(t.muted).child(p.note));
@@ -585,7 +618,7 @@ export class Popups {
         .hover((st) => st.bg(`${edgeTone(t)}66`))
         .on_click((_e, cx) => { cx.stop_propagation(); p.pick = i; this.submit(cx); cx.notify(); });
 
-      const marked = i === p.pick ? row.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
+      const marked = i === p.pick ? chosen(t, row) : row;
       const valued = marked.child(div().relative().flex_1().min_w(0).truncate().text_color(i === p.pick ? t.foreground : t.muted).child(s.value));
 
       return s.sub === undefined || s.sub === null || Str.isEmpty(s.sub) ? valued : valued.child(div().relative().flex_none().text_color(t.dim).child(s.sub));
@@ -604,7 +637,7 @@ export class Popups {
     const len = p.input.value().length;
 
     const label = (s: string, right: Element | null = null) => {
-      const el = h_flex().mt(10).mb(4).text_size(10).text_color(t.dim).child(div().child(Str.toUpperCase(s))).child(div().flex_1());
+      const el = h_flex().mt(10).mb(4).text_size(10).text_color(t.dim).child(isDithered() ? div().child(Str.toUpperCase(s)) : heading(t, s)).child(div().flex_1());
 
       return right === null ? el : el.child(right);
     };
@@ -613,11 +646,11 @@ export class Popups {
 
     const body = v_flex().px(14).pt(6).pb(12)
       .child(label("Summary", h_flex().text_size(11).child(div().text_color(count).child(String(len))).child(div().text_color(t.dim).child(" / 50"))))
-      .child(div().id("cm-sum").border(1).border_color(p.at === 0 ? t.accent : edgeTone(t)).px(6).h(26).flex().items_center()
+      .child(inputBox(div().id("cm-sum").border(1).border_color(p.at === 0 ? t.accent : fieldEdge(t)).px(6).h(26).flex().items_center())
         .on_mouse_down("left", () => { p.at = 0; p.input.focus(); })
         .child(Input.new(p.input).w_full().text_size(12).text_color(t.foreground)))
       .child(label("Description"))
-      .child(div().id("cm-desc").border(1).border_color(p.at === 1 ? t.accent : edgeTone(t)).px(6).py(4).h(110)
+      .child(inputBox(div().id("cm-desc").border(1).border_color(p.at === 1 ? t.accent : fieldEdge(t)).px(6).py(4).h(110))
         .on_mouse_down("left", () => { p.at = 1; p.desc.focus(); })
         .child(Textarea.new(p.desc).w_full().h_full().text_size(12).text_color(t.foreground)))
       .child(div().mt(10).child(this.hintRow(t, p, (cx) => this.submit(cx), () => this.cancelCommit(p))));

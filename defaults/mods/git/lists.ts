@@ -5,7 +5,7 @@
 
 import { Array as Arr, Match, Option, String as Str } from "effect";
 import { div } from "gpui-kit";
-import type { Context, MouseButtonEvent, ScrollWheelEvent } from "gpui-kit";
+import type { Context, MouseButtonEvent, MouseMoveEvent, ScrollWheelEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { LOG_LIMIT } from "./git.ts";
@@ -232,4 +232,20 @@ export function resize(view: GitView, e: MouseButtonEvent, key: string, from: nu
   const { min = 160, max = 4000, sign = 1, axis = "x" } = options;
 
   view.resizing = { key, axis, at: axis === "x" ? e.position.x : e.position.y, from, set, min, max: Math.max(min, max), sign };
+}
+
+/** The pointer moved over the window: where it is (a right-click menu stands
+ *  there), and a splitter being dragged follows it. True when a size changed. */
+export function dragSplitter(v: GitView, e: MouseMoveEvent): boolean {
+  v.mouse = { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) };
+
+  const now = v.resizing;
+
+  if (now === null) return false;
+
+  const moved = unzoom((now.axis === "x" ? e.position.x : e.position.y) - now.at) * now.sign;
+
+  now.set(Math.round(Math.min(now.max, Math.max(now.min, now.from + moved))));
+
+  return true;
 }

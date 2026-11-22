@@ -4,7 +4,7 @@
 
 import { Array as Arr, Option, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
-import type { Context } from "gpui-kit";
+import type { Context, Element } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Action, Binding, KeyContext, ListContext } from "./keys.ts";
@@ -14,7 +14,8 @@ import type { MenuItem } from "./popups.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import type { KeyRow, KeySection } from "@fireflies/keyhelp";
 import type { Hint } from "./draw.ts";
-import { ART, dither, chip, hints, short } from "./draw.ts";
+import { ART, dither, chip, hints, isDithered, short } from "./draw.ts";
+import { glyph, tag, titleBar } from "@fireflies/look";
 import { CONTEXT_NAMES } from "./state.ts";
 import { pathOf, nameOf, subjectOf } from "./items.ts";
 import type { default as GitView } from "./main.ts";
@@ -37,10 +38,34 @@ const BAR_KEYS: ReadonlyMap<string, string> = new Map([["esc", "escape"], ["pgup
 /** Contexts whose right-click menu offers ctrl-p (the main view shows a diff for them). */
 export const PANE_CONTEXTS: ReadonlySet<KeyContext> = new Set<KeyContext>(["files", "review", "commits", "subCommits", "reflog", "commitFiles", "stash", "staging", "main"]);
 
+/** A plain layout's header: the shared title bar (@fireflies/look), the repo, its branch as a tag, the chips as line icons. */
+function plainHeader(v: GitView, t: Theme, where: string): Element {
+  const s = v.data.status, state = v.data.state, pane = inPane(v);
+
+  const parts = [
+    div().flex_shrink(1).min_w(0).max_w(360).truncate().text_color(t.muted).child(v.on === null ? where : `${v.on}:${where}`),
+    ...(s === null ? [] : [tag(t, div().flex_none().text_color(t.ansi6).child(s.head ?? `(detached ${short(s.oid ?? "")})`))]),
+    ...(s !== null && s.ahead > 0 ? [div().flex_none().text_color(t.ansi4).child(`↑${s.ahead}`)] : []),
+    ...(s !== null && s.behind > 0 ? [div().flex_none().text_color(t.ansi5).child(`↓${s.behind}`)] : []),
+    ...(state === null ? [] : [tag(t, div().flex_none().text_color(t.ansi3).child(`${Str.capitalize(state)} · m`))]),
+    ...(v.backTo === null ? [] : [chip(t, "git-back", h_flex().gap(4).items_center().child(glyph("‹", "arrow-left")).child("GitHub"), false, () => v.goBack(), t.dim)]),
+    div().flex_1(),
+    ...(v.busyText === null ? [] : [div().flex_none().text_color(t.working).child(v.busyText)]),
+    keysHint(t, "git-keys", v.popups.top?.kind === "keys", () => (v.popups.top?.kind === "keys" ? v.popups.close() : openKeys(v))).mx(4),
+    chip(t, "git-refresh", glyph("↻", "refresh-cw"), false, () => reload(v, true)),
+    ...(movable(v) ? [chip(t, "git-move", glyph(pane ? "⧉" : "◧", pane ? "app-window" : "panel-left"), false, () => move(v)).tooltip(pane ? "Out to a window · ctrl-t" : "Into a pane · ctrl-t")] : []),
+    ...(v.overlay === null ? [] : [chip(t, "git-close", glyph("✕", "x"), false, () => quit(v))]),
+  ];
+
+  return titleBar(t, { id: "git-head", art: "moon-6", plain: "git-branch", title: "Git" }, parts);
+}
+
 export function windowHeader(v: GitView, t: Theme) {
   const s = v.data.status;
   const where = v.git === null ? v.folder ?? "" : Str.replace(/^\/(Users|home)\/[^/]+/, "~")(v.git.root);
   const state = v.data.state;
+
+  if (!isDithered()) return plainHeader(v, t, where);
 
   const head = h_flex().id("git-head").relative().h(34).flex_none().overflow_hidden().pl(12).pr(6).gap(10).items_center().text_size(11)
     .child(div().absolute().inset_0().opacity(0.5).child(dither(edge(t), 2)))
