@@ -12,20 +12,20 @@
 //   item   { id, db, type, archived, content: { kind, id, number, title, state, url, repo, assignees, labels, milestone }, values: fieldId -> value (a Map; an object on disk) }
 //   value  { optionId, name } | { iterationId, title, startDate, duration } | { text } | { number } | { date } | { names }
 
-import type { Guard, Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf } from "./guard.ts";
-import { isList, mapOf, maybe, toJson, toMap } from "./guards.ts";
+import { Array as Arr, Predicate, Record as Rec, Schema } from "effect";
+import type { Codec } from "@fireflies/kit";
+import { maybe } from "./model.ts";
 
-export const text = maybe(isString);
+export const text = maybe(Schema.String);
 
-/** A list's items that `guard` proves (the others, nulls GitHub sends for what it won't show, left out). */
-const proven = <T>(list: readonly unknown[] | null | undefined, guard: Guard<T>): T[] => (list ?? []).filter((x) => guard(x));
+/** A list's items that `schema` reads (the others, nulls GitHub sends for what it won't show, left out). */
+const proven = <A, I>(list: readonly unknown[] | null | undefined, schema: Codec<A, I>): A[] => Arr.getSomes(Arr.map(list ?? [], (x) => Schema.decodeUnknownOption(schema)(x)));
 
-/** A GraphQL connection: its nodes, proven one by one where they're read. */
-const nodes = maybe(object({}, { nodes: maybe(isList) }));
+/** A GraphQL connection: its nodes, read one by one where they're read. */
+const nodes = maybe(Schema.Struct({ nodes: maybe(Schema.Array(Schema.Unknown)) }));
 
 /** Someone's login (a user, an organization). */
-const login = maybe(object({}, { login: text }));
+const login = maybe(Schema.Struct({ login: text }));
 
 // ---- reading
 
@@ -59,38 +59,32 @@ export function projectListQuery(repo: ListedRepo): string {
 }
 
 /** A project node of GitHub's answer. */
-const isProjectNode = object({ id: isString }, {
-  number: maybe(isNumber), title: text, url: text, closed: maybe(isBoolean), shortDescription: text, updatedAt: text, owner: login,
-});
+const ProjectNodeSchema = Schema.Struct({ id: Schema.String, number: maybe(Schema.Finite), title: text, url: text, closed: maybe(Schema.Boolean), shortDescription: text, updatedAt: text, owner: login });
 
 /** projectListQuery's answer: GitHub leaves out (null) what it won't show. */
-export const isProjectListAnswer = object({}, {
-  viewer: login,
-  repository: maybe(object({}, { id: text, projectsV2: nodes, owner: maybe(object({}, { projectsV2: nodes })) })),
-  parent: maybe(object({}, { projectsV2: nodes })),
-});
+export const ProjectListAnswerSchema = Schema.Struct({ viewer: login,
+  repository: maybe(Schema.Struct({ id: text, projectsV2: nodes, owner: maybe(Schema.Struct({ projectsV2: nodes })) })),
+  parent: maybe(Schema.Struct({ projectsV2: nodes })) });
 
-export type ProjectListAnswer = Guarded<typeof isProjectListAnswer>;
+export type ProjectListAnswer = typeof ProjectListAnswerSchema.Type;
 
 /** Where the picker found a project. */
-export const isFrom = literal("repo", "parent", "owner");
+export const FromSchema = Schema.Literals(["repo", "parent", "owner"]);
 
-export type From = Guarded<typeof isFrom>;
+export type From = typeof FromSchema.Type;
 
 /** A project as the picker lists it. */
-export const isListedProject = object({
-  id: isString, number: nullable(isNumber), title: isString, url: nullable(isString), closed: isBoolean, owner: nullable(isString),
-  about: isString, updatedAt: nullable(isString), from: isFrom,
-});
+export const ListedProjectSchema = Schema.Struct({ id: Schema.String, number: Schema.NullOr(Schema.Finite), title: Schema.String, url: Schema.NullOr(Schema.String), closed: Schema.Boolean, owner: Schema.NullOr(Schema.String),
+  about: Schema.String, updatedAt: Schema.NullOr(Schema.String), from: FromSchema });
 
-export type ListedProject = Guarded<typeof isListedProject>;
+export type ListedProject = typeof ListedProjectSchema.Type;
 
 /** The picker's list: who reads it, the repo's id (to convert drafts into), the projects. */
-export const isProjectList = object({ viewer: nullable(isString), repoId: nullable(isString), projects: arrayOf(isListedProject) });
+export const ProjectListSchema = Schema.Struct({ viewer: Schema.NullOr(Schema.String), repoId: Schema.NullOr(Schema.String), projects: Schema.Array(ListedProjectSchema) });
 
-export type ProjectList = Guarded<typeof isProjectList>;
+export type ProjectList = typeof ProjectListSchema.Type;
 
-const slimProject = (p: Guarded<typeof isProjectNode>, from: From): ListedProject => ({
+const slimProject = (p: typeof ProjectNodeSchema.Type, from: From): ListedProject => ({
   id: p.id, number: p.number ?? null, title: p.title ?? "", url: p.url ?? null, closed: Boolean(p.closed), owner: p.owner?.login ?? null,
   about: p.shortDescription || "", updatedAt: p.updatedAt ?? null, from,
 });
@@ -102,7 +96,7 @@ export function parseProjectList(data: ProjectListAnswer | null | undefined): Pr
   const seen = new Set<string>(), out: ListedProject[] = [];
 
   const add = (list: readonly unknown[] | null | undefined, from: From) => {
-    for (const n of proven(list, isProjectNode)) {
+    for (const n of proven(list, ProjectNodeSchema)) {
       if (seen.has(n.id)) continue;
 
       seen.add(n.id);
@@ -164,79 +158,70 @@ export function boardQuery(first = true): string {
 // ---- the board's records (as drawn, and as the cache keeps them)
 
 /** An option of a single select field. */
-export const isOption = object({ id: isString, name: isString, color: isString });
+export const OptionSchema = Schema.Struct({ id: Schema.String, name: Schema.String, color: Schema.String });
 
-export type FieldOption = Guarded<typeof isOption>;
+export type FieldOption = typeof OptionSchema.Type;
 
 /** An iteration of an iteration field: `done` when it's over. */
-export const isIteration = object({ id: isString, title: isString, startDate: isString, duration: isNumber, done: isBoolean });
+export const IterationSchema = Schema.Struct({ id: Schema.String, title: Schema.String, startDate: Schema.String, duration: Schema.Finite, done: Schema.Boolean });
 
-export type Iteration = Guarded<typeof isIteration>;
+export type Iteration = typeof IterationSchema.Type;
 
 /** The kinds of field that have no options of their own (GitHub's dataType, lowercased and
  *  shortened; "other": one GitHub added after this list). */
-export const isPlainType = literal("text", "number", "date", "multi", "title", "assignees", "labels", "repo", "milestone",
-  "linked_pull_requests", "reviewers", "tracks", "tracked_by", "parent_issue", "sub_issues_progress", "issue_type", "other");
+export const PlainTypeSchema = Schema.Literals(["text", "number", "date", "multi", "title", "assignees", "labels", "repo", "milestone", "linked_pull_requests", "reviewers", "tracks", "tracked_by", "parent_issue", "sub_issues_progress", "issue_type", "other"]);
 
-export type PlainType = Guarded<typeof isPlainType>;
+export type PlainType = typeof PlainTypeSchema.Type;
 
 /** A project field, a union on its type: a single select has its options, an iteration field its iterations. */
-export const isField = oneOf(
-  object({ id: isString, name: isString, type: literal("single"), options: arrayOf(isOption) }),
-  object({ id: isString, name: isString, type: literal("iteration"), iterations: arrayOf(isIteration) }),
-  object({ id: isString, name: isString, type: isPlainType }),
-);
+export const FieldSchema = Schema.Union([Schema.Struct({ id: Schema.String, name: Schema.String, type: Schema.Literals(["single"]), options: Schema.Array(OptionSchema) }), Schema.Struct({ id: Schema.String, name: Schema.String, type: Schema.Literals(["iteration"]), iterations: Schema.Array(IterationSchema) }), Schema.Struct({ id: Schema.String, name: Schema.String, type: PlainTypeSchema })]);
 
-export type Field = Guarded<typeof isField>;
+export type Field = typeof FieldSchema.Type;
 
 export type FieldType = Field["type"];
 
 /** A sort of a view: the field, ascending (1) or descending (-1). */
-export const isSort = object({ field: isString, dir: literal(1, -1) });
+export const SortSchema = Schema.Struct({ field: Schema.String, dir: Schema.Literals([1, -1]) });
 
-export const isView = object({
-  id: isString, number: nullable(isNumber), name: isString, layout: isString, filter: isString, visible: arrayOf(isString),
-  columnBy: nullable(isString), groupBy: nullable(isString), sort: arrayOf(isSort),
-});
+export const ViewSchema = Schema.Struct({ id: Schema.String, number: Schema.NullOr(Schema.Finite), name: Schema.String, layout: Schema.String, filter: Schema.String, visible: Schema.Array(Schema.String),
+  columnBy: Schema.NullOr(Schema.String), groupBy: Schema.NullOr(Schema.String), sort: Schema.Array(SortSchema) });
 
-export type View = Guarded<typeof isView>;
+export type View = typeof ViewSchema.Type;
 
 /** A single select's value. */
-export const isSelectValue = object({ optionId: isString, name: isString });
+export const SelectValueSchema = Schema.Struct({ optionId: Schema.String, name: Schema.String });
 
-export const isIterationValue = object({ iterationId: isString, title: isString, startDate: isString, duration: isNumber });
+export const IterationValueSchema = Schema.Struct({ iterationId: Schema.String, title: Schema.String, startDate: Schema.String, duration: Schema.Finite });
 
-export const isTextValue = object({ text: isString });
+export const TextValueSchema = Schema.Struct({ text: Schema.String });
 
-export const isNumberValue = object({ number: isNumber });
+export const NumberValueSchema = Schema.Struct({ number: Schema.Finite });
 
-export const isDateValue = object({ date: isString });
+export const DateValueSchema = Schema.Struct({ date: Schema.String });
 
 /** A multi select's value: its names, comma separated. */
-export const isNamesValue = object({ names: isString });
+export const NamesValueSchema = Schema.Struct({ names: Schema.String });
 
 /** An item's value for a field: which one it is follows from the field's type. */
-export const isFieldValue = oneOf(isSelectValue, isIterationValue, isTextValue, isNumberValue, isDateValue, isNamesValue);
+export const FieldValueSchema = Schema.Union([SelectValueSchema, IterationValueSchema, TextValueSchema, NumberValueSchema, DateValueSchema, NamesValueSchema]);
 
-export type FieldValue = Guarded<typeof isFieldValue>;
+export type FieldValue = typeof FieldValueSchema.Type;
 
-export const isKind = literal("pr", "issue", "draft", "redacted");
+export const KindSchema = Schema.Literals(["pr", "issue", "draft", "redacted"]);
 
-export const isAssignee = object({ id: nullable(isString), login: isString });
+export const AssigneeSchema = Schema.Struct({ id: Schema.NullOr(Schema.String), login: Schema.String });
 
-export type Assignee = Guarded<typeof isAssignee>;
+export type Assignee = typeof AssigneeSchema.Type;
 
-export const isCardLabel = object({ id: nullable(isString), name: isString, color: isString });
+export const CardLabelSchema = Schema.Struct({ id: Schema.NullOr(Schema.String), name: Schema.String, color: Schema.String });
 
-export type CardLabel = Guarded<typeof isCardLabel>;
+export type CardLabel = typeof CardLabelSchema.Type;
 
 /** What an item is: an issue, a pull request, a draft, or one this login can't see. */
-export const isContent = object({
-  kind: isKind, id: nullable(isString), number: nullable(isNumber), title: isString, state: nullable(isString), isDraft: isBoolean,
-  url: nullable(isString), repo: nullable(isString), assignees: arrayOf(isAssignee), labels: arrayOf(isCardLabel), milestone: nullable(isString),
-});
+export const ContentSchema = Schema.Struct({ kind: KindSchema, id: Schema.NullOr(Schema.String), number: Schema.NullOr(Schema.Finite), title: Schema.String, state: Schema.NullOr(Schema.String), isDraft: Schema.Boolean,
+  url: Schema.NullOr(Schema.String), repo: Schema.NullOr(Schema.String), assignees: Schema.Array(AssigneeSchema), labels: Schema.Array(CardLabelSchema), milestone: Schema.NullOr(Schema.String) });
 
-export type Content = Guarded<typeof isContent>;
+export type Content = typeof ContentSchema.Type;
 
 /** A project item: its content and its values by field id. */
 export interface Item {
@@ -249,13 +234,11 @@ export interface Item {
 }
 
 /** The project a board is of. */
-export const isBoardProject = object({
-  id: isString, number: nullable(isNumber), title: isString, url: nullable(isString), closed: isBoolean, owner: nullable(isString),
-});
+export const BoardProjectSchema = Schema.Struct({ id: Schema.String, number: Schema.NullOr(Schema.Finite), title: Schema.String, url: Schema.NullOr(Schema.String), closed: Schema.Boolean, owner: Schema.NullOr(Schema.String) });
 
-export type BoardProject = Guarded<typeof isBoardProject>;
+export type BoardProject = typeof BoardProjectSchema.Type;
 
-export const isBoardRepo = object({ id: isString, full: isString });
+export const BoardRepoSchema = Schema.Struct({ id: Schema.String, full: Schema.String });
 
 /** A board: the project, its fields and views, the repos linked to it, the items read so far
  *  (`total` of them, `more`: the next page's cursor). */
@@ -264,84 +247,64 @@ export interface Board {
   readonly viewer: string | null;
   readonly fields: readonly Field[];
   readonly views: readonly View[];
-  readonly repos: readonly Guarded<typeof isBoardRepo>[];
+  readonly repos: readonly typeof BoardRepoSchema.Type[];
   readonly items: readonly Item[];
   readonly total: number;
   readonly more: string | null;
 }
 
 /** An item as the cache file holds it: its values an object by field id. */
-const isStoredItem = object({
-  id: isString, db: nullable(isNumber), type: nullable(isString), archived: isBoolean, content: isContent, values: mapOf(isFieldValue),
-});
+const StoredItemSchema = Schema.Struct({ id: Schema.String, db: Schema.NullOr(Schema.Finite), type: Schema.NullOr(Schema.String), archived: Schema.Boolean, content: ContentSchema, values: Schema.Record(Schema.String, FieldValueSchema) });
 
 /** A board as the cache file holds it (slimBoard). */
-export const isStoredBoard = object({
-  project: isBoardProject, viewer: nullable(isString), fields: arrayOf(isField), views: arrayOf(isView), repos: arrayOf(isBoardRepo),
-  items: arrayOf(isStoredItem), total: isNumber, more: nullable(isString),
-});
+export const StoredBoardSchema = Schema.Struct({ project: BoardProjectSchema, viewer: Schema.NullOr(Schema.String), fields: Schema.Array(FieldSchema), views: Schema.Array(ViewSchema), repos: Schema.Array(BoardRepoSchema),
+  items: Schema.Array(StoredItemSchema), total: Schema.Finite, more: Schema.NullOr(Schema.String) });
 
-export type StoredBoard = Guarded<typeof isStoredBoard>;
+export type StoredBoard = typeof StoredBoardSchema.Type;
 
 /** A board read back from the cache. */
-export const boardOf = (b: StoredBoard): Board => ({ ...b, items: b.items.map((i) => ({ ...i, values: toMap(i.values) })) });
+export const boardOf = (b: StoredBoard): Board => ({ ...b, items: b.items.map((i) => ({ ...i, values: new Map(Rec.toEntries(i.values)) })) });
 
 // ---- GitHub's answers
 
-const isOptionNode = object({ id: isString, name: isString }, { color: text });
+const OptionNodeSchema = Schema.Struct({ id: Schema.String, name: Schema.String, color: text });
 
-const isIterationNode = object({ id: isString, title: isString, startDate: isString, duration: isNumber });
+const IterationNodeSchema = Schema.Struct({ id: Schema.String, title: Schema.String, startDate: Schema.String, duration: Schema.Finite });
 
-const isFieldNode = object({ id: isString }, {
-  name: text, dataType: text, options: maybe(isList),
-  configuration: maybe(object({}, { iterations: maybe(isList), completedIterations: maybe(isList) })),
-});
+const FieldNodeSchema = Schema.Struct({ id: Schema.String, name: text, dataType: text, options: maybe(Schema.Array(Schema.Unknown)),
+  configuration: maybe(Schema.Struct({ iterations: maybe(Schema.Array(Schema.Unknown)), completedIterations: maybe(Schema.Array(Schema.Unknown)) })) });
 
-const isNamedNode = object({ id: isString });
+const NamedNodeSchema = Schema.Struct({ id: Schema.String });
 
-const isSortNode = object({}, { direction: text, field: maybe(object({}, { id: text })) });
+const SortNodeSchema = Schema.Struct({ direction: text, field: maybe(Schema.Struct({ id: text })) });
 
-const isViewNode = object({ id: isString }, {
-  number: maybe(isNumber), name: text, layout: text, filter: text, fields: nodes, groupByFields: nodes, verticalGroupByFields: nodes, sortByFields: nodes,
-});
+const ViewNodeSchema = Schema.Struct({ id: Schema.String, number: maybe(Schema.Finite), name: text, layout: text, filter: text, fields: nodes, groupByFields: nodes, verticalGroupByFields: nodes, sortByFields: nodes });
 
-const isRepoNode = object({ id: isString, nameWithOwner: isString });
+const RepoNodeSchema = Schema.Struct({ id: Schema.String, nameWithOwner: Schema.String });
 
-const isValueNode = object({}, {
-  __typename: text, optionId: text, name: text, iterationId: text, title: text, startDate: text, duration: maybe(isNumber),
-  text, number: maybe(isNumber), date: text, value: text, field: maybe(object({}, { id: text })),
-});
+const ValueNodeSchema = Schema.Struct({ __typename: text, optionId: text, name: text, iterationId: text, title: text, startDate: text, duration: maybe(Schema.Finite),
+  text, number: maybe(Schema.Finite), date: text, value: text, field: maybe(Schema.Struct({ id: text })) });
 
-const isAssigneeNode = object({ login: isString }, { id: text });
+const AssigneeNodeSchema = Schema.Struct({ login: Schema.String, id: text });
 
-const isLabelNode = object({ name: isString }, { id: text, color: text });
+const LabelNodeSchema = Schema.Struct({ name: Schema.String, id: text, color: text });
 
-const isContentNode = object({}, {
-  __typename: text, id: text, number: maybe(isNumber), title: text, state: text, isDraft: maybe(isBoolean), url: text,
-  repository: maybe(object({}, { nameWithOwner: text })), assignees: nodes, labels: nodes, milestone: maybe(object({}, { title: text })),
-});
+const ContentNodeSchema = Schema.Struct({ __typename: text, id: text, number: maybe(Schema.Finite), title: text, state: text, isDraft: maybe(Schema.Boolean), url: text,
+  repository: maybe(Schema.Struct({ nameWithOwner: text })), assignees: nodes, labels: nodes, milestone: maybe(Schema.Struct({ title: text })) });
 
 /** An item node of GitHub's answer. */
-export const isItemNode = object({ id: isString }, {
-  databaseId: maybe(isNumber), type: text, isArchived: maybe(isBoolean), fieldValues: nodes, content: maybe(isContentNode),
-});
+export const ItemNodeSchema = Schema.Struct({ id: Schema.String, databaseId: maybe(Schema.Finite), type: text, isArchived: maybe(Schema.Boolean), fieldValues: nodes, content: maybe(ContentNodeSchema) });
 
-export type ItemNode = Guarded<typeof isItemNode>;
+export type ItemNode = typeof ItemNodeSchema.Type;
 
-const isItems = maybe(object({}, {
-  totalCount: maybe(isNumber), pageInfo: maybe(object({}, { hasNextPage: maybe(isBoolean), endCursor: text })), nodes: maybe(isList),
-}));
+const ItemsSchema = maybe(Schema.Struct({ totalCount: maybe(Schema.Finite), pageInfo: maybe(Schema.Struct({ hasNextPage: maybe(Schema.Boolean), endCursor: text })), nodes: maybe(Schema.Array(Schema.Unknown)) }));
 
 /** boardQuery's answer, either page: the project (fields, views, repos on the first) and a page of its items. */
-export const isBoardAnswer = object({}, {
-  viewer: login,
-  node: maybe(object({}, {
-    id: text, number: maybe(isNumber), title: text, url: text, closed: maybe(isBoolean), owner: login,
-    fields: nodes, views: nodes, repositories: nodes, items: isItems,
-  })),
-});
+export const BoardAnswerSchema = Schema.Struct({ viewer: login,
+  node: maybe(Schema.Struct({ id: text, number: maybe(Schema.Finite), title: text, url: text, closed: maybe(Schema.Boolean), owner: login,
+    fields: nodes, views: nodes, repositories: nodes, items: ItemsSchema })) });
 
-export type BoardAnswer = Guarded<typeof isBoardAnswer>;
+export type BoardAnswer = typeof BoardAnswerSchema.Type;
 
 const TYPES = new Map<string, FieldType>([
   ["SINGLE_SELECT", "single"], ["ITERATION", "iteration"], ["TEXT", "text"], ["NUMBER", "number"], ["DATE", "date"], ["MULTI_SELECT", "multi"],
@@ -356,20 +319,20 @@ function fieldType(dataType: string | null | undefined): FieldType {
 
   const lower = (dataType ?? "").toLowerCase();
 
-  return isPlainType(lower) ? lower : "other";
+  return Schema.is(PlainTypeSchema)(lower) ? lower : "other";
 }
 
-function parseField(n: Guarded<typeof isFieldNode>): Field {
+function parseField(n: typeof FieldNodeSchema.Type): Field {
   const base = { id: n.id, name: n.name ?? "" };
   const type = fieldType(n.dataType);
 
-  if (type === "single") return { ...base, type, options: proven(n.options, isOptionNode).map((o) => ({ id: o.id, name: o.name, color: o.color ?? "GRAY" })) };
+  if (type === "single") return { ...base, type, options: proven(n.options, OptionNodeSchema).map((o) => ({ id: o.id, name: o.name, color: o.color ?? "GRAY" })) };
 
   if (type === "iteration") {
-    const it = (x: Guarded<typeof isIterationNode>, done: boolean): Iteration => ({ id: x.id, title: x.title, startDate: x.startDate, duration: x.duration, done });
+    const it = (x: typeof IterationNodeSchema.Type, done: boolean): Iteration => ({ id: x.id, title: x.title, startDate: x.startDate, duration: x.duration, done });
     const c = n.configuration;
 
-    const iterations = [...proven(c?.completedIterations, isIterationNode).map((x) => it(x, true)), ...proven(c?.iterations, isIterationNode).map((x) => it(x, false))]
+    const iterations = [...proven(c?.completedIterations, IterationNodeSchema).map((x) => it(x, true)), ...proven(c?.iterations, IterationNodeSchema).map((x) => it(x, false))]
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
     return { ...base, type, iterations };
@@ -378,18 +341,18 @@ function parseField(n: Guarded<typeof isFieldNode>): Field {
   return { ...base, type };
 }
 
-function parseView(n: Guarded<typeof isViewNode>): View {
-  const ids = (c: Guarded<typeof nodes>) => proven(c?.nodes, isNamedNode).map((x) => x.id);
+function parseView(n: typeof ViewNodeSchema.Type): View {
+  const ids = (c: typeof nodes.Type) => proven(c?.nodes, NamedNodeSchema).map((x) => x.id);
 
   return {
     id: n.id, number: n.number ?? null, name: n.name ?? "", layout: (n.layout ?? "BOARD_LAYOUT").replace(/_LAYOUT$/, "").toLowerCase(),
     filter: n.filter ?? "", visible: ids(n.fields), columnBy: ids(n.verticalGroupByFields)[0] ?? null, groupBy: ids(n.groupByFields)[0] ?? null,
-    sort: proven(n.sortByFields?.nodes, isSortNode).flatMap((s) => (s.field?.id ? [{ field: s.field.id, dir: s.direction === "DESC" ? -1 : 1 } as const] : [])),
+    sort: proven(n.sortByFields?.nodes, SortNodeSchema).flatMap((s) => (s.field?.id ? [{ field: s.field.id, dir: s.direction === "DESC" ? -1 : 1 } as const] : [])),
   };
 }
 
 /** A field value node as the board keeps it (null: not one it knows, or without its id). */
-function parseValue(v: Guarded<typeof isValueNode>): FieldValue | null {
+function parseValue(v: typeof ValueNodeSchema.Type): FieldValue | null {
   switch (v.__typename) {
     case "ProjectV2ItemFieldSingleSelectValue":
       return v.optionId ? { optionId: v.optionId, name: v.name ?? "" } : null;
@@ -398,7 +361,7 @@ function parseValue(v: Guarded<typeof isValueNode>): FieldValue | null {
     case "ProjectV2ItemFieldTextValue":
       return { text: v.text ?? "" };
     case "ProjectV2ItemFieldNumberValue":
-      return isNumber(v.number) ? { number: v.number } : null;
+      return Predicate.isNumber(v.number) ? { number: v.number } : null;
     case "ProjectV2ItemFieldDateValue":
       return { date: v.date ?? "" };
     case "ProjectV2ItemFieldMultiSelectValue":
@@ -416,7 +379,7 @@ export function parseItem(n: ItemNode): Item {
   const kind = KINDS.get(c?.__typename ?? "") ?? "redacted";
   const values = new Map<string, FieldValue>();
 
-  for (const v of proven(n.fieldValues?.nodes, isValueNode)) {
+  for (const v of proven(n.fieldValues?.nodes, ValueNodeSchema)) {
     const id = v.field?.id;
     const value = parseValue(v);
 
@@ -428,8 +391,8 @@ export function parseItem(n: ItemNode): Item {
     content: {
       kind, id: c?.id ?? null, number: c?.number ?? null, title: c?.title ?? (kind === "redacted" ? "(no access)" : ""),
       state: kind === "draft" ? "DRAFT" : c?.state ?? null, isDraft: Boolean(c?.isDraft), url: c?.url ?? null, repo: c?.repository?.nameWithOwner ?? null,
-      assignees: proven(c?.assignees?.nodes, isAssigneeNode).map((a) => ({ id: a.id ?? null, login: a.login })),
-      labels: proven(c?.labels?.nodes, isLabelNode).map((l) => ({ id: l.id ?? null, name: l.name, color: l.color ?? "666666" })),
+      assignees: proven(c?.assignees?.nodes, AssigneeNodeSchema).map((a) => ({ id: a.id ?? null, login: a.login })),
+      labels: proven(c?.labels?.nodes, LabelNodeSchema).map((l) => ({ id: l.id ?? null, name: l.name, color: l.color ?? "666666" })),
       milestone: c?.milestone?.title ?? null,
     },
     values,
@@ -445,9 +408,9 @@ export function parseBoard(data: BoardAnswer | null | undefined): Board | null {
   const board: Board = {
     project: { id: p.id, number: p.number ?? null, title: p.title ?? "", url: p.url ?? null, closed: Boolean(p.closed), owner: p.owner?.login ?? null },
     viewer: data?.viewer?.login ?? null,
-    fields: proven(p.fields?.nodes, isFieldNode).map(parseField),
-    views: proven(p.views?.nodes, isViewNode).map(parseView),
-    repos: proven(p.repositories?.nodes, isRepoNode).map((r) => ({ id: r.id, full: r.nameWithOwner })),
+    fields: proven(p.fields?.nodes, FieldNodeSchema).map(parseField),
+    views: proven(p.views?.nodes, ViewNodeSchema).map(parseView),
+    repos: proven(p.repositories?.nodes, RepoNodeSchema).map((r) => ({ id: r.id, full: r.nameWithOwner })),
     items: [], total: 0, more: null,
   };
 
@@ -457,7 +420,7 @@ export function parseBoard(data: BoardAnswer | null | undefined): Board | null {
 /** Adds a page of items: { ...board, items, total, more: the next cursor or null }. */
 export function addPage(board: Board, data: BoardAnswer | null | undefined): Board {
   const c = data?.node?.items;
-  const items = [...board.items, ...proven(c?.nodes, isItemNode).map(parseItem)];
+  const items = [...board.items, ...proven(c?.nodes, ItemNodeSchema).map(parseItem)];
   const more = c?.pageInfo?.hasNextPage && items.length < MAX_ITEMS ? c.pageInfo.endCursor ?? null : null;
 
   return { ...board, items, total: c?.totalCount ?? items.length, more };
@@ -487,17 +450,13 @@ export const detailQuery = `query($id: ID!) { node(id: $id) { __typename
   ... on PullRequest { body url createdAt author { login } comments(last: 30) { totalCount nodes { author { login } body createdAt url } } }
   ... on DraftIssue { body createdAt creator { login } } } }`;
 
-const isCommentNode = object({}, { author: login, body: text, createdAt: text, url: text });
+const CommentNodeSchema = Schema.Struct({ author: login, body: text, createdAt: text, url: text });
 
 /** detailQuery's answer. */
-export const isDetailAnswer = object({}, {
-  node: maybe(object({}, {
-    body: text, url: text, createdAt: text, author: login, creator: login,
-    comments: maybe(object({}, { totalCount: maybe(isNumber), nodes: maybe(isList) })),
-  })),
-});
+export const DetailAnswerSchema = Schema.Struct({ node: maybe(Schema.Struct({ body: text, url: text, createdAt: text, author: login, creator: login,
+    comments: maybe(Schema.Struct({ totalCount: maybe(Schema.Finite), nodes: maybe(Schema.Array(Schema.Unknown)) })) })) });
 
-export type DetailAnswer = Guarded<typeof isDetailAnswer>;
+export type DetailAnswer = typeof DetailAnswerSchema.Type;
 
 /** A comment in the detail panel. */
 export interface DetailComment {
@@ -522,7 +481,7 @@ export function parseDetail(data: DetailAnswer | null | undefined): Detail | nul
 
   if (!n) return null;
 
-  const comments = proven(n.comments?.nodes, isCommentNode);
+  const comments = proven(n.comments?.nodes, CommentNodeSchema);
 
   return {
     body: n.body ?? "", url: n.url ?? null, createdAt: n.createdAt ?? null, author: n.author?.login ?? n.creator?.login ?? null,
@@ -539,13 +498,13 @@ export function choicesQuery(full: string): string {
 }
 
 /** choicesQuery's answer. */
-export const isChoicesAnswer = object({}, { repository: maybe(object({}, { labels: nodes, assignableUsers: nodes })) });
+export const ChoicesAnswerSchema = Schema.Struct({ repository: maybe(Schema.Struct({ labels: nodes, assignableUsers: nodes })) });
 
-export type ChoicesAnswer = Guarded<typeof isChoicesAnswer>;
+export type ChoicesAnswer = typeof ChoicesAnswerSchema.Type;
 
-const isChoiceLabel = object({ id: isString, name: isString }, { color: text });
+const ChoiceLabelSchema = Schema.Struct({ id: Schema.String, name: Schema.String, color: text });
 
-const isUser = object({ id: isString, login: isString });
+const UserSchema = Schema.Struct({ id: Schema.String, login: Schema.String });
 
 /** What the field menu offers to add: a repo's labels and its assignable users. */
 export interface Choices {
@@ -557,8 +516,8 @@ export function parseChoices(data: ChoicesAnswer | null | undefined): Choices {
   const r = data?.repository;
 
   return {
-    labels: proven(r?.labels?.nodes, isChoiceLabel).map((l) => ({ id: l.id, name: l.name, color: l.color ?? null })),
-    users: proven(r?.assignableUsers?.nodes, isUser).map((u) => ({ id: u.id, login: u.login })),
+    labels: proven(r?.labels?.nodes, ChoiceLabelSchema).map((l) => ({ id: l.id, name: l.name, color: l.color ?? null })),
+    users: proven(r?.assignableUsers?.nodes, UserSchema).map((u) => ({ id: u.id, login: u.login })),
   };
 }
 
@@ -571,9 +530,19 @@ export function slimBoard(b: Board | null | undefined): StoredBoard | null {
   return {
     project: b.project, viewer: b.viewer, fields: b.fields, views: b.views, repos: b.repos, total: b.total, more: null,
     items: b.items.filter((i) => !i.id.startsWith("temp-")).map((i) => ({
-      id: i.id, db: i.db, type: i.type, archived: i.archived, values: toJson(i.values),
+      id: i.id, db: i.db, type: i.type, archived: i.archived, values: Rec.fromEntries(i.values),
       content: { ...i.content, assignees: i.content.assignees.map((a) => ({ id: a.id, login: a.login })), labels: i.content.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })) },
     })),
   };
 }
 
+
+// ---- as tests of a value's shape: for the cache's pieces (projects.ts) and the tests
+
+export const isStoredBoard = Schema.is(StoredBoardSchema);
+export const isListedProject = Schema.is(ListedProjectSchema);
+export const isItemNode = Schema.is(ItemNodeSchema);
+export const isBoardAnswer = Schema.is(BoardAnswerSchema);
+export const isProjectListAnswer = Schema.is(ProjectListAnswerSchema);
+export const isDetailAnswer = Schema.is(DetailAnswerSchema);
+export const isChoicesAnswer = Schema.is(ChoicesAnswerSchema);

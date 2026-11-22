@@ -2,18 +2,17 @@
 // window's runtime: the projects to pick from, the picked board (every page),
 // a card's body and comments, a repo's labels and people. A token without the
 // project scope is said on the tab (its ScopeProblem), not as a failure; a
-// read of a repo no longer shown is dropped. board.ts's answers still pass its
-// guards (read here as schemas) until board.ts is on Schema.
+// read of a repo no longer shown is dropped. GitHub's answers are decoded by
+// board.ts's schemas.
 
-import { Array as Arr, Clock, Effect, Option, Schema } from "effect";
+import { Array as Arr, Clock, Effect, Option } from "effect";
 import { redraw } from "@fireflies/kit";
-import type { Guard } from "./guard.ts";
 import type { Repo } from "./gh.ts";
 import { GhError, graphql } from "./gh.ts";
 import type { Choices, Item } from "./board.ts";
 import {
-  addPage, boardQuery, choicesQuery, detailQuery, isBoardAnswer, isChoicesAnswer, isDetailAnswer, isProjectListAnswer, parseBoard, parseChoices, parseDetail,
-  parseProjectList, projectListQuery, scopeProblem,
+  BoardAnswerSchema, ChoicesAnswerSchema, DetailAnswerSchema, ProjectListAnswerSchema, addPage, boardQuery, choicesQuery, detailQuery, parseBoard, parseChoices,
+  parseDetail, parseProjectList, projectListQuery, scopeProblem,
 } from "./board.ts";
 import { LIMITS, newest } from "./cache.ts";
 import { SLOW } from "./model.ts";
@@ -23,20 +22,17 @@ import type { default as Projects } from "./projects.ts";
 /** The picker's list is read again this rarely. */
 const LIST_EVERY = 10 * 60000;
 
-/** A board.ts guard as the schema gh.ts decodes with. */
-const answer = <T>(guard: Guard<T>) => Schema.declare(guard);
-
 /** The picked project's board, every page of it; edits GitHub took before this read began are in it now. */
 const readBoard = (v: Projects, repo: Repo, pid: string) => Effect.gen(function* () {
   const started = yield* Clock.currentTimeMillis;
-  const first = yield* Effect.map(graphql(repo, boardQuery(true), answer(isBoardAnswer), [["id", pid]]), parseBoard);
+  const first = yield* Effect.map(graphql(repo, boardQuery(true), BoardAnswerSchema, [["id", pid]]), parseBoard);
 
   if (first === null) return yield* GhError.make({ message: "GitHub didn't find that project (it may be gone, or private to others)." });
 
   let b = first;
 
   for (let more = b.more; more !== null && more !== ""; more = b.more) {
-    const page = yield* graphql(repo, boardQuery(false), answer(isBoardAnswer), [["id", pid], ["after", more]]);
+    const page = yield* graphql(repo, boardQuery(false), BoardAnswerSchema, [["id", pid], ["after", more]]);
 
     b = addPage(b, page);
   }
@@ -66,7 +62,7 @@ export const readDetail = (v: Projects, item: Item) => Effect.gen(function* () {
 
   v.details.set(id, { ...kept, busy: true, at: kept?.at ?? 0 });
 
-  const read = yield* Effect.match(graphql(repo, detailQuery, answer(isDetailAnswer), [["id", id]]), {
+  const read = yield* Effect.match(graphql(repo, detailQuery, DetailAnswerSchema, [["id", id]]), {
     onSuccess: (data) => ({ d: parseDetail(data) }),
     onFailure: (e) => ({ error: e.message }),
   });
@@ -87,7 +83,7 @@ export const choicesFor = (v: Projects, full: string | null) => Effect.gen(funct
 
   if (had !== undefined) return had;
 
-  const c = yield* Effect.map(graphql(repo, choicesQuery(full), answer(isChoicesAnswer)), parseChoices);
+  const c = yield* Effect.map(graphql(repo, choicesQuery(full), ChoicesAnswerSchema), parseChoices);
 
   v.choices.set(full, c);
 
@@ -96,7 +92,7 @@ export const choicesFor = (v: Projects, full: string | null) => Effect.gen(funct
 
 /** The projects to pick from (the repo's, its parent's, its owner's), the pick kept on one of them. */
 const readList = (v: Projects, repo: Repo) => Effect.gen(function* () {
-  const l = yield* Effect.map(graphql(repo, projectListQuery(repo), answer(isProjectListAnswer), [], { partial: true }), parseProjectList);
+  const l = yield* Effect.map(graphql(repo, projectListQuery(repo), ProjectListAnswerSchema, [], { partial: true }), parseProjectList);
 
   if (v.app.repo !== repo) return false;
 
