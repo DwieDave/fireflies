@@ -15,7 +15,6 @@ gpui_apple = { package = "gpui-pre-apple", version = "=0.3.8", features = ["runt
 
 [patch.crates-io]
 gpui-pre = { path = "../../vendor/gpui-pre" }
-gpui-pre-wgpu = { path = "../../vendor/gpui-pre-wgpu" }
 gpui-pre-apple = { path = "../../vendor/gpui-pre-apple" }
 taffy = { path = "../../vendor/taffy" }
 

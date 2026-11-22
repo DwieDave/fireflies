@@ -1137,6 +1137,7 @@ dependencies = [
  "dispatch2",
  "etagere",
  "foreign-types",
+ "futures",
  "gpui-pre",
  "gpui-pre-util",
  "image",
@@ -1148,6 +1149,8 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "parking_lot",
+ "raw-window-handle",
+ "uuid",
 ]
 
 [[package]]
@@ -3920,7 +3923,3 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "gpui-pre-wgpu"
-version = "0.3.8"

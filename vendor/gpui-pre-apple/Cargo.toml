@@ -203,3 +203,12 @@ priority = -1
 [lints.rust.unexpected_cfgs]
 level = "allow"
 priority = 0
+
+[target.'cfg(target_os = "ios")'.dependencies.futures]
+version = "0.3"
+
+[target.'cfg(target_os = "ios")'.dependencies.raw-window-handle]
+version = "0.6"
+
+[target.'cfg(target_os = "ios")'.dependencies.uuid]
+version = "1"
