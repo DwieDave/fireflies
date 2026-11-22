@@ -3,7 +3,7 @@
 // (open and on the rail) and its glint; the meadow that places them all.
 
 import { div, svg } from "gpui-kit";
-import { flyMark, wingedMark } from "./winged.ts";
+import { doneBadge, flyMark, wingedMark } from "./winged.ts";
 import type { Beat } from "./winged.ts";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -21,12 +21,6 @@ import { flyActs } from "./sky-keys.ts";
 import { shelfView } from "./shelf.ts";
 import type Sky from "./sky.ts";
 import { edge as edgeTone } from "@fireflies/tones";
-
-/** A 12 px check on a dark plate, set on a done firefly's mark. */
-export function doneBadge(t: Theme): Element {
-  return div().size(12).flex().items_center().justify_center().bg(t.background).border(1).border_color(t.done)
-    .child(svg(CHECK).size(8).text_color(t.done));
-}
 
 /** How the sidebar's wings beat (sky-plan.ts FLAP): by status, a landing one
  *  as a working one; 3 cells deep; resting ones and a calm sky hold them still. */

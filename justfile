@@ -110,6 +110,8 @@ test:
     bun test scripts/nocturne-launchers.test.ts
     # Mod panes' marks and names (Databases, a launcher's mod) in the header, the parked chip, the tab and the shelf's tile.
     bun test scripts/nocturne-modmarks.test.ts
+    # An agent's tab wears its winged mark, done with the sidebar's check; several agents: the one the tab's status comes from.
+    bun test scripts/nocturne-tab-done.test.ts
     # A middle click on a pane's header bar or parked chip closes it as its close button does (asks kept); not from a button.
     bun test scripts/nocturne-middle-close.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
