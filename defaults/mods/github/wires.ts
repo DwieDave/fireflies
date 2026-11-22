@@ -8,6 +8,7 @@
 // implied by another need (a job needing `changes` and `build`, where
 // `build` needs `changes`) aren't drawn.
 
+import { Array as Arr, Option, Order, Predicate } from "effect";
 import type { Timed, Tone } from "./model.ts";
 import { tone } from "./model.ts";
 
@@ -26,7 +27,7 @@ export function reduceNeeds<K>(parents: ReadonlyMap<K, readonly K[]>): Map<K, K[
   const above = (id: K, seen = new Set<K>()): Set<K> => {
     const known = memo.get(id);
 
-    if (known) return known;
+    if (known !== undefined) return known;
 
     const out = new Set<K>();
 
@@ -48,9 +49,9 @@ export function reduceNeeds<K>(parents: ReadonlyMap<K, readonly K[]>): Map<K, K[
   const out = new Map<K, K[]>();
 
   for (const [id, ps] of parents) {
-    const own = [...new Set(ps)].filter((p) => p !== id);
+    const own = Arr.filter(Arr.dedupe(ps), (p) => p !== id);
 
-    out.set(id, own.filter((p) => !own.some((q) => q !== p && above(q).has(p))));
+    out.set(id, Arr.filter(own, (p) => !Arr.some(own, (q) => q !== p && above(q).has(p))));
   }
 
   return out;
@@ -65,14 +66,17 @@ export type GraphJob = Timed & { readonly id: number };
 /** What a job's line comes from: the run, a job left of it, or a job further left by its detour. */
 type Source = "run" | number | { readonly via: number };
 
-const isVia = (s: Source): s is { readonly via: number } => typeof s === "object";
+const isVia = (s: Source): s is { readonly via: number } => Predicate.isObject(s);
 
 const srcKey = (s: Source) => (isVia(s) ? `via:${s.via}` : String(s));
 
-const lineTone = (k: Tone): LineTone => (k === "working" ? "working" : k === "done" ? "done" : "dim");
+const lineTone = (k: Tone): LineTone => (k === "working" || k === "done" ? k : "dim");
 
-const groupTone = (tones: readonly Tone[]): LineTone => (tones.includes("working") ? "working"
-  : tones.every((k) => k === "queued" || k === "skipped" || k === "stopped") ? "dim" : "done");
+function groupTone(tones: readonly Tone[]): LineTone {
+  if (Arr.contains(tones, "working")) return "working";
+
+  return Arr.every(tones, (k) => k === "queued" || k === "skipped" || k === "stopped") ? "dim" : "done";
+}
 
 /** The run's box. */
 export interface RunBox {
@@ -139,24 +143,24 @@ interface Group {
 export function route<J extends GraphJob>(cols: readonly (readonly J[])[], parents: ReadonlyMap<number, readonly number[]> | null, runTone: Tone = "done"): Routed<J> {
   const colOf = new Map<number, number>();
 
-  cols.forEach((c, ci) => c.forEach((j) => colOf.set(j.id, ci)));
+  for (const [ci, c] of Arr.zip(Arr.range(0, cols.length - 1), cols)) for (const j of c) colOf.set(j.id, ci);
 
   const gaps = groupGaps(cols, sources(cols, parents, colOf), colOf);
   const at = place(cols, gapWidths(gaps), runTone, colOf);
   const lines = pen();
   const vias = drawDetours(at, cols, gaps, lines);
 
-  gaps.forEach((gs, g) => drawGap(at, gs, g, vias, lines));
+  for (const [g, gs] of Arr.zip(Arr.range(0, gaps.length - 1), gaps)) drawGap(at, gs, g, vias, lines);
 
   // Detours over the top push everything down; those under make it taller.
-  const top = Math.min(PAD, ...lines.segs.map((r) => r.y));
+  const top = Math.min(PAD, ...Arr.map(lines.segs, (r) => r.y));
   const shift = PAD - top;
 
   for (const b of [at.run, ...at.nodes, ...lines.segs]) b.y += shift;
 
   for (const q of lines.pulses) q.y += shift;
 
-  const bottom = Math.max(PAD + at.tall + shift, ...lines.segs.map((r) => r.y + r.h));
+  const bottom = Math.max(PAD + at.tall + shift, ...Arr.map(lines.segs, (r) => r.y + r.h));
 
   return { run: at.run, nodes: at.nodes, segs: lines.segs, pulses: lines.pulses, width: at.width, height: bottom + PAD };
 }
@@ -165,19 +169,22 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
 function sources<J extends GraphJob>(cols: readonly (readonly J[])[], parents: ReadonlyMap<number, readonly number[]> | null, colOf: ReadonlyMap<number, number>): Map<number | "run", (number | "run")[]> {
   const raw = new Map<number | "run", (number | "run")[]>();
 
-  cols.forEach((c, ci) => c.forEach((j) => {
-    if (!parents) {
-      raw.set(j.id, ci === 0 ? ["run"] : (cols[ci - 1] ?? []).map((p) => p.id));
+  for (const [ci, c] of Arr.zip(Arr.range(0, cols.length - 1), cols)) {
+    for (const j of c) {
+      if (parents === null) {
+        raw.set(j.id, ci === 0 ? ["run"] : Arr.map(cols[ci - 1] ?? [], (p) => p.id));
 
-      return;
+        continue;
+      }
+
+      const ps: (number | "run")[] = Arr.filter(parents.get(j.id) ?? [], (p) => (colOf.get(p) ?? Infinity) < ci);
+      const first: (number | "run")[] = ci === 0 ? ["run"] : [];
+
+      raw.set(j.id, ps.length > 0 ? ps : first);
     }
+  }
 
-    const ps = (parents.get(j.id) ?? []).filter((p) => (colOf.get(p) ?? Infinity) < ci);
-
-    raw.set(j.id, ps.length ? ps : ci === 0 ? ["run"] : []);
-  }));
-
-  return parents ? reduceNeeds(raw) : raw;
+  return parents === null ? raw : reduceNeeds(raw);
 }
 
 /** The column a source sits in (-1 for the run). */
@@ -188,28 +195,28 @@ const colOfSrc = (colOf: ReadonlyMap<number, number>, s: number | "run") => (s =
  * sources. A source from further left comes in as its detour, { via: id }.
  */
 function groupGaps<J extends GraphJob>(cols: readonly (readonly J[])[], from: ReadonlyMap<number | "run", readonly (number | "run")[]>, colOf: ReadonlyMap<number, number>): Group[][] {
-  return cols.map((c, g) => {
+  return Arr.map(cols, (c, g) => {
     const byKey = new Map<string, Group>();
 
     for (const j of c) {
-      const src = (from.get(j.id) ?? []).map((s): Source => (s !== "run" && (colOfSrc(colOf, s) ?? Infinity) < g - 1 ? { via: s } : s));
+      const src = Arr.map(from.get(j.id) ?? [], (s): Source => (s !== "run" && (colOfSrc(colOf, s) ?? Infinity) < g - 1 ? { via: s } : s));
 
-      if (!src.length) continue;
+      if (src.length === 0) continue;
 
-      const key = src.map(srcKey).sort().join("|");
+      const key = Arr.join(Arr.sort(Arr.map(src, srcKey), Order.String), "|");
       const group = byKey.get(key) ?? { src, targets: [] };
 
       byKey.set(key, group);
       group.targets.push(j.id);
     }
 
-    return [...byKey.values()];
+    return Arr.fromIterable(byKey.values());
   });
 }
 
 /** Each gap's width: room for its buses, merge buses first, then the split/single ones. */
 function gapWidths(gaps: readonly (readonly Group[])[]): number[] {
-  return gaps.map((gs) => {
+  return Arr.map(gaps, (gs) => {
     let lanes = 0;
 
     for (const gr of gs) lanes += gr.src.length > 1 && gr.targets.length > 1 ? 2 : 1;
@@ -233,31 +240,33 @@ interface Placed<J> {
 
 /** Boxes: columns side by side, each centered on the tallest. */
 function place<J extends GraphJob>(cols: readonly (readonly J[])[], gapW: readonly number[], runTone: Tone, colOf: ReadonlyMap<number, number>): Placed<J> {
-  const heights = cols.map((c) => c.length * NH + Math.max(0, c.length - 1) * GAP_Y);
+  const heights = Arr.map(cols, (c) => c.length * NH + Math.max(0, c.length - 1) * GAP_Y);
   const tall = Math.max(NH, ...heights);
   const colX: number[] = [];
   let x = PAD + RW;
 
-  cols.forEach((_, ci) => {
+  for (const ci of Arr.range(0, cols.length - 1)) {
+    if (cols.length === 0) break;
+
     x += gapW[ci] ?? GAP_X;
     colX.push(x);
     x += NW;
-  });
+  }
 
   const run: RunBox = { x: PAD, y: PAD + Math.round((tall - NH) / 2), w: RW, tone: runTone };
   const nodes: JobBox<J>[] = [];
   const byId = new Map<number, JobBox<J>>();
 
-  cols.forEach((c, ci) => {
+  for (const [ci, c] of Arr.zip(Arr.range(0, cols.length - 1), cols)) {
     const top = PAD + Math.round((tall - (heights[ci] ?? 0)) / 2);
 
-    c.forEach((job, ri) => {
+    for (const [ri, job] of Arr.zip(Arr.range(0, c.length - 1), c)) {
       const n = { job, col: ci, row: ri, x: colX[ci] ?? 0, y: top + ri * (NH + GAP_Y), w: NW, tone: tone(job.status, job.conclusion) };
 
       nodes.push(n);
       byId.set(job.id, n);
-    });
-  });
+    }
+  }
 
   return { run, nodes, byId, colX, colOf, tall, width: x + PAD };
 }
@@ -300,12 +309,14 @@ function drawDetours<J extends GraphJob>(at: Placed<J>, cols: readonly (readonly
   const vias = new Map<string, End | null>();
   const detours: { readonly id: number; readonly g: number }[] = [];
 
-  gaps.forEach((gs, g) => gs.forEach((gr) => gr.src.forEach((s) => {
-    if (!isVia(s) || vias.has(`${s.via}@${g}`)) return;
+  for (const [g, gs] of Arr.zip(Arr.range(0, gaps.length - 1), gaps)) {
+    for (const s of Arr.flatMap(gs, (gr) => gr.src)) {
+      if (!isVia(s) || vias.has(`${s.via}@${g}`)) continue;
 
-    vias.set(`${s.via}@${g}`, null);
-    detours.push({ id: s.via, g });
-  })));
+      vias.set(`${s.via}@${g}`, null);
+      detours.push({ id: s.via, g });
+    }
+  }
 
   // Over the columns between when the job sits in the top half of its own
   // column (so its line crosses fewer lines out of the jobs below it), else under.
@@ -314,7 +325,7 @@ function drawDetours<J extends GraphJob>(at: Placed<J>, cols: readonly (readonly
   for (const d of detours) {
     const p = at.byId.get(d.id), c = colOfSrc(at.colOf, d.id);
 
-    if (!p || c === undefined) continue;
+    if (p === undefined || c === undefined) continue;
 
     const up = p.row < ((cols[c]?.length ?? 1) - 1) / 2;
     const i = up ? over++ : under++;
@@ -339,7 +350,7 @@ function edgeBetween<J extends GraphJob>(at: Placed<J>, cols: readonly (readonly
     for (const j of cols[k] ?? []) {
       const b = at.byId.get(j.id);
 
-      if (b) edge = up ? Math.min(edge, b.y) : Math.max(edge, b.y + NH);
+      if (b !== undefined) edge = up ? Math.min(edge, b.y) : Math.max(edge, b.y + NH);
     }
   }
 
@@ -351,39 +362,31 @@ function drawGap<J extends GraphJob>(at: Placed<J>, gs: readonly Group[], g: num
   const midOf = (id: number | undefined) => {
     const n = id === undefined ? undefined : at.byId.get(id);
 
-    return n ? mid(n) : 0;
+    return n === undefined ? 0 : mid(n);
   };
 
   const left = gapLeft(at, g), right = at.colX[g] ?? left;
-  const order = [...gs].sort((a, b) => midOf(a.targets[0]) - midOf(b.targets[0]));
-  const merges = order.filter((gr) => gr.src.length > 1 && gr.targets.length > 1);
+  const order = Arr.sort(gs, Order.mapInput(Order.Number, (gr: Group) => midOf(gr.targets[0])));
+  const merges = Arr.filter(order, (gr) => gr.src.length > 1 && gr.targets.length > 1);
   const lanes = merges.length + order.length;
 
   const laneX = (i: number) => (lanes === 1 ? Math.round((left + right) / 2)
     : left + EDGE + Math.round(i * (right - left - 2 * EDGE) / (lanes - 1)));
 
   for (const gr of order) {
-    const srcs = gr.src.flatMap((s): End[] => {
-      if (isVia(s)) {
-        const d = vias.get(`${s.via}@${g}`);
-
-        return d ? [d] : [];
-      }
+    const srcs = Arr.flatMap(gr.src, (s): End[] => {
+      if (isVia(s)) return Arr.fromNullishOr(vias.get(`${s.via}@${g}`));
 
       const b = s === "run" ? at.run : at.byId.get(s);
 
-      return b ? [{ x: b.x + b.w, y: mid(b), tone: b.tone }] : [];
+      return b === undefined ? [] : [{ x: b.x + b.w, y: mid(b), tone: b.tone }];
     });
 
-    const tgts = gr.targets.flatMap((id) => {
-      const n = at.byId.get(id);
+    const tgts = Arr.flatMap(gr.targets, (id) => Arr.fromNullishOr(at.byId.get(id)));
+    const merge = Arr.findFirstIndex(merges, (m) => m === gr);
+    const lane = Option.getOrElse(Arr.findFirstIndex(order, (o) => o === gr), () => 0);
 
-      return n ? [n] : [];
-    });
-
-    const merged = merges.includes(gr);
-
-    drawGroup(srcs, tgts, merged ? laneX(merges.indexOf(gr)) : null, laneX(merges.length + order.indexOf(gr)), lines);
+    drawGroup(srcs, tgts, Option.isSome(merge) ? laneX(merge.value) : null, laneX(merges.length + lane), lines);
   }
 }
 
@@ -393,26 +396,26 @@ function drawGap<J extends GraphJob>(at: Placed<J>, gs: readonly Group[], g: num
  * to each target, a pulse into a working one.
  */
 function drawGroup(srcs: readonly End[], tgts: readonly JobBox<unknown>[], inX: number | null, out: number, lines: Pen): void {
-  const into = groupTone(tgts.map((n) => n.tone));
+  const into = groupTone(Arr.map(tgts, (n) => n.tone));
 
   for (const s of srcs) lines.h(s.x, inX ?? out, s.y, lineTone(s.tone));
 
-  const ty = tgts.map(mid);
+  const ty = Arr.map(tgts, mid);
 
   if (inX !== null) {
     // Many into many: merge, one trunk, split.
-    const sy = srcs.map((s) => s.y);
+    const sy = Arr.map(srcs, (s) => s.y);
     const lo = Math.max(Math.min(...sy), Math.min(...ty)), hi = Math.min(Math.max(...sy), Math.max(...ty));
     const centre = Math.round((Math.min(...ty) + Math.max(...ty)) / 2);
 
-    const trunk = lo <= hi ? Math.min(hi, Math.max(lo, nearest(centre, [...ty, ...sy].filter((y) => y >= lo && y <= hi)) ?? centre))
+    const trunk = lo <= hi ? Math.min(hi, Math.max(lo, nearest(centre, Arr.filter([...ty, ...sy], (y) => y >= lo && y <= hi)) ?? centre))
       : Math.round((lo + hi) / 2);
 
     lines.v(inX, Math.min(...sy, trunk), Math.max(...sy, trunk), into);
     lines.h(inX, out, trunk, into);
     lines.v(out, Math.min(...ty, trunk), Math.max(...ty, trunk), into);
   } else {
-    const ys = [...srcs.map((s) => s.y), ...ty];
+    const ys = [...Arr.map(srcs, (s) => s.y), ...ty];
 
     lines.v(out, Math.min(...ys), Math.max(...ys), into);
   }
