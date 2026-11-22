@@ -3,9 +3,10 @@
 // on the window's queue, and the menus and prompts several tables share.
 
 import type { Context } from "gpui-kit";
-import { Effect } from "effect";
+import { Array as Arr, Effect, String as Str } from "effect";
 import type { GitServices } from "./fx.ts";
 import type { StatusFile } from "./parse.ts";
+import type { CommitFile } from "./git.ts";
 import type { default as GitView } from "./main.ts";
 import type { ExecOptions, SpawnOptions } from "./state.ts";
 import type { Item } from "./items.ts";
@@ -28,21 +29,25 @@ export function spawn<E>(v: GitView, job: Effect.Effect<void, E, GitServices>, o
 
 /** The ref a branch / tag / commit / remote branch row stands for. */
 export function refOf(v: GitView, x: Item | null = it(v)): string | null {
-  if (!x) return null;
+  if (x === null) return null;
 
   return hashOf(x) ?? (isRemoteBranch(x) ? x.name : null) ?? nameOf(x);
 }
 
 /** A row's working-tree files: a directory's, a file's. */
 export function filesOf(rows: readonly Item[]): StatusFile[] {
-  return rows.flatMap((r) => {
+  return Arr.flatMap(rows, (r) => {
     if (!isTreeRow(r)) return [];
 
-    if (r.kind === "dir") return r.files.flatMap((f) => ("staged" in f ? [f] : []));
+    if (r.kind === "dir") {
+      const all: readonly (StatusFile | CommitFile)[] = r.files;
+
+      return Arr.filter(all, (f): f is StatusFile => "staged" in f);
+    }
 
     const f = statusFileOf(r);
 
-    return f ? [f] : [];
+    return f === null ? [] : [f];
   });
 }
 
@@ -86,14 +91,14 @@ export function commit(v: GitView, flags: string) {
   const files = v.data.status?.files ?? [];
   const g = v.git;
 
-  if (!files.length || !g) return v.error("Nothing to commit: the work tree is clean.");
+  if (!Arr.isReadonlyArrayNonEmpty(files) || g === null) return v.error("Nothing to commit: the work tree is clean.");
 
   const go = () => v.commitPopup({
-    title: flags ? "Commit (no hooks)" : "Commit", draft: true,
-    ok: (m) => git(v, "Commit", [], { env: { NOCTURNE_GIT_MSG: m }, shell: MSG_COMMIT(flags), shown: `git commit ${flags ? `${flags} ` : ""}-m <message>` }),
+    title: Str.isEmpty(flags) ? "Commit" : "Commit (no hooks)", draft: true,
+    ok: (m) => git(v, "Commit", [], { env: { NOCTURNE_GIT_MSG: m }, shell: MSG_COMMIT(flags), shown: `git commit ${Str.isEmpty(flags) ? "" : `${flags} `}-m <message>` }),
   });
 
-  if (!files.some((f) => f.staged)) {
+  if (!Arr.some(files, (f) => f.staged)) {
     return v.ask({
       title: "Nothing staged", text: "No files are staged. Stage every change and commit?",
       go: () => spawn(v, Effect.gen(function* () {
@@ -113,7 +118,7 @@ export function commit(v: GitView, flags: string) {
 export function upstreamResetMenu(v: GitView) {
   const up = v.data.status?.upstream;
 
-  if (!up) return v.error("This branch has no upstream.");
+  if (up === null || up === undefined || Str.isEmpty(up)) return v.error("This branch has no upstream.");
 
   v.menu({
     title: `Reset to ${up}`,
@@ -130,7 +135,7 @@ export function push(v: GitView) {
   const g = v.git;
   const head = s?.head;
 
-  if (!s || !head || !g) return v.error("Not on a branch: nothing to push.");
+  if (s === null || head === null || head === undefined || g === null) return v.error("Not on a branch: nothing to push.");
 
   const go = (args: readonly string[], title = "Push"): void => spawn(v, Effect.gen(function* () {
     // The pushed branch's row spins (whichever row is selected).
@@ -147,18 +152,18 @@ export function push(v: GitView) {
     yield* v.reloadNow();
   }), { row: `branch:${head}` });
 
-  if (s.upstream) return go(["push"]);
+  if (s.upstream !== null) return go(["push"]);
 
   const remote = v.data.remotes[0]?.name;
 
-  if (!remote) return v.error("No remote to push to: add one in Branches › Remotes (n).");
+  if (remote === undefined) return v.error("No remote to push to: add one in Branches › Remotes (n).");
 
   v.prompt({
     title: "Push to (upstream)", value: `${remote} ${head}`,
     ok: (x) => {
-      const [r, b] = x.trim().split(/\s+/);
+      const [r, b] = Str.split(Str.trim(x), /\s+/);
 
-      if (r) go(["push", "--set-upstream", r, b ?? head]);
+      if (r !== undefined && Str.isNonEmpty(r)) go(["push", "--set-upstream", r, b ?? head]);
     },
   });
 }
@@ -168,7 +173,7 @@ export function pull(v: GitView) {
   const g = v.git;
   const head = s?.head;
 
-  if (!s || !head || !g) return v.error("Not on a branch: nothing to pull.");
+  if (s === null || head === null || head === undefined || g === null) return v.error("Not on a branch: nothing to pull.");
 
   const go = (args: readonly string[]): void => spawn(v, Effect.gen(function* () {
     v.busy(`Pulling ${head}…`);
@@ -180,16 +185,16 @@ export function pull(v: GitView) {
     yield* v.reloadNow();
   }), { row: `branch:${head}` });
 
-  if (s.upstream) return go(["pull", "--no-edit"]);
+  if (s.upstream !== null) return go(["pull", "--no-edit"]);
 
   const remote = v.data.remotes[0]?.name;
 
-  if (!remote) return v.error("No remote to pull from.");
+  if (remote === undefined) return v.error("No remote to pull from.");
 
   v.prompt({
     title: "Pull from (and set as upstream)", value: `${remote}/${head}`,
     ok: (x) => spawn(v, Effect.gen(function* () {
-      const r = yield* g.run("Set upstream", ["branch", `--set-upstream-to=${x.trim()}`]);
+      const r = yield* g.run("Set upstream", ["branch", `--set-upstream-to=${Str.trim(x)}`]);
 
       if (!r.ok) return v.error(r.err);
 
