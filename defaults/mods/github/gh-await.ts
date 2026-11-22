@@ -5,17 +5,15 @@
 // goes with the last one.
 
 import { Effect, Option, Schema } from "effect";
-import { appHome } from "herdr";
 import type { Context } from "gpui-kit";
 import { Redraw } from "@fireflies/kit";
 import type { Guard } from "./guard.ts";
 import type { ApiOptions, Fetched, GraphqlOptions, Read, Repo, RepoPlace, Where } from "./gh.ts";
 import * as Gh from "./gh.ts";
-import type { Entry } from "./cache.ts";
 import type { GqlVar } from "./model.ts";
-import * as store from "./store.ts";
+import type * as store from "./store.ts";
 import type { Slugged } from "./remotes.ts";
-import { nowMs, runtime } from "./fx.ts";
+import { runtime } from "./fx.ts";
 
 export type { Repo } from "./gh.ts";
 
@@ -72,11 +70,3 @@ export const repoOf = (folder: string | null | undefined, on: string | null): Pr
 /** gh.ts viewRepo. */
 export const viewRepo = (want: Slugged | null, place: RepoPlace, { quiet = false } = {}): Promise<Repo | null> => run(Gh.viewRepo(want, place, quiet));
 
-// ---- the cache file (store.ts), for window-reads.ts
-
-/** The cache file of this app. */
-const cacheFile = (): string => store.cachePath(appHome());
-
-/** store.ts save at the window's time: true once written, false when it couldn't be. */
-export const saveCache = (folder: string | null, entry: Entry): Promise<boolean> =>
-  run(Effect.match(store.save(cacheFile(), folder, entry, nowMs()), { onFailure: () => false, onSuccess: () => true }));

@@ -6,7 +6,10 @@ import { Effect } from "effect";
 import type { Context } from "gpui-kit";
 import type { Entry } from "./cache.ts";
 import { entryFor, slimRepo } from "./cache.ts";
-import { saveCache } from "./gh-await.ts";
+import { appHome } from "herdr";
+import * as store from "./store.ts";
+import { cachePath } from "./store.ts";
+import { runtime } from "./fx.ts";
 import type { ReadOptions } from "./host.ts";
 import type { default as GitHub } from "./main.ts";
 
@@ -45,12 +48,19 @@ function finish(v: GitHub, cx: Context, tab: Tab, gen: number): void {
 /** A tab's read, one at a time (the shown tab's waits for the read behind it, and the other way round). */
 const readTab = (tab: Tab, opts: ReadOptions) => tab.reading.withPermits(1)(tab.read(opts));
 
+/** What a refresh asked for: true is every read past the ETags, false the timers' own. */
+function readOptions(force: boolean | ReadOptions): ReadOptions {
+  if (force === true) return { all: true, fresh: true };
+
+  return force === false ? {} : force;
+}
+
 /** Reads the shown tab now (`force`: true, or { all, fresh }); one read at a time, another asked meanwhile runs after it.
  *  The read is a run on the window: closing it ends the read. */
 export function refresh(v: GitHub, cx: Context, force: boolean | ReadOptions = false): void {
   if (v.repo === null) return;
 
-  const opts: ReadOptions = force === true ? { all: true, fresh: true } : force === false ? {} : force;
+  const opts = readOptions(force);
 
   if (v.busy) {
     v.again = true;
@@ -101,20 +111,27 @@ export function warm(v: GitHub, _cx: Context): void {
   }))));
 }
 
-/** Writes what's shown to the cache (store.ts), at most every SAVE_EVERY. */
-export function persist(v: GitHub): Promise<boolean> | null {
-  if (!v.repo || v.saving || v.state !== "ready") return v.saving;
+/** Writes what's shown to the cache (store.ts), at most every SAVE_EVERY. It runs on the mod's runtime, not the
+ *  copy's, so a close (which awaits it) doesn't cut it off; a write that fails leaves the window dirty, tried again
+ *  at the next save. */
+export function persist(v: GitHub): Promise<void> | null {
+  if (v.repo === null || v.saving !== null || v.state !== "ready") return v.saving;
 
   v.dirty = false;
-  v.savedAt = Date.now();
+  v.savedAt = v.now();
 
   const entry: Entry = { ...entryFor(v.repo), repo: slimRepo(v.repo), prs: v.prs.snapshot(), actions: v.actions.snapshot(), projects: v.projects.snapshot() };
 
-  const saving = saveCache(v.folder, entry).finally(() => {
-    v.saving = null;
-  });
+  const save = store.save(cachePath(appHome()), v.folder, entry, v.savedAt).pipe(
+    Effect.catch(() => Effect.sync(() => {
+      v.dirty = true;
+    })),
+    Effect.ensuring(Effect.sync(() => {
+      v.saving = null;
+    })),
+  );
 
-  v.saving = saving;
+  v.saving = runtime.runtime.runPromise(save);
 
-  return saving;
+  return v.saving;
 }

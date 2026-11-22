@@ -186,7 +186,7 @@ export default class GitHub extends View implements Host {
   located = false;
   dirty = false;
   savedAt = 0;
-  saving: Promise<boolean> | null = null;
+  saving: Promise<void> | null = null;
   closed = false;
   switching = false;
   gen = 0;
@@ -401,7 +401,7 @@ export default class GitHub extends View implements Host {
     warm(this, cx);
   }
 
-  persist(): Promise<boolean> | null {
+  persist(): Promise<void> | null {
     return persist(this);
   }
 
