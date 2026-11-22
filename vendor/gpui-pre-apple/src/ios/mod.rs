@@ -6,7 +6,10 @@
 //! [`host::touch`]; everything GPUI asks of a platform is answered here.
 
 pub mod host;
+mod open_type;
+mod text_system;
 mod platform;
 mod window;
 
 pub use platform::IosPlatform;
+pub use text_system::MacTextSystem as IosTextSystem;

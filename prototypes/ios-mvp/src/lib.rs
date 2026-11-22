@@ -8,7 +8,7 @@ mod app {
         InteractiveElement as _, ParentElement as _, Render, StatefulInteractiveElement as _,
         Styled as _, Window, WindowOptions, div, px, rgb,
     };
-    use gpui_apple::ios::{IosPlatform, host};
+    use gpui_apple::ios::{IosPlatform, IosTextSystem, host};
     use std::{cell::RefCell, ffi::c_void, rc::Rc, sync::Arc};
 
     thread_local! {
@@ -29,6 +29,10 @@ mod app {
                 .items_center()
                 .justify_center()
                 .gap(px(24.))
+                .font_family("Helvetica Neue")
+                .text_color(rgb(0xe8e6e3))
+                .child(div().text_size(px(28.)).font_weight(gpui::FontWeight::SEMIBOLD).child("Fireflies on iOS"))
+                .child(div().text_size(px(15.)).text_color(rgb(0x8b93a7)).child("GPUI · Metal · UIKit touch"))
                 .child(
                     div()
                         .id("tap-target")
@@ -40,6 +44,7 @@ mod app {
                             cx.notify();
                         })),
                 )
+                .child(div().text_size(px(20.)).child(format!("taps: {}", self.taps)))
                 .child(
                     div()
                         .flex()
@@ -54,7 +59,7 @@ mod app {
 
     pub fn start(layer: *mut c_void, width: f32, height: f32, scale: f32, taps: usize) {
         unsafe { host::attach_layer(layer, width, height, scale) };
-        let platform = Rc::new(IosPlatform::new(Arc::new(gpui::NoopTextSystem::new())));
+        let platform = Rc::new(IosPlatform::new(Arc::new(IosTextSystem::new())));
         let handle = Application::with_platform(platform).run_embedded(move |cx: &mut App| {
             cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| Counter { taps }))
                 .expect("open the window");
