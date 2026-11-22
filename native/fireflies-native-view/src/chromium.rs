@@ -476,7 +476,7 @@ impl ChromiumView {
         }
     }
 
-    pub fn action(&self, action: &str, _args: &Value) -> Result<Value, String> {
+    pub fn action(&self, action: &str, args: &Value) -> Result<Value, String> {
         let b = &self.browser;
         let host = b.host().ok_or("browser has no host")?;
         match action {
@@ -495,6 +495,11 @@ impl ChromiumView {
                 return Ok(json!(true));
             }
             "browser.stop" => b.stop_load(),
+            "browser.scroll" => {
+                let script = crate::scroll_script(args)?;
+                let f = b.main_frame().ok_or("browser has no page")?;
+                f.execute_java_script(Some(&CefString::from(script.as_str())), None, 0);
+            }
             "browser.zoomIn" => host.set_zoom_level(host.zoom_level() + 0.5),
             "browser.zoomOut" => host.set_zoom_level(host.zoom_level() - 0.5),
             "browser.zoomReset" => host.set_zoom_level(0.0),

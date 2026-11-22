@@ -206,6 +206,7 @@ impl Kind {
                 "browser.forward",
                 "browser.reload",
                 "browser.stop",
+                "browser.scroll",
                 "web.inspect",
                 "web.pip",
             ],
@@ -265,6 +266,7 @@ impl Kind {
                 "browser.forward",
                 "browser.reload",
                 "browser.stop",
+                "browser.scroll",
                 "browser.zoomIn",
                 "browser.zoomOut",
                 "browser.zoomReset",
@@ -507,6 +509,47 @@ pub fn normalize_url(input: &str) -> Result<String, String> {
 /// [`normalize_url`].
 pub const CHROMIUM_PAGES: &[&str] = &[]; // Alloy style blocks every chrome:// page
 
+/// `browser.scroll {by, dir, axis?}`'s script: the page scrolled as its own keys would (the
+/// arrows, page up / down, home / end) while the page hasn't the keyboard. `by`: "line" (40 px),
+/// "page" (85 % of the scroller's height or width) or "end" (to the top / bottom, left / right);
+/// `dir`: 1 down / right, -1 up / left; `axis`: "y" (the default) or "x". It scrolls what's
+/// scrollable under the page's middle, else the page. The text is fixed: only those checked words
+/// go in, never anything a mod sends.
+pub fn scroll_script(args: &Value) -> Result<String, String> {
+    let dir = match args.get("dir").and_then(Value::as_i64) {
+        Some(1) => "1",
+        Some(-1) => "-1",
+        _ => return Err("browser.scroll needs { dir: 1 | -1 }".into()),
+    };
+    let by = match args.get("by").and_then(Value::as_str).unwrap_or("line") {
+        b @ ("line" | "page" | "end") => b,
+        _ => return Err("browser.scroll: by is \"line\", \"page\" or \"end\"".into()),
+    };
+    let y = match args.get("axis").and_then(Value::as_str).unwrap_or("y") {
+        "y" => "true",
+        "x" => "false",
+        _ => return Err("browser.scroll: axis is \"y\" or \"x\"".into()),
+    };
+    Ok(SCROLL_SCRIPT
+        .replace("__Y__", y)
+        .replace("__BY__", by)
+        .replace("__DIR__", dir))
+}
+
+const SCROLL_SCRIPT: &str = r#"(() => {
+  const y = __Y__, by = "__BY__", dir = __DIR__, root = document.scrollingElement || document.documentElement;
+  const can = (e) => {
+    const o = getComputedStyle(e)[y ? "overflowY" : "overflowX"];
+    return /auto|scroll|overlay/.test(o) && (y ? e.scrollHeight > e.clientHeight : e.scrollWidth > e.clientWidth);
+  };
+  let e = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  while (e && e !== document.body && e !== document.documentElement && !can(e)) e = e.parentElement;
+  if (!e || e === document.body || e === document.documentElement) e = root;
+  const room = y ? (e === root ? innerHeight : e.clientHeight) : (e === root ? innerWidth : e.clientWidth);
+  const step = by === "line" ? 40 : by === "page" ? room * 0.85 : (y ? e.scrollHeight : e.scrollWidth);
+  e.scrollBy(y ? { top: dir * step, behavior: "instant" } : { left: dir * step, behavior: "instant" });
+})()"#;
+
 pub fn normalize_chromium_url(input: &str) -> Result<String, String> {
     let s = input.trim();
     if let Some(rest) = s.strip_prefix("chrome://") {
@@ -634,6 +677,21 @@ impl Event {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn last_view_scroll_script_takes_only_its_words() {
+        let s = scroll_script(&json!({ "by": "page", "dir": -1 })).unwrap();
+        assert!(s.contains("const y = true, by = \"page\", dir = -1,"));
+        let s = scroll_script(&json!({ "by": "end", "dir": 1, "axis": "x" })).unwrap();
+        assert!(s.contains("const y = false, by = \"end\", dir = 1,"));
+        assert!(scroll_script(&json!({ "dir": 1 })).unwrap().contains("by = \"line\""));
+        assert!(scroll_script(&json!({ "by": "page" })).is_err());
+        assert!(scroll_script(&json!({ "by": "x\"; alert(1); \"", "dir": 1 })).is_err());
+        assert!(scroll_script(&json!({ "by": "line", "dir": 2 })).is_err());
+        assert!(scroll_script(&json!({ "dir": 1, "axis": "z" })).is_err());
+        assert!(Kind::Web.allows("browser.scroll") && Kind::Chromium.allows("browser.scroll"));
+        assert!(!Kind::Pdf.allows("browser.scroll"));
+    }
+
     use super::*;
 
     #[test]

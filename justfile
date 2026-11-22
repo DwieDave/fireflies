@@ -286,6 +286,10 @@ test:
     bun test scripts/look.test.ts
     # A connection's sslmode: kept in connections.json, a picked database and a pin; psql's -d conninfo, MySQL's --ssl-mode and MariaDB's --skip-ssl / --ssl-verify-server-cert (its --version tells them apart); the form's ssl toggle by key (a pasted require kept, shown beside it); a pasted URL, a found DATABASE_URL and PGSSLMODE; databases.connect carrying it, refusing an unknown one.
     bun test scripts/databases-ssl.test.ts
+    # The Databases window back where it was left in its space (lastview.ts): written on change under the space's id, a sent connection kept as its request; another space opens as before; a reconnect that fails shows the list with why.
+    bun test scripts/databases-lastview.test.ts
+    # The GitHub window back where it was left in its space (github/lastview.ts): its tab, selection and filters per space id, written by the tick when changed; another space and another folder open as before; a pane's own place still wins.
+    bun test scripts/github-lastview.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

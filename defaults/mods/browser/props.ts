@@ -3,6 +3,7 @@
 // context, whether native views exist here, a bar button's shape.
 
 import type { Context, KeyEvent } from "gpui-kit";
+import type { Scroll } from "./scroll.ts";
 import type { Props } from "gpui-shell";
 import * as herdr from "herdr";
 import { props, closeOverlay } from "herdr";
@@ -67,7 +68,7 @@ export const closeOwn = () => {
 export const available = () => typeof herdr.nativeView !== "undefined";
 
 /** What a call to a web view is given: a page to go to, whether it shows, or nothing. */
-export type CallArgs = { readonly url: string } | { readonly visible: boolean } | Readonly<Record<never, never>>;
+export type CallArgs = { readonly url: string } | { readonly visible: boolean } | Scroll | Readonly<Record<never, never>>;
 
 /** A bar button tab and enter reach: its id, whether it can be pressed, what it does. */
 export interface Control {

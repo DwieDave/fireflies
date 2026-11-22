@@ -97,7 +97,11 @@ runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
 `data/github/cache.json`: it shows that at once when opened (from the
 keys, the palette, + new, another mod's `nocturne.github*` command, or back
 from a pull request's review) and reads GitHub behind it, every time; the
-bar says "updating…", then "updated 2m ago". While open it reads the shown
+bar says "updating…", then "updated 2m ago". Where it was left in each space
+(its tab, each tab's selection and filter, for its folder) is kept in shared
+`github.spaces` under the space's id, written as it changes: opened in that
+space on the same folder (also after a restart), it comes back there; a space
+with nothing kept opens on what the window kept last. While open it reads the shown
 tab again every 3 s while a run, job or check moves and every minute when all
 is still; closed, it reads nothing. A workflow run by hand, a re-run (`R`,
 `A`, `e`) or a cancel (`X`) is read again after 1, 2, 3, 5 and 8 s, then
@@ -305,7 +309,12 @@ memory ("ask each time", found ones); they reach the client through its
 environment or a 0600 file in the window's private temp folder, never a
 command line, shared state, settings, the log or the history. It keeps
 `data/databases/connections.json` (no secrets), `history/<id>.json` (a
-password literal blanked) and `queries/<id>.json` (each tab's text). Commands
+password literal blanked) and `queries/<id>.json` (each tab's text). Where it
+was left in each space (its connection, panel, open table and query tab; a
+sent connection as its `databases.connect` request, never a secret) is kept in
+shared `databases.spaces` under the space's id: a window opened in that space
+(also after a restart) connects again and goes back there; a connection that
+doesn't come up leaves the list shown with why. Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
 rows and structure, the cursor in [2] on its row), `databases.cancel`, `databases.stop` (what esc does to a
@@ -748,7 +757,10 @@ the highlighted line shows where it will land.
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
   inspector, `O` the system's browser, `t` a new tab, `x` close the tab, `J` / `K`
   the tab left / right, `1`–`9` a tab (9 the last), Tab / Shift-Tab its buttons
-  and tabs (Enter presses), `?` the keys. Its keys.json section (`mod:browser`:
+  and tabs (Enter presses), the arrows / PgUp / PgDn / Home / End / Space /
+  Shift-Space scroll the page (the native view's `browser.scroll {by: "line" |
+  "page" | "end", dir: 1 | -1, axis?: "y" | "x"}`, either engine; in the page they
+  are the page's own, a field in it keeps them), `?` the keys. Its keys.json section (`mod:browser`:
   Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
   Cmd-Alt-I the inspector) applies in the bar, the address field, the page
   (after a click into it, or Enter from the bar) and its inspector pane, over
