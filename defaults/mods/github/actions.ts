@@ -12,7 +12,7 @@
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Guard, Guarded } from "./guard.ts";
+import type { Guard } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
 import { api, ghRun, fileAt, slimmed } from "./gh-await.ts";
@@ -50,15 +50,11 @@ export function graphHeight(stored: number | null | undefined, rightH: number): 
   return Math.round(Math.min(Math.max(100, rightH - 120), Math.max(100, want)));
 }
 
-const isRunFilter = object({ branch: isString, label: isString });
 
 /** What the tab keeps in shared state between openings (main.ts STATE). */
-export const isActionsKept = object({}, {
-  filter: nullable(isRunFilter), sel: nullable(isNumber), jobSel: nullable(isNumber),
-  sizes: object({}, { runs: isNumber, runsH: isNumber, graph: isNumber, steps: isNumber }),
-});
+import type { ActionsKept } from "./kept.ts";
 
-export type ActionsKept = Guarded<typeof isActionsKept>;
+export type { ActionsKept };
 
 /** The splitters' sizes, once dragged: runs (width), runsH (height, narrow), graph (height), steps (width). */
 interface Sizes {

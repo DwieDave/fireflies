@@ -39,18 +39,22 @@
 // in a web pane beside the pane underneath and closes the window.
 
 import { View, div } from "gpui-kit";
+import { Schema } from "effect";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
-import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
+import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import { type Ran, type Repo, repoOf, viewRepo } from "./gh-await.ts";
+import { readShared, sharedKey, writeShared } from "@fireflies/kit";
+import type { Ran, Repo } from "./gh-await.ts";
+import { runtime } from "./fx.ts";
+import type { GithubFx } from "./fx.ts";
+import { commands, start, switchFork } from "./window-life.ts";
+import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
-import { type Doc, type Entry, lookup, repoKey } from "./cache.ts";
+import { type Doc, type Entry, lookup } from "./cache.ts";
 import * as store from "./store.ts";
 import { type Axis, type Hint, type Note, hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
 import { bindTab, tabActions } from "@fireflies/form-keys";
@@ -59,8 +63,8 @@ import Prs from "./prs.ts";
 import Actions from "./actions.ts";
 import Projects from "./projects.ts";
 import type { Confirm, TabId } from "./window-chrome.ts";
-import { isTabId, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
-import { windowKey, pickerKey, runCommand } from "./window-keys.ts";
+import { TabIdSchema, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
+import { windowKey, pickerKey } from "./window-keys.ts";
 import { refresh, warm, persist, SAVE_EVERY } from "./window-reads.ts";
 import { STATE, WINDOW_KEY, besidePane, keptFor, saveCopy } from "./place.ts";
 
@@ -70,7 +74,9 @@ export const WINDOW = "github.window";
 // read when github.new-pr arrives or the window opens with create "pr".
 export const CREATE = "github.create";
 
-const CREATE_KEY = sharedKey(CREATE, nullable(object({}, { folder: nullable(isString), on: nullable(isString), head: nullable(isString), at: isNumber })));
+const maybeText = Schema.optionalKey(Schema.NullOr(Schema.String));
+
+const CREATE_KEY = sharedKey(CREATE, Schema.NullOr(Schema.Struct({ folder: maybeText, on: maybeText, head: maybeText, at: Schema.optionalKey(Schema.Finite) })));
 
 const CREATE_FRESH = 30000;
 const BEAT = 4000;
@@ -78,11 +84,14 @@ const BEAT = 4000;
 
 /** What the window is opened with (nocturne/github.ts, git's way back, + new): the folder and
  *  machine, its overlay, the tab, a form to open (and when it was asked). */
-const isGithubProps = object({}, {
-  folder: nullable(isString), on: nullable(isString), overlay: isString, slot: isString, tab: isTabId, create: literal("pr", "workflow"), at: isNumber,
+const GithubPropsSchema = Schema.Struct({
+  folder: maybeText, on: maybeText, overlay: Schema.optionalKey(Schema.String), slot: Schema.optionalKey(Schema.String), tab: Schema.optionalKey(TabIdSchema),
+  create: Schema.optionalKey(Schema.Literals(["pr", "workflow"])), at: Schema.optionalKey(Schema.Finite),
 });
 
-type GithubProps = Guarded<typeof isGithubProps>;
+const isGithubProps = Schema.is(GithubPropsSchema);
+
+type GithubProps = typeof GithubPropsSchema.Type;
 
 const NO_PROPS: GithubProps = {};
 
@@ -121,12 +130,6 @@ function here(): Place {
 
   // A space attached to a folder (space.folder) uses it over where its panes are.
   return { folder: (space?.attached && space.folder) || cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
-}
-
-/** The same repo described the same way, its branch aside (that one may move). */
-function sameRepo(a: Repo, b: Repo): boolean {
-  return a.owner === b.owner && a.name === b.name && a.full === b.full && a.host === b.host && a.root === b.root && a.on === b.on
-    && a.url === b.url && a.base === b.base && a.parent === b.parent && a.child === b.child;
 }
 
 export default class GitHub extends View implements Host {
@@ -191,6 +194,10 @@ export default class GitHub extends View implements Host {
   warmed: Set<Tab> | null = null;
   handle: FocusHandle | null = null;
 
+  /** The copy's handle on the runtime (fx.ts) and its own cx, from init: what its effects run with. */
+  fx: GithubFx | null = null;
+  acx: AsyncContext | null = null;
+
   constructor(p?: Props) {
     super(p);
     this.prs = new Prs(this);
@@ -224,6 +231,10 @@ export default class GitHub extends View implements Host {
     this.actions = new Actions(this, same ? kept.actions : {});
     this.projects = new Projects(this, same ? kept.projects : {});
 
+    this.acx = cx;
+    this.fx = runtime.attach(cx, (said) => {
+      this.note = noteOf(said, "failed", this.now());
+    });
     this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
 
@@ -251,16 +262,7 @@ export default class GitHub extends View implements Host {
 
     this.start(cx);
     cx.timer.every(1000, (cx) => this.tick(cx));
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const c = (await nextCommand()).replace(/^github\./, "");
-
-        if (c === "focus") handle.focus();
-        else runCommand(this, c, cx);
-
-        cx.notify();
-      }
-    });
+    this.fx.run(commands(this, cx, () => handle.focus()), { key: "commands" });
   }
 
   // ---- life
@@ -282,56 +284,9 @@ export default class GitHub extends View implements Host {
     return true;
   }
 
+  /** The opening (window-life.ts), on the copy's runtime. */
   start(cx: Context): void {
-    cx.spawn(async (cx) => {
-      if (!this.checked) {
-        try {
-          this.fromCache(await store.load());
-        } catch {
-          this.checked = true;
-        }
-
-        cx.notify();
-      }
-
-      // A cached repo is read at once; where the folder's repo is now is asked meanwhile.
-      if (this.repo) this.refresh(cx, { all: true });
-
-      try {
-        const now = await repoOf(this.folder, this.on);
-
-        if (this.closed) return;
-
-        const r = this.repo;
-        // The folder's fork, shown as its parent last time (p): the parent stays.
-        const onParent = now && r?.child === now.full && r.full === now.parent && r.on === now.on;
-
-        if (onParent && r) r.branch = now.branch;
-        else if (now && r && repoKey(now) === repoKey(r)) {
-          // The same repo: its branch may have moved. The tabs drop a read whose repo isn't the shown
-          // one (by identity), so the object stays and the opening read under way counts; a repo
-          // GitHub now describes otherwise is replaced and read again.
-          if (sameRepo(r, now)) r.branch = now.branch;
-          else {
-            this.repo = { ...r, ...now };
-            this.refresh(cx, { all: true });
-          }
-        } else this.show(now, cx);
-      } catch (err) {
-        const why = err instanceof Error ? err.message : String(err);
-
-        // Offline: a cached repo stays shown, the bar says so.
-        if (this.repo) this.stale = why;
-        else {
-          this.state = "error";
-          this.error = why;
-        }
-      }
-
-      this.located = true; // the folder's branch is known now (a cached one may be old)
-      this.openForm(cx);
-      cx.notify();
-    });
+    this.fx?.run(start(this, this.acx ?? cx, cachePath(appHome())), { key: "start" });
   }
 
   /** Shows another repo (or none), with what the cache holds of it (`cached`): what was shown of the old one goes. */
@@ -357,30 +312,8 @@ export default class GitHub extends View implements Host {
     if (!r || !to || this.switching) return;
 
     this.switching = true;
-    this.note = noteOf(`Opening ${to.full}…`, "working", Date.now());
-    cx.spawn(async (cx) => {
-      try {
-        const next = await viewRepo(to, { root: r.root, on: r.on, branch: r.branch });
-
-        if (this.closed || this.repo !== r) return;
-
-        if (!next) throw new Error(`${to.full} isn't on GitHub.`);
-
-        next.child = to.child;
-
-        if (to.child) next.parent = null; // from the parent, p goes back to the fork, not up again
-
-        this.note = null;
-        // From the cache when this folder showed it before.
-        this.show(next, cx, store.peek()?.repos.get(repoKey(next)) ?? null);
-        this.dirty = true;
-      } catch (err) {
-        this.note = noteOf(err instanceof Error ? err.message : String(err), "failed", Date.now());
-      } finally {
-        this.switching = false;
-        cx.notify();
-      }
-    });
+    this.note = noteOf(`Opening ${to.full}…`, "working", this.now());
+    this.fx?.run(switchFork(this, this.acx ?? cx, r, to), { key: "fork" });
   }
 
   /** Tells the toggle (nocturne's sky) this window is still open. */
@@ -523,8 +456,8 @@ export default class GitHub extends View implements Host {
 
     if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
 
-    // The last read goes to the cache (the app gives cleanup a quarter second).
-    await this.saving;
+    // The last read goes to the cache (the app gives cleanup a quarter second); what still runs ends.
+    await Promise.all([this.saving, this.fx?.close()]);
   }
 
   /** Opens a link like any mod's (a web pane beside the focused pane, or the

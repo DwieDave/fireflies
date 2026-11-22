@@ -7,9 +7,7 @@ import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { placeMenu } from "@fireflies/menu-place";
-import type { Guarded } from "./guard.ts";
-import { literal } from "./guard.ts";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Schema, String as Str } from "effect";
 import type { Hint } from "./kit.ts";
 import type { PickRow } from "./host.ts";
 import { dither, chip, stop, pip, lit, ART, veil, unzoom } from "./kit.ts";
@@ -25,9 +23,9 @@ import { edge } from "@fireflies/tones";
 export const NARROW = 640;
 
 /** The window's tabs. */
-export const isTabId = literal("prs", "actions", "projects");
+export const TabIdSchema = Schema.Literals(["prs", "actions", "projects"]);
 
-export type TabId = Guarded<typeof isTabId>;
+export type TabId = typeof TabIdSchema.Type;
 
 export const TABS: readonly (readonly [TabId, string])[] = [["prs", "Pull requests"], ["actions", "Actions"], ["projects", "Projects"]];
 

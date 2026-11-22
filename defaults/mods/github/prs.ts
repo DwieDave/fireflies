@@ -8,8 +8,7 @@ import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
+import { arrayOf, isNumber, isString, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
 import type { Repo } from "./gh.ts";
 import { ghJson, ghRun, api, graphql, slimmed } from "./gh-await.ts";
@@ -42,12 +41,9 @@ type Panel = "list" | "checks" | "main";
 const PANELS: readonly Panel[] = ["list", "checks", "main"];
 
 /** What the tab keeps in shared state between openings (main.ts STATE): the filter, the PR, the dragged sizes. */
-export const isPrsKept = object({}, {
-  filter: isPrFilter, sel: nullable(isNumber),
-  sizes: object({}, { left: isNumber, top: isNumber, checks: isNumber }),
-});
+import type { PrsKept } from "./kept.ts";
 
-export type PrsKept = Guarded<typeof isPrsKept>;
+export type { PrsKept };
 
 /** The splitters' sizes, once dragged. */
 interface Sizes {
