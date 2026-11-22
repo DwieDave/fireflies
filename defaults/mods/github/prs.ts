@@ -4,17 +4,15 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div } from "gpui-kit";
-import { Semaphore } from "effect";
+import { Semaphore, Schema } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
-import { arrayOf, isNumber, isString, object } from "./guard.ts";
-import { maybe } from "./guards.ts";
 import { pollPrs } from "./prs-reads.ts";
 import * as Gh from "./gh.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
-import { checkRows, rollupTone, readAgo, SLOW, linksIn, isPrView, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
+import { PrFilterSchema, PrRowSchema, PrViewSchema, ReviewCommentSchema, checkRows, maybe, rollupTone, readAgo, SLOW, linksIn } from "./model.ts";
 import type { Pieces } from "./cache.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "@fireflies/markdown";
@@ -66,10 +64,13 @@ interface Detail {
 }
 
 /** A filter's list as the cache keeps it. */
-const isListPiece = object({ list: arrayOf(isPrRow) }, { at: maybe(isNumber) });
+const isListPiece = Schema.is(Schema.Struct({ list: Schema.Array(PrRowSchema), at: maybe(Schema.Finite) }));
 
 /** A PR's view as the cache keeps it. */
-const isDetailPiece = object({ pr: isPrView }, { review: maybe(arrayOf(isReviewComment)), reviewTag: maybe(isString), at: maybe(isNumber) });
+const isDetailPiece = Schema.is(Schema.Struct({ pr: PrViewSchema, review: maybe(Schema.Array(ReviewCommentSchema)), reviewTag: maybe(Schema.String), at: maybe(Schema.Finite) }));
+
+/** A filter the list was read with. */
+const isPrFilter = Schema.is(PrFilterSchema);
 
 /** The cache's part for this tab (cache.ts entry.prs). */
 export interface PrsCached {
