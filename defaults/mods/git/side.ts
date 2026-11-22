@@ -23,6 +23,9 @@ const SUB_TITLES = { subCommits: "Commits", remoteBranches: "Remote branches", c
 /** A tabbed panel's name on a plain layout's card. */
 const PANEL_NAMES = { files: "Files", branches: "Branches", commits: "Commits" } as const;
 
+/** The filter's input box: square in nocturne, rounded with the accent ring in a plain layout. */
+const filterBox = (el: Element): Element => (isDithered() ? el : el.rounded(6));
+
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];
   const s = v.sub(p);
@@ -119,7 +122,7 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
     .child(div().flex_1().min_h(0).child(sideList(v, t, ctx, rowH, drawRow(v, t, ctx, wide), active)));
 
   const body = filtering !== null
-    ? list.child(h_flex().h(22).mx(4).mb(2).px(6).gap(6).items_center().border(1).border_color(t.accent).text_size(11)
+    ? list.child(filterBox(h_flex().h(22).mx(4).mb(2).px(6).gap(6).items_center().border(1).border_color(t.accent).text_size(11))
       .child(div().text_color(t.accent).child("/")).child(Input.new(filtering.input).flex_1().text_size(11).text_color(t.foreground)))
     : list;
 

@@ -17,7 +17,7 @@ import type { DiffRow } from "./patch.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "@fireflies/layout-look";
-import { dithered, glyph, kbd, panel as card, rule, veil } from "@fireflies/look";
+import { dithered, glyph, kbd, panel as card, rule, textWidth, veil } from "@fireflies/look";
 import type { PlainIcon } from "@fireflies/look";
 
 /** A changed line's tint: added green, removed red; none for the rest. */
@@ -47,6 +47,8 @@ interface Frame {
   readonly zoom: number;
   readonly dpr: number;
   readonly dithered: boolean;
+  /** The age column's width (rows.ts): the pixel font's 26 px, or the widest age in the plain look's font. */
+  readonly ageW: number;
 }
 
 let frame: Frame | null = null;
@@ -59,7 +61,9 @@ const readZoom = () => {
 
 /** Runs `draw` with the app's zoom, platform and look read once for it. */
 export function drawing<A>(draw: () => A): A {
-  frame = { zoom: readZoom(), dpr: appWindow().platform === "macos" ? 2 : 1, dithered: flat(POPUP_SCRIM, 1) === null };
+  const dith = flat(POPUP_SCRIM, 1) === null;
+
+  frame = { zoom: readZoom(), dpr: appWindow().platform === "macos" ? 2 : 1, dithered: dith, ageW: dith ? 26 : plainAgeWidth() };
 
   try {
     return draw();
@@ -77,6 +81,12 @@ export const unzoom = (v: number) => v / zoom();
 /** Whether this draw is nocturne's dithered look (read once per draw), else
  *  the plain one (herdr-app's default layout: docs/plain-look.md). */
 export const isDithered = (): boolean => frame?.dithered ?? dithered();
+
+/** The widest age ("52w") in the plain look's font, with room around it. */
+const plainAgeWidth = (): number => Math.ceil(textWidth("52w", 11)) + 6;
+
+/** The age column's width for this draw (read once per draw). */
+export const ageWidth = (): number => frame?.ageW ?? (isDithered() ? 26 : plainAgeWidth());
 
 /** A value by look, for this draw: look's pick() without asking the app again per call. */
 export const byLook = <A>(nocturne: A, plain: A): A => (isDithered() ? nocturne : plain);

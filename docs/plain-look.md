@@ -585,13 +585,13 @@ checks each row off in its report.
 
 #### git (8745 lines of its own, 28 functions): done
 
-Done on 2026-11-22: every row below but two. Nocturne's element tree is
-unchanged (recorded whole in ten states, before and after: identical);
+Done on 2026-11-22: every row below. Nocturne's element tree is unchanged
+(recorded whole in ten states, before and after: identical);
 scripts/git-look.test.ts proves both looks. The look is read once per draw
-(draw.ts `isDithered`, `byLook`, `mark`: look's `pick`/`glyph` asked the
-app per call). Left: `parse.ts` age / relativeDate (the 26 px age column is
-the same in plain) and the side filter's input box (square in plain). The
-shots are owed while scratch apps are off.
+(draw.ts `isDithered`, `byLook`, `mark`, `ageWidth`: look's `pick`,
+`glyph` and `textWidth` asked the app per call); the age column is the
+widest age measured in the plain font. The shots are owed while scratch apps
+are off.
 
 | file: function | draws | becomes |
 | --- | --- | --- |
