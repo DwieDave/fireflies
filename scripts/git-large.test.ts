@@ -1,7 +1,9 @@
-// The git window's scrolling on a large change set (Developer: "Scrolling
-// changes is choppy"): a scroll step redraws only the rows in view and
-// recomputes nothing per draw that its data didn't change. Counts work (syntax
-// highlight calls, file tree builds, git runs) rather than wall time.
+// The git window on a large change set (600 changed files in folders, a
+// 4000-line diff). Scrolling (Developer: "Scrolling changes is choppy"): a
+// step redraws only the rows in view and recomputes nothing per draw that its
+// data didn't change; counts work (syntax highlight calls, app calls, file
+// tree builds, git runs) rather than wall time. A range selection over all of
+// a folder's files highlights the folder too.
 import { test, expect, mock, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -67,6 +69,7 @@ const cx: any = {
 };
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
+const { rangeHolds } = await import("../defaults/mods/git/items.ts");
 
 /** Waits until both of the window's queues are drained. */
 async function settle(v: any) {
@@ -154,4 +157,34 @@ test("scrolling 600 changed files in the tree: the tree is built once, not per d
   expect(v.items("files").some((r: any) => r.path === "src/d0/f0.ts")).toBe(true);
   v.tree = false;
   expect(v.items("files").every((r: any) => r.kind === "file")).toBe(true);
+});
+
+test("a range over every file of a folder highlights the folder, at every depth; part of them does not", async () => {
+  const v = await open();
+  v.setPanel("files"); v.tree = true; await settle(v);
+  const rows = v.items("files");
+  const at = (path: string) => rows.findIndex((r: any) => r.path === path);
+  const d0 = at("src/d0"), sub = at("src/d0/sub"), src = at("src");
+  const first = at("src/d0/sub/f15.ts"), lastSub = at("src/d0/sub/f29.ts");
+  expect([src, d0, sub]).toEqual([0, 1, 2]);
+  expect(first).toBe(3);
+  const lit = (a: number, b: number) => ({ src: rangeHolds(rows, src, [a, b]), d0: rangeHolds(rows, d0, [a, b]), sub: rangeHolds(rows, sub, [a, b]) });
+  // Every file of d0 (sub's and its own), the range starting under the folders' rows.
+  const lastD0 = rows.findIndex((r: any, i: number) => i > d0 && r.depth <= 1) - 1;
+  expect(lit(first, lastD0)).toEqual({ src: false, d0: true, sub: true });
+  // Only sub's files: sub, not d0.
+  expect(lit(first, lastSub)).toEqual({ src: false, d0: false, sub: true });
+  // All but one of sub's files: neither.
+  expect(lit(first + 1, lastD0)).toEqual({ src: false, d0: false, sub: false });
+  // Drawn with the range on: the folders' rows are drawn in it.
+  v.range = { ctx: "files", anchor: first }; v.sel.files = lastD0; v.follow.files = true;
+  v.render();
+  // A folded folder stands for its files: d0 with sub folded is lit by sub's row and d0's own files.
+  v.collapsed.add("src/d0/sub");
+  const folded = v.items("files");
+  const fsub = folded.findIndex((r: any) => r.path === "src/d0/sub"), fend = folded.findIndex((r: any, i: number) => i > fsub && r.depth <= 1) - 1;
+  expect(rangeHolds(folded, 1, [fsub, fend])).toBe(true);
+  expect(rangeHolds(folded, 1, [fsub + 1, fend])).toBe(false);
+  // A folded folder isn't lit by the range around it unless it is in it.
+  expect(rangeHolds(folded, fsub, [fsub + 1, fend])).toBe(false);
 });

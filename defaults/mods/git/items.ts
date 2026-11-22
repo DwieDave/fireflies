@@ -162,3 +162,32 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
 
   return list.filter((x) => words(x).some((s) => s && s.toLowerCase().includes(q)));
 }
+
+/** Whether a range selection [a, b] highlights row `i`: it holds the row,
+ *  or the row is an open folder and every row under it that stands for files
+ *  (a file, a folded folder) lies in the range, at any depth. */
+export function rangeHolds(rows: readonly Item[], i: number, range: readonly [number, number]): boolean {
+  const [a, b] = range;
+
+  if (i >= a && i <= b) return true;
+
+  const r = rows[i] ?? null;
+
+  if (!isTreeRow(r) || r.kind !== "dir" || !r.open) return false;
+
+  let any = false;
+
+  for (let j = i + 1; j < rows.length; j++) {
+    const x = rows[j] ?? null;
+
+    if (!isTreeRow(x) || x.depth <= r.depth) break;
+
+    if (x.kind === "dir" && x.open) continue;
+
+    if (j < a || j > b) return false;
+
+    any = true;
+  }
+
+  return any;
+}

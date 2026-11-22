@@ -14,7 +14,7 @@ import { act } from "./actions.ts";
 import { band, empty, graphPass, unzoom, rowWindow, busyMark } from "./draw.ts";
 import type { ResizeOptions, DrawRow } from "./state.ts";
 import { PANELS, WIDE_ROW, WIDE_LANE, LANE } from "./state.ts";
-import { rowKey } from "./items.ts";
+import { rangeHolds, rowKey } from "./items.ts";
 import { graphFor, shownWidth } from "./rows.ts";
 import type { default as GitView } from "./main.ts";
 import { contextMenu } from "./bars.ts";
@@ -54,7 +54,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   const range = v.range?.ctx === ctx ? [Math.min(v.range.anchor, sel), Math.max(v.range.anchor, sel)] as const : null;
 
   const shown = rows.slice(top, top + vis + 1).map((r, k) => {
-    const i = top + k, isSel = i === sel, inRange = range !== null && i >= range[0] && i <= range[1];
+    const i = top + k, isSel = i === sel, inRange = range !== null && rangeHolds(rows, i, range);
 
     const row = div().id(`${ctx}-row-${i}`).relative().h(rowH).flex_none().w_full()
       .hover((s) => s.bg(`${edge(t)}55`))
