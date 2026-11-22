@@ -65,7 +65,7 @@ import type { Anchor } from "@fireflies/menu-place";
 import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
-import { empty, unzoom, unzoomSize } from "./draw.ts";
+import { drawing, empty, unzoom, unzoomSize } from "./draw.ts";
 import type { Back, Data, Panel, TabOf, Subs, Mode, Copied, MainContent, More, Staging, Note, Resizing, Show, Intent, MainHeights, OtherTops, Kept, SpawnOptions, Sub, ExecOptions, ViewContext, Tab } from "./state.ts";
 import { Queue } from "./queue.ts";
 import { NO_PROPS, isGitProps, isGroups, NO_GROUPS, here, STATE, WINDOW_KEY, GITHUB_WINDOW, PANELS } from "./state.ts";
@@ -677,6 +677,11 @@ export default class GitView extends View {
   // ---- drawing: panels
 
   override render() {
+    return drawing(() => this.drawWindow());
+  }
+
+  /** The window's tree, inside drawing() (draw.ts): what its rows share is read once. */
+  private drawWindow() {
     const t = theme();
 
     const body = this.state === "loading" ? empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })

@@ -80,6 +80,8 @@ test:
     bun test scripts/github-form-layout.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/git-view.test.ts
+    # Scrolling the git window on a large change set: a step highlights only the lines it brings into view, the file tree is built once, no git runs.
+    bun test scripts/git-scroll.test.ts
     # The git window as a normal pane: no frame or ✕, esc stays, narrow widths, moved window -> pane -> window, two copies, a restart's props.
     bun test scripts/git-pane.test.ts
     # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.

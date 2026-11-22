@@ -11,6 +11,8 @@ import { fileTree } from "./parse.ts";
 import type { default as GitView } from "./main.ts";
 
 
+const NO_FILES: readonly StatusFile[] = [];
+
 /** The Status panel's one row. */
 export interface StatusRow {
   readonly kind: "status";
@@ -99,6 +101,24 @@ export function rowKey(ctx: ListContext, x: Item | null) {
   return null;
 }
 
+/** The last tree built from a list of files, by the view's tree settings:
+ *  each draw asks for a list's rows more than once, and a scroll step changes
+ *  none of what the tree is built from. */
+const trees = new WeakMap<readonly object[], { readonly key: string; readonly rows: readonly Item[] }>();
+
+function treeOf<F extends { readonly path: string }>(v: GitView, files: readonly F[], build: () => readonly Item[]): readonly Item[] {
+  const key = `${v.tree}|${v.statusFilter ?? ""}|${[...v.collapsed].join("\0")}`;
+  const known = trees.get(files);
+
+  if (known?.key === key) return known.rows;
+
+  const rows = build();
+
+  trees.set(files, { key, rows });
+
+  return rows;
+}
+
 /** The rows a list context shows (filtered). */
 export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
   const d = v.data;
@@ -106,11 +126,11 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
   const list = ((): readonly Item[] => {
     switch (ctx) {
       case "status": return [{ kind: "status" }];
-      case "files": {
+      case "files": return treeOf(v, d.status?.files ?? NO_FILES, () => {
         const files = (d.status?.files ?? []).filter((f) => !v.statusFilter || (v.statusFilter === "staged" ? f.staged : f.unstaged));
 
         return v.tree ? fileTree(files, v.collapsed) : files.map((f) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
-      }
+      });
 
       case "review": return v.review.shown();
       case "worktrees": return d.worktrees;
@@ -124,9 +144,11 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
         const s = v.subOfKind(ctx);
 
         if (s?.kind === "commitFiles") {
-          const rows: readonly TreeRow<CommitFile>[] = v.tree ? fileTree<CommitFile>(s.items, v.collapsed) : s.items.map((f: CommitFile) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
+          return treeOf(v, s.items, () => {
+            const rows: readonly TreeRow<CommitFile>[] = v.tree ? fileTree<CommitFile>(s.items, v.collapsed) : s.items.map((f: CommitFile) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
 
-          return rows;
+            return rows;
+          });
         }
 
         return s?.items ?? [];
