@@ -6,9 +6,13 @@ import type { WebLink } from "./model.ts";
 import { noteOf } from "./kit.ts";
 import { keysKey } from "@fireflies/keyhelp";
 import Actions from "./actions.ts";
-import { TABS, isTabId } from "./window-chrome.ts";
+import { Schema } from "effect";
+import { TABS, TabIdSchema } from "./window-chrome.ts";
 import type { default as GitHub } from "./main.ts";
 import { actsOnCommands, leave, move, toPane, toWindow } from "./place.ts";
+
+/** A command naming a tab (github.prs, github.actions, github.projects). */
+const isTabId = Schema.is(TabIdSchema);
 
 /** The window's keys: a confirm, a form or a composer first, then the picker, ?, the window's own, the shown tab's. */
 export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {

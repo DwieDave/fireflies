@@ -46,8 +46,6 @@ import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object } from "./guard.ts";
 import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Ran, Repo } from "./gh-await.ts";
 import { runtime } from "./fx.ts";
@@ -65,7 +63,7 @@ import Prs from "./prs.ts";
 import Actions from "./actions.ts";
 import Projects from "./projects.ts";
 import type { Confirm, TabId } from "./window-chrome.ts";
-import { isTabId, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
+import { TabIdSchema, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
 import { windowKey, pickerKey } from "./window-keys.ts";
 import { refresh, warm, persist, SAVE_EVERY } from "./window-reads.ts";
 import { STATE, WINDOW_KEY, besidePane, keptFor, saveCopy } from "./place.ts";
@@ -86,11 +84,14 @@ const BEAT = 4000;
 
 /** What the window is opened with (nocturne/github.ts, git's way back, + new): the folder and
  *  machine, its overlay, the tab, a form to open (and when it was asked). */
-const isGithubProps = object({}, {
-  folder: nullable(isString), on: nullable(isString), overlay: isString, slot: isString, tab: isTabId, create: literal("pr", "workflow"), at: isNumber,
+const GithubPropsSchema = Schema.Struct({
+  folder: maybeText, on: maybeText, overlay: Schema.optionalKey(Schema.String), slot: Schema.optionalKey(Schema.String), tab: Schema.optionalKey(TabIdSchema),
+  create: Schema.optionalKey(Schema.Literals(["pr", "workflow"])), at: Schema.optionalKey(Schema.Finite),
 });
 
-type GithubProps = Guarded<typeof isGithubProps>;
+const isGithubProps = Schema.is(GithubPropsSchema);
+
+type GithubProps = typeof GithubPropsSchema.Type;
 
 const NO_PROPS: GithubProps = {};
 
