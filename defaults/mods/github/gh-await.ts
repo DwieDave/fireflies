@@ -5,12 +5,16 @@
 // goes with the last one.
 
 import { Effect, Option, Schema } from "effect";
+import { appHome } from "herdr";
 import type { Guard } from "./guard.ts";
 import type { ApiOptions, Fetched, GraphqlOptions, Read, Repo, RepoPlace, Where } from "./gh.ts";
 import * as Gh from "./gh.ts";
+import type { Doc, Entry } from "./cache.ts";
+import { parse } from "./cache.ts";
 import type { GqlVar } from "./model.ts";
+import * as store from "./store.ts";
 import type { Slugged } from "./remotes.ts";
-import { runtime } from "./fx.ts";
+import { nowMs, runtime } from "./fx.ts";
 
 export type { Repo } from "./gh.ts";
 
@@ -18,7 +22,7 @@ export type { Repo } from "./gh.ts";
 const schemaOf = <T>(guard: Guard<T>) => Schema.declare(guard);
 
 /** Runs a read of GitHub; a failure rejects with its tagged error (its `message` in a person's words). */
-const run = <A, E>(effect: Effect.Effect<A, E, Gh.GhServices>): Promise<A> => runtime.runtime.runPromise(effect);
+const run = <A, E>(effect: Effect.Effect<A, E, Gh.GhServices | store.StoreServices>): Promise<A> => runtime.runtime.runPromise(effect);
 
 /** An answer kept as it came. */
 export const plain = <T>(guard: Guard<T>): Read<T, T> => Gh.plain(schemaOf(guard));
@@ -62,3 +66,15 @@ export const repoOf = (folder: string | null | undefined, on: string | null): Pr
 
 /** gh.ts viewRepo. */
 export const viewRepo = (want: Slugged | null, place: RepoPlace, { quiet = false } = {}): Promise<Repo | null> => run(Gh.viewRepo(want, place, quiet));
+
+// ---- the cache file (store.ts), for main.ts and window-reads.ts
+
+/** The cache file of this app. */
+const cacheFile = (): string => store.cachePath(appHome());
+
+/** store.ts load: a file that can't be read opens as a blank cache, as before. */
+export const loadCache = (): Promise<Doc> => run(Effect.catchTag(store.load(cacheFile()), "FileError", () => Effect.succeed(parse(null))));
+
+/** store.ts save at the window's time: true once written, false when it couldn't be. */
+export const saveCache = (folder: string | null, entry: Entry): Promise<boolean> =>
+  run(Effect.match(store.save(cacheFile(), folder, entry, nowMs()), { onFailure: () => false, onSuccess: () => true }));

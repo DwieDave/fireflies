@@ -5,7 +5,7 @@
 import type { Context } from "gpui-kit";
 import type { Entry } from "./cache.ts";
 import { entryFor, slimRepo } from "./cache.ts";
-import * as store from "./store.ts";
+import { saveCache } from "./gh-await.ts";
 import type { ReadOptions } from "./host.ts";
 import type { default as GitHub } from "./main.ts";
 
@@ -113,7 +113,7 @@ export function persist(v: GitHub): Promise<boolean> | null {
 
   const entry: Entry = { ...entryFor(v.repo), repo: slimRepo(v.repo), prs: v.prs.snapshot(), actions: v.actions.snapshot(), projects: v.projects.snapshot() };
 
-  const saving = store.save(v.folder, entry).catch(() => false).finally(() => {
+  const saving = saveCache(v.folder, entry).finally(() => {
     v.saving = null;
   });
 

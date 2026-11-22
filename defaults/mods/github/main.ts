@@ -47,7 +47,7 @@ import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import { type Ran, type Repo, repoOf, viewRepo } from "./gh-await.ts";
+import { type Ran, type Repo, loadCache, repoOf, viewRepo } from "./gh-await.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
 import { type Doc, type Entry, lookup, repoKey } from "./cache.ts";
@@ -286,7 +286,7 @@ export default class GitHub extends View implements Host {
     cx.spawn(async (cx) => {
       if (!this.checked) {
         try {
-          this.fromCache(await store.load());
+          this.fromCache(await loadCache());
         } catch {
           this.checked = true;
         }
