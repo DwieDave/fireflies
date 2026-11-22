@@ -15,7 +15,7 @@
 // those are this app's, per project (shared state "github.boards").
 
 import { div, svg } from "gpui-kit";
-import { Semaphore, Array as Arr, Schema } from "effect";
+import { Semaphore, Array as Arr, Schema, Option } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { shared, setShared } from "herdr";
@@ -51,7 +51,7 @@ import { edge } from "@fireflies/tones";
 // Each map read entry by entry (the kit's mapOf): one project's settings in another shape are left out, the rest read.
 const LocalSchema = Schema.Struct({
   view: Schema.optionalKey(Schema.String), folded: Schema.optionalKey(mapOf(Schema.Array(Schema.String))), lanes: Schema.optionalKey(mapOf(Schema.Array(Schema.String))),
-  limits: Schema.optionalKey(mapOf(mapOf(Schema.Finite))),
+  limits: Schema.optionalKey(Schema.Finite.pipe(mapOf, mapOf)),
 });
 
 const PREFS = sharedKey("github.boards", Schema.Struct({ repos: Schema.optionalKey(mapOf(Schema.String)), projects: Schema.optionalKey(mapOf(LocalSchema)) }));
@@ -277,7 +277,7 @@ export default class Projects {
     this.scope = null;
     this.error = "";
 
-    if (!this.pick || (this.list && !this.list.projects.some((p) => p.id === this.pick))) this.pick = this.remembered() ?? null;
+    if (this.pick === null || this.pick === "" || (this.list !== null && !Arr.some(this.list.projects, (p) => p.id === this.pick))) this.pick = this.remembered() ?? null;
   }
 
   snapshot(): ProjectsSnapshot {
@@ -286,14 +286,14 @@ export default class Projects {
     for (const [id, b] of this.boards) {
       const board = slimBoard(b.board);
 
-      if (board) boards.set(id, { board, at: b.at });
+      if (board !== null) boards.set(id, { board, at: b.at });
     }
 
-    return { list: this.list ? { ...this.list, at: this.listAt } : null, boards: newest(boards, LIMITS.boards) };
+    return { list: this.list === null ? null : { ...this.list, at: this.listAt }, boards: newest(boards, LIMITS.boards) };
   }
 
   readAt(): number {
-    return this.pick ? this.boards.get(this.pick)?.at ?? 0 : this.listAt;
+    return this.pick === null ? this.listAt : this.boards.get(this.pick)?.at ?? 0;
   }
 
   interval(): number {
@@ -314,13 +314,13 @@ export default class Projects {
   }
 
   local(): Local {
-    return (this.pick ? this.prefs().projects.get(this.pick) : undefined) ?? NO_LOCAL;
+    return (this.pick === null ? undefined : this.prefs().projects.get(this.pick)) ?? NO_LOCAL;
   }
 
   setLocal(fn: (l: Local) => Local): void {
     const pick = this.pick;
 
-    if (!pick) return;
+    if (pick === null || pick === "") return;
 
     const p = this.prefs();
 
@@ -330,67 +330,67 @@ export default class Projects {
   remembered(): string | null {
     const app = this.app.repo;
 
-    return app ? this.prefs().repos.get(repoKey(app)) ?? null : null;
+    return app === null ? null : this.prefs().repos.get(repoKey(app)) ?? null;
   }
 
   /** The board as read, with the edits on their way laid over it. */
   base(): Board | null {
-    return this.pick ? this.boards.get(this.pick)?.board ?? null : null;
+    return this.pick === null ? null : this.boards.get(this.pick)?.board ?? null;
   }
 
   board(): Board | null {
     const b = this.base();
 
-    return b ? overlay(b, this.pending) : null;
+    return b === null ? null : overlay(b, this.pending);
   }
 
   views(b: Board | null = this.board()): readonly View[] {
     const all = b?.views ?? [];
-    const boards = all.filter((v) => v.layout === "board");
+    const boards = Arr.filter(all, (v) => v.layout === "board");
 
-    return boards.length ? boards : all.slice(0, 1);
+    return boards.length > 0 ? boards : Arr.take(all, 1);
   }
 
   view(b: Board | null = this.board()): View | null {
     const vs = this.views(b);
 
-    return vs.find((v) => v.id === this.viewId) ?? vs.find((v) => v.id === this.local().view) ?? vs[0] ?? null;
+    return Option.getOrNull(Arr.findFirst(vs, (v) => v.id === this.viewId).pipe(Option.orElse(() => Arr.findFirst(vs, (v) => v.id === this.local().view)), Option.orElse(() => Arr.head(vs))));
   }
 
   lay(b: Board | null = this.board()): Layout | null {
-    if (!b) return null;
+    if (b === null) return null;
 
     const v = this.view(b), l = this.local();
-    const field = v ? (b.fields.find((f) => f.id === v.columnBy) ?? null) : null;
+    const field = v === null ? null : Option.getOrNull(Arr.findFirst(b.fields, (f) => f.id === v.columnBy));
     const fid = field?.id ?? layout(b, v).field?.id ?? "";
-    const limits = new Map([...(l.limits.get(fid) ?? new Map<string, number>())].filter(([, n]) => n > 0));
+    const limits = new Map(Arr.filter(Arr.fromIterable(l.limits.get(fid) ?? new Map<string, number>()), ([, n]) => n > 0));
 
     return layout(b, v, this.filterText, {
-      folded: v ? l.folded.get(v.id) ?? [] : [], lanesFolded: v ? l.lanes.get(v.id) ?? [] : [], limits,
-    }, { me: b.viewer ?? this.list?.viewer, now: Date.now() });
+      folded: v === null ? [] : l.folded.get(v.id) ?? [], lanesFolded: v === null ? [] : l.lanes.get(v.id) ?? [], limits,
+    }, { me: b.viewer ?? this.list?.viewer, now: this.app.now() });
   }
 
   /** The grid j / k walk (carrying: as it would look after the drop). */
   grid(lay: Layout): readonly (readonly Item[])[] {
     const g = grid(lay);
 
-    return this.carrying ? carried(g, this.carrying) : g;
+    return this.carrying === null ? g : carried(g, this.carrying);
   }
 
   foldedCols(lay: Layout): boolean[] {
-    return lay.columns.map((c) => c.folded);
+    return Arr.map(lay.columns, (c) => c.folded);
   }
 
   at(lay: Layout | null = this.lay()): At {
-    if (!lay) return { col: 0, row: -1 };
+    if (lay === null) return { col: 0, row: -1 };
 
     const g = this.grid(lay);
 
-    if (this.carrying) return { col: this.carrying.col, row: this.carrying.row };
+    if (this.carrying !== null) return { col: this.carrying.col, row: this.carrying.row };
 
-    const f = this.sel ? find(g, this.sel) : null;
+    const f = this.sel === null ? null : find(g, this.sel);
 
-    if (f) {
+    if (f !== null) {
       this.selCol = f.col;
 
       return f;
@@ -398,11 +398,11 @@ export default class Projects {
 
     const col = Math.min(this.selCol, Math.max(0, g.length - 1));
 
-    return { col, row: g[col]?.length ? 0 : -1 };
+    return { col, row: (g[col]?.length ?? 0) > 0 ? 0 : -1 };
   }
 
   current(lay: Layout | null = this.lay()): Item | null {
-    if (!lay) return null;
+    if (lay === null) return null;
 
     const a = this.at(lay);
 
@@ -413,11 +413,11 @@ export default class Projects {
   keepSel(): void {
     const lay = this.lay();
 
-    if (!lay) return;
+    if (lay === null) return;
 
     const g = this.grid(lay);
 
-    if (this.sel && find(g, this.sel)) return;
+    if (this.sel !== null && find(g, this.sel) !== null) return;
 
     const col = Math.min(this.selCol, Math.max(0, g.length - 1));
 
@@ -454,7 +454,7 @@ export default class Projects {
 
       const it = this.current(lay);
 
-      if (it) void this.readDetail(it, cx);
+      if (it !== null) this.readDetail(it, cx);
     }
   }
 
@@ -468,7 +468,7 @@ export default class Projects {
 
     const h = this.handles[a.col];
 
-    if (h && a.row >= 0) h.scroll_to_item(this.rowIndex(lay, a), "center");
+    if (h !== undefined && a.row >= 0) h.scroll_to_item(this.rowIndex(lay, a), "center");
   }
 
   /** The list row a grid position is drawn at (lane headers count). */
@@ -476,13 +476,13 @@ export default class Projects {
     const rows = columnRows(this, lay, a.col);
     const id = this.grid(lay)[a.col]?.[a.row]?.id;
 
-    return Math.max(0, rows.findIndex((r) => "item" in r && r.item.id === id));
+    return Math.max(0, Option.getOrElse(Arr.findFirstIndex(rows, (r) => "item" in r && r.item.id === id), () => -1));
   }
 
   /** How many columns fit side by side. */
   fits(lay: Layout): number {
     const avail = this.width - (this.detailOpen ? DETAIL_W + GAP : 0);
-    const folded = lay.columns.filter((c) => c.folded).length;
+    const folded = Arr.filter(lay.columns, (c) => c.folded).length;
 
     return Math.max(1, Math.floor((avail - folded * (FOLD_W + GAP)) / (200 + GAP)));
   }
@@ -493,10 +493,11 @@ export default class Projects {
 
   /** L: the links in the open card's detail (its body and comments). */
   links(): WebLink[] {
-    const b = this.board(), item = this.detailOpen && b ? this.current(this.lay(b)) : null;
-    const d = item?.content.id ? this.details.get(item.content.id)?.d : null;
+    const b = this.board(), item = this.detailOpen && b !== null ? this.current(this.lay(b)) : null;
+    const id = item?.content.id ?? "";
+    const d = id === "" ? null : this.details.get(id)?.d;
 
-    return d ? linksIn([d.body, ...d.comments.map((c) => c.body)]) : [];
+    return d === null || d === undefined ? [] : linksIn([d.body, ...Arr.map(d.comments, (c) => c.body)]);
   }
 
   setView(id: string): void {
@@ -520,7 +521,7 @@ export default class Projects {
 
     const p = this.prefs(), repo = this.app.repo;
 
-    if (repo) this.setPrefs({ ...p, repos: new Map(p.repos).set(repoKey(repo), id) });
+    if (repo !== null) this.setPrefs({ ...p, repos: new Map(p.repos).set(repoKey(repo), id) });
 
     this.app.refresh(cx, { all: false });
   }
@@ -551,19 +552,19 @@ export default class Projects {
   hints(): Hint[] {
     if (this.typing === "filter") return [["enter", "apply"], ["esc", "leave"], ["↓", "board"]];
 
-    if (this.typing) return [["enter", "save"], ["esc", "cancel"]];
+    if (this.typing !== null) return [["enter", "save"], ["esc", "cancel"]];
 
     if (this.menu?.kind === "fields") return this.menu.side === "fields" ? [["tab ⇧tab", "field"], ["l enter", "values"], ["esc", "close"]] : [["j/k", "value"], ["enter", "set"], ["tab ⇧tab", "field"], ["h", "fields"], ["esc", "close"]];
 
-    if (this.menu) return [["j/k", "move"], ["enter", "choose"], ["esc", "close"]];
+    if (this.menu !== null) return [["j/k", "move"], ["enter", "choose"], ["esc", "close"]];
 
-    if (this.carrying) return [["h/l", "column"], ["j/k", "move it"], ["enter", "drop"], ["esc", "put back"]];
+    if (this.carrying !== null) return [["h/l", "column"], ["j/k", "move it"], ["enter", "drop"], ["esc", "put back"]];
 
     if (this.focus === "detail") return [["j/k", "scroll"], ["e", "edit fields"], ["o", "on GitHub"], ["h", "board"], ["esc", "close"], ["?", "keys"]];
 
-    if (this.scope) return [["r", "read again"], ["?", "keys"]];
+    if (this.scope !== null) return [["r", "read again"], ["?", "keys"]];
 
-    if (!this.board()) return [["p", "projects"], ["r", "refresh"], ["?", "keys"]];
+    if (this.board() === null) return [["p", "projects"], ["r", "refresh"], ["?", "keys"]];
 
     return [["h/l", "column"], ["j/k", "card"], ["enter", "open"], ["m", "carry"], ["e", "fields"], ["a", "add"], ["/", "filter"], ["v", "view"], ["p", "project"], ["?", "keys"]];
   }
@@ -583,7 +584,7 @@ export default class Projects {
   render(t: Theme, size: Size): Element {
     this.width = size.width;
 
-    if (this.scope) {
+    if (this.scope !== null) {
       const can = this.scope.need === "project" ? "change" : "read";
 
       return v_flex().size_full().items_center().justify_center().gap(10).text_size(11)
@@ -593,17 +594,17 @@ export default class Projects {
         .child(h_flex().relative().px(10).h(24).items_center().text_size(12).child(dither(edge(t), 1)).child(div().relative().text_color(t.accent).child(this.scope.command)));
     }
 
-    if (!this.list && !this.base()) return empty(t, "Reading projects…", null, { moon: 3 });
+    if (this.list === null && this.base() === null) return empty(t, "Reading projects…", null, { moon: 3 });
 
-    if (!this.pick) return empty(t, "No projects here", `Neither ${this.app.repo?.full ?? "this repo"} nor its owner has a project you can see. Link one on GitHub, then r.`, { moon: 0 });
+    if (this.pick === null || this.pick === "") return empty(t, "No projects here", `Neither ${this.app.repo?.full ?? "this repo"} nor its owner has a project you can see. Link one on GitHub, then r.`, { moon: 0 });
 
     const b = this.board();
 
-    if (!b) return v_flex().size_full().child(bar(this, t, null, null)).child(empty(t, "Reading the board…", this.list?.projects.find((p) => p.id === this.pick)?.title ?? "", { moon: 4 }));
+    if (b === null) return v_flex().size_full().child(bar(this, t, null, null)).child(empty(t, "Reading the board…", Option.getOrUndefined(Arr.findFirst(this.list?.projects ?? [], (p) => p.id === this.pick))?.title ?? "", { moon: 4 }));
 
     const lay = this.lay(b);
 
-    if (!lay) return empty(t, "Reading the board…", null, { moon: 4 });
+    if (lay === null) return empty(t, "Reading the board…", null, { moon: 4 });
 
     const menu = this.menu;
 
@@ -614,7 +615,7 @@ export default class Projects {
     return v_flex().size_full().relative()
       .child(bar(this, t, b, lay))
       .child(body)
-      .when(menu !== null, (el) => (menu ? el.child(menuPanel(this, t, b, menu)) : el));
+      .when(menu !== null, (el) => (menu !== null ? el.child(menuPanel(this, t, b, menu)) : el));
   }
 
 }
