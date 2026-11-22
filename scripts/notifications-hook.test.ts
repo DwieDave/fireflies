@@ -4,12 +4,23 @@
 // whose hook is still Herdr's copy wrote ~/.local/state/herdr-app/notify,
 // which the reader still finds.
 import { test, expect, mock } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
 const state = mkdtempSync(join(tmpdir(), "notify-hook-"));
-const env = { ...process.env, XDG_STATE_HOME: state };
+let env: Record<string, string | undefined> = { ...process.env, XDG_STATE_HOME: state };
+
+// A stat that answers as GNU coreutils' does (Linux, or a Nix shell on macOS): -f is
+// file-system status over several lines and exit 1, -c %Y the time.
+const gnu = mkdtempSync(join(tmpdir(), "notify-gnu-"));
+writeFileSync(join(gnu, "stat"), `#!/bin/sh
+case "$1" in
+  -f) printf '  File: "%s"\n    ID: 1 Namelen: ?  Type: apfs\n' "$3"; exit 1 ;;
+  -c) echo 1700000000 ;;
+esac
+`);
+chmodSync(join(gnu, "stat"), 0o755);
 
 mock.module("herdr", () => ({
   terminals: () => [], agents: () => [], shared: () => null, setShared: () => {},
@@ -41,4 +52,23 @@ test("a record from Herdr's copy of the hook (herdr-app/notify) is still read; t
   const records = await readRecords(["t1", "t2"]);
   expect(records.get("t2")?.payload.tool_name).toBe("Edit");
   expect(records.get("t1")?.payload.tool_name).toBe("Bash");
+});
+
+test("records are read where stat is GNU's (Linux, a Nix shell), with their time", async () => {
+  const before = env;
+  env = { ...before, PATH: `${gnu}:${before.PATH ?? ""}` };
+  try {
+    const records = await readRecords(["t1", "t2"]);
+    expect(records.get("t1")?.payload.tool_name).toBe("Bash");
+    expect(records.get("t2")?.payload.tool_name).toBe("Edit");
+    expect(records.get("t1")?.at).toBe(1700000000 * 1000);
+  } finally {
+    env = before;
+  }
+});
+
+test("records carry the file's own time with the stat on PATH (BSD's on macOS, GNU's in a Nix shell)", async () => {
+  const records = await readRecords(["t1"]);
+  expect(Number.isFinite(records.get("t1")?.at)).toBe(true);
+  expect(Math.abs((records.get("t1")?.at ?? 0) - Date.now())).toBeLessThan(600_000);
 });

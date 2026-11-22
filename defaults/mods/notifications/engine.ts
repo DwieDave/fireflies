@@ -58,7 +58,9 @@ const RECORDS = [
   '  f="$d/fireflies/notify/$id.claude.json"',
   '  [ -f "$f" ] || f="$d/herdr-app/notify/$id.claude.json"',
   '  [ -f "$f" ] || continue',
-  '  printf \'\\n@@record %s %s\\n\' "$id" "$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)"',
+  // GNU stat first: its -f is file-system status, printed over several lines (exit 1), which
+  // would land in the header; BSD stat refuses -c with nothing on stdout.
+  '  printf \'\\n@@record %s %s\\n\' "$id" "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)"',
   '  cat "$f"',
   'done',
 ].join("\n");
