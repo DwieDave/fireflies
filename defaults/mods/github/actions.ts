@@ -10,7 +10,7 @@
 // lines from where the wheel left it.
 
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
-import { Array as Arr, Option, Schema, Semaphore } from "effect";
+import { Array as Arr, Option, Schema, Semaphore, String as Str } from "effect";
 import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
 import { pollActions, readLog } from "./actions-reads.ts";
@@ -210,16 +210,16 @@ export default class Actions {
   runWorkflow(cx: Context): void {
     const repo = this.app.repo;
 
-    if (!repo) return;
+    if (repo === null) return;
 
     this.flow?.form.release();
-    this.flow = new DispatchForm(this.app, this, repo, { path: this.run()?.path?.replace(/@.*$/, "") ?? null });
+    this.flow = new DispatchForm(this.app, this, repo, { path: Option.getOrNull(Option.map(Option.fromNullishOr(this.run()?.path), Str.replace(/@.*$/, ""))) });
     this.flow.load(cx);
     this.flow.form.go(0, cx);
   }
 
   closeForm(): void {
-    if (this.flow) this.flow.closed = true;
+    if (this.flow !== null) this.flow.closed = true;
 
     this.flow = null;
     this.app.focusSelf();
@@ -261,7 +261,7 @@ export default class Actions {
       this.needsAt.set(k, n.at ?? 0);
     }
 
-    if (this.runs && (this.sel === null || !this.list().some((r) => r.id === this.sel))) this.sel = this.list()[0]?.id ?? null;
+    if (this.runs !== null && (this.sel === null || !Arr.some(this.list(), (r) => r.id === this.sel))) this.sel = this.list()[0]?.id ?? null;
   }
 
   /** The shown branch's cached runs (or none yet). */
@@ -295,7 +295,7 @@ export default class Actions {
 
   list(): Run[] {
     const runs = this.runs ?? [];
-    const more = [...this.extra.values()].filter((r) => !runs.some((x) => x.id === r.id));
+    const more = Arr.filter(Arr.fromIterable(this.extra.values()), (r) => !Arr.some(runs, (x) => x.id === r.id));
 
     return [...more, ...runs];
   }
@@ -303,17 +303,17 @@ export default class Actions {
   run(): Run | null {
     const l = this.list();
 
-    return l.find((r) => r.id === this.sel) ?? l[0] ?? null;
+    return Option.getOrNull(Arr.findFirst(l, (r) => r.id === this.sel)) ?? l[0] ?? null;
   }
 
   jobsOf(r: Run | null): readonly Job[] | null {
-    return r ? this.jobs.get(r.id) ?? null : null;
+    return r === null ? null : this.jobs.get(r.id) ?? null;
   }
 
   job(): Job | null {
     const j = this.jobsOf(this.run()) ?? [];
 
-    return j.find((x) => x.id === this.jobSel) ?? j[0] ?? null;
+    return Option.getOrNull(Arr.findFirst(j, (x) => x.id === this.jobSel)) ?? j[0] ?? null;
   }
 
   steps(): readonly Step[] {
@@ -323,7 +323,7 @@ export default class Actions {
   step(): Step | null {
     const s = this.steps();
 
-    return s.find((x) => x.number === this.stepSel) ?? s.find((x) => x.status === "in_progress") ?? s.find((x) => x.conclusion === "failure") ?? s[0] ?? null;
+    return Option.getOrNull(Arr.findFirst(s, (x) => x.number === this.stepSel).pipe(Option.orElse(() => Arr.findFirst(s, (x) => x.status === "in_progress")), Option.orElse(() => Arr.findFirst(s, (x) => x.conclusion === "failure")), Option.orElse(() => Arr.head(s))));
   }
 
   /** The run's workflow file at its commit, as the needs' key. */
@@ -334,7 +334,7 @@ export default class Actions {
   columns(): Job[][] {
     const r = this.run(), jobs = this.jobsOf(r);
 
-    if (!r || !jobs) return [];
+    if (r === null || jobs === null) return [];
 
     return jobColumns(jobs, this.needs.get(this.needsKey(r)) ?? null);
   }
@@ -343,7 +343,7 @@ export default class Actions {
   parents(): Parents {
     const r = this.run(), jobs = this.jobsOf(r);
 
-    return r && jobs ? jobParents(jobs, this.needs.get(this.needsKey(r)) ?? null) : null;
+    return r !== null && jobs !== null ? jobParents(jobs, this.needs.get(this.needsKey(r)) ?? null) : null;
   }
 
   /** Runs and the selected run's jobs: what's moving decides the pace; a re-run or cancel GitHub
@@ -392,12 +392,12 @@ export default class Actions {
   selectRun(i: number, cx: Context): void {
     const list = this.list();
 
-    if (!list.length) return;
+    if (list.length === 0) return;
 
     const k = Math.max(0, Math.min(list.length - 1, i));
     const r = list[k];
 
-    if (r && r.id !== this.sel) {
+    if (r !== undefined && r.id !== this.sel) {
       this.sel = r.id;
       this.jobSel = null;
       this.stepSel = null;
@@ -410,13 +410,13 @@ export default class Actions {
 
   /** From a PR's check: that run (fetched if the list doesn't have it) and job. */
   show(runId: number, jobId: number | null, cx: Context): void {
-    if (!this.list().some((r) => r.id === runId)) this.extra.set(runId, { id: runId, name: "…", status: "queued", event: "", head_branch: "" });
+    if (!Arr.some(this.list(), (r) => r.id === runId)) this.extra.set(runId, { id: runId, name: "…", status: "queued", event: "", head_branch: "" });
 
     this.sel = runId;
     this.jobSel = jobId ?? null;
     this.stepSel = null;
     this.pan = null;
-    this.focus = jobId ? "steps" : "graph";
+    this.focus = jobId === null || jobId === 0 ? "graph" : "steps";
     this.app.refresh(cx, true);
   }
 
@@ -431,10 +431,10 @@ export default class Actions {
   moveJob(dx: number, dy: number, _cx: Context): void {
     const cols = this.columns();
 
-    if (!cols.length) return;
+    if (cols.length === 0) return;
 
-    let ci = cols.findIndex((c) => c.some((j) => j.id === this.jobSel));
-    let ri = ci < 0 ? 0 : (cols[ci] ?? []).findIndex((j) => j.id === this.jobSel);
+    let ci = Option.getOrElse(Arr.findFirstIndex(cols, (c) => Arr.some(c, (j) => j.id === this.jobSel)), () => -1);
+    let ri = ci < 0 ? 0 : Option.getOrElse(Arr.findFirstIndex(cols[ci] ?? [], (j) => j.id === this.jobSel), () => -1);
 
     if (ci < 0) ci = 0;
 
@@ -446,18 +446,18 @@ export default class Actions {
 
     const len = (c: number) => cols[c]?.length ?? 0;
 
-    if (dx) {
+    if (dx !== 0) {
       const row = ri / Math.max(1, len(ci) - 1);
 
       ci = Math.max(0, Math.min(cols.length - 1, ci + dx));
       ri = Math.round(row * (len(ci) - 1));
     }
 
-    if (dy) ri = Math.max(0, Math.min(len(ci) - 1, ri + dy));
+    if (dy !== 0) ri = Math.max(0, Math.min(len(ci) - 1, ri + dy));
 
     const j = cols[ci]?.[ri];
 
-    if (j && j.id !== this.jobSel) {
+    if (j !== undefined && j.id !== this.jobSel) {
       this.jobSel = j.id;
       this.stepSel = null;
       this.logAt = 0;
@@ -470,9 +470,9 @@ export default class Actions {
   moveStep(d: number): void {
     const s = this.steps(), cur = this.step();
 
-    if (!s.length) return;
+    if (s.length === 0) return;
 
-    const i = Math.max(0, Math.min(s.length - 1, (cur ? s.indexOf(cur) : -1) + d));
+    const i = Math.max(0, Math.min(s.length - 1, (cur === null ? -1 : s.indexOf(cur)) + d));
 
     this.stepSel = s[i]?.number ?? null;
     this.logAt = 0;
@@ -492,7 +492,7 @@ export default class Actions {
   scrollLog(d: number): void {
     const n = this.logView().lines.length;
 
-    if (!n) return;
+    if (n === 0) return;
 
     const vis = Math.max(1, this.logVis);
     const top = Math.max(0, Math.min(Math.max(0, n - vis), this.logTop() + d));
@@ -505,9 +505,9 @@ export default class Actions {
 
   /** The chosen step's log as drawn: its groups folded unless opened, and its whole length. */
   logView(): FoldedLog {
-    const j = this.job(), s = this.step(), got = j ? this.logs.get(j.id) : undefined;
+    const j = this.job(), s = this.step(), got = j === null ? undefined : this.logs.get(j.id);
 
-    if (!j || !got || "error" in got || !s) return { lines: [], total: 0 };
+    if (j === null || got === undefined || "error" in got || s === null) return { lines: [], total: 0 };
 
     return foldLog(got.get(s.number) ?? [], (at) => this.opened.has(`${j.id}:${s.number}:${at}`));
   }
@@ -517,7 +517,7 @@ export default class Actions {
     const j = this.job(), s = this.step(), lines = this.logView().lines;
     const n = at === "top" ? groupAt(lines, this.logTop())?.at : at;
 
-    if (j && s && n !== undefined) toggleFold(this.opened, `${j.id}:${s.number}:`, lines, n);
+    if (j !== null && s !== null && n !== undefined) toggleFold(this.opened, `${j.id}:${s.number}:`, lines, n);
   }
 
   /** R / A / e / X (run-actions.ts). */
@@ -526,7 +526,7 @@ export default class Actions {
   }
 
   key(k: string, e: KeyEvent, cx: Context): boolean | "typing" {
-    const list = this.list(), r = this.run(), i = r ? list.indexOf(r) : -1;
+    const list = this.list(), r = this.run(), i = r === null ? -1 : list.indexOf(r);
     const at = PANELS.indexOf(this.focus);
     const f = this.focus;
 
@@ -564,12 +564,12 @@ export default class Actions {
     else if (k === "b") {
       const branch = this.app.repo?.branch;
 
-      this.showRuns(this.filter ? null : branch ? { branch, label: branch } : null, cx);
-    } else if (k === "o" && r) {
+      this.showRuns(this.filter !== null || branch === null || branch === undefined || branch === "" ? null : { branch, label: branch }, cx);
+    } else if (k === "o" && r !== null) {
       const j = f !== "runs" ? this.job() : null;
       const url = j?.html_url ?? r.html_url;
 
-      if (url) this.app.openUrl(url, cx);
+      if (url !== null && url !== undefined && url !== "") this.app.openUrl(url, cx);
     } else return false;
 
     return true;
@@ -577,21 +577,21 @@ export default class Actions {
 
   /** w: the next run (from the selected one) that's running, else the next running job. */
   nextRunning(cx: Context): void {
-    const list = this.list(), r = this.run(), i = r ? list.indexOf(r) : -1;
-    const next = [...list.slice(i + 1), ...list.slice(0, i + 1)].find((x) => x.status === "in_progress" || x.status === "queued");
+    const list = this.list(), r = this.run(), i = r === null ? -1 : list.indexOf(r);
+    const next = Option.getOrUndefined(Arr.findFirst([...Arr.drop(list, i + 1), ...Arr.take(list, i + 1)], (x) => x.status === "in_progress" || x.status === "queued"));
 
-    if (next) {
+    if (next !== undefined) {
       this.selectRun(list.indexOf(next), cx);
       this.focus = "graph";
     }
   }
 
   hints(): Hint[] {
-    if (this.form) return this.form.hints();
+    if (this.form !== null) return this.form.hints();
 
     const f = this.focus;
 
-    if (f === "runs") return [["j/k", "run"], ["l", "jobs"], ["n", "run workflow"], ["w", "next live"], ["b", this.filter ? "all runs" : "this branch"], ["R", "re-run failed"], ["X", "cancel"], ["?", "keys"]];
+    if (f === "runs") return [["j/k", "run"], ["l", "jobs"], ["n", "run workflow"], ["w", "next live"], ["b", this.filter === null ? "this branch" : "all runs"], ["R", "re-run failed"], ["X", "cancel"], ["?", "keys"]];
 
     if (f === "graph") return [["hjkl", "job"], ["enter", "steps"], ["e", "re-run job"], ["R", "re-run failed"], ["o", "browser"], ["?", "keys"]];
 
@@ -619,7 +619,7 @@ export default class Actions {
   }
 
   render(t: Theme, size: Size): Element {
-    if (this.form) return this.form.render(t, size);
+    if (this.form !== null) return this.form.render(t, size);
 
     const app = this.app, wide = size.width >= 820;
     const clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
