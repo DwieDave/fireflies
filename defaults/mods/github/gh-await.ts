@@ -26,7 +26,7 @@ const schemaOf = <T>(guard: Guard<T>) => Schema.declare(guard);
 const run = <A, E>(effect: Effect.Effect<A, E, Gh.GhServices | store.StoreServices>): Promise<A> => runtime.runtime.runPromise(effect);
 
 /** Runs a tab's read (an effect that redraws) for window-reads.ts, which still awaits: redrawn through `cx`. */
-export const awaitRead = <E>(effect: Effect.Effect<void, E, Gh.GhServices | Redraw>, cx: Context | null): Promise<void> =>
+export const awaitRead = <A, E>(effect: Effect.Effect<A, E, Gh.GhServices | Redraw>, cx: Context | null): Promise<A> =>
   run(Effect.provideService(effect, Redraw, Redraw.of({ now: Effect.sync(() => cx?.notify()) })));
 
 /** An answer kept as it came. */

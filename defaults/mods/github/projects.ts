@@ -23,8 +23,8 @@ import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { JsonMap } from "./guards.ts";
 import { mapOf, maybe, toJson, toMap } from "./guards.ts";
-import type { Repo } from "./gh.ts";
-import { graphql } from "./gh-await.ts";
+import { awaitRead } from "./gh-await.ts";
+import { choicesFor, pollProjects, readDetail } from "./projects-reads.ts";
 import type { WebLink } from "./model.ts";
 import { SLOW, linksIn } from "./model.ts";
 import type { Pieces, Piece } from "./cache.ts";
@@ -34,7 +34,7 @@ import { dither, empty, ART } from "./kit.ts";
 import type { Board, Choices, Detail, Field, Item, ProjectList, ScopeProblem, StoredBoard, View } from "./board.ts";
 import type { At, Carry, Layout, Lane } from "./board-layout.ts";
 import type { Op } from "./board-edits.ts";
-import { projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices, slimBoard, isStoredBoard, boardOf, isProjectListAnswer, isBoardAnswer, isDetailAnswer, isChoicesAnswer, isListedProject } from "./board.ts";
+import { slimBoard, isStoredBoard, boardOf, isListedProject } from "./board.ts";
 import { layout, grid, find, carried } from "./board-layout.ts";
 import { overlay } from "./board-edits.ts";
 import type { Host, ReadOptions } from "./host.ts";
@@ -45,7 +45,6 @@ import { addDraft } from "./projects-edits.ts";
 import { key } from "./projects-keys.ts";
 import { edge } from "@fireflies/tones";
 
-const LIST_EVERY = 10 * 60000; // the picker's list is read again this rarely
 
 // ---- what this app keeps of a board (shared "github.boards"): GitHub keeps no column limits or
 // folded columns for a view. As shared state holds it:
@@ -430,121 +429,21 @@ export default class Projects {
 
   // ---- reading
 
-  async poll({ all = false }: ReadOptions, cx: Context | null): Promise<void> {
-    const repo = this.app.repo;
-
-    if (!repo) return;
-
-    const now = Date.now();
-
-    try {
-      if (all || !this.list || now - this.listAt >= LIST_EVERY) {
-        const l = parseProjectList(await graphql(repo, projectListQuery(repo), isProjectListAnswer, [], { partial: true }));
-
-        if (this.app.repo !== repo) return;
-
-        this.list = l;
-        this.listAt = Date.now();
-        this.scope = null;
-
-        if (!this.pick || !l.projects.some((p) => p.id === this.pick)) {
-          const was = this.remembered();
-
-          this.pick = was && l.projects.some((p) => p.id === was) ? was : (l.projects.find((p) => !p.closed) ?? l.projects[0])?.id ?? null;
-        }
-
-        cx?.notify();
-      }
-
-      const pid = this.pick;
-
-      if (!pid) return;
-
-      const kept = this.boards.get(pid);
-      // Read when asked, when old, or once an edit GitHub took has settled.
-      const fresh = kept && now - kept.at < SLOW - 500, settled = this.settleAt && now >= this.settleAt;
-
-      if (!all && fresh && !settled) return;
-
-      await this.readBoard(repo, pid);
-
-      // Reopened with the detail docked: its card is read with the board.
-      const it = this.current();
-
-      if (this.detailOpen && it) await this.readDetail(it, null);
-    } catch (err) {
-      const s = scopeProblem(err instanceof Error ? err.message : String(err));
-
-      if (s) {
-        this.scope = s;
-
-        return;
-      }
-
-      throw err;
-    }
+  /** Reads the project list, the picked board and an open card's detail (projects-reads.ts). all: past the timers. */
+  poll(opts: ReadOptions, cx: Context | null): Promise<void> {
+    return awaitRead(pollProjects(this, opts), cx);
   }
 
-  async readBoard(repo: Repo, pid: string): Promise<void> {
-    const started = Date.now();
-    let b = parseBoard(await graphql(repo, boardQuery(true), isBoardAnswer, [["id", pid]]));
-
-    if (!b) throw new Error("GitHub didn't find that project (it may be gone, or private to others).");
-
-    for (let more = b.more; more; more = b.more) b = addPage(b, await graphql(repo, boardQuery(false), isBoardAnswer, [["id", pid], ["after", more]]));
-
-    if (this.app.repo !== repo) return;
-
-    this.boards.set(pid, { board: b, at: Date.now() });
-    this.settleAt = 0;
-    this.error = "";
-    // Edits GitHub took before this read began are in it now.
-    this.pending = this.pending.filter((p) => !(p.state === "done" && (p.doneAt ?? 0) <= started));
-    this.keepSel();
-
-    if (this.boards.size > LIMITS.boards * 2) this.boards = newest(this.boards, LIMITS.boards);
+  /** The selected card's body and comments, read once it's opened: a run on the window. */
+  readDetail(item: Item, _cx?: Context | null): void {
+    this.app.run(readDetail(this, item));
   }
 
-  /** The selected card's body and comments, read once it's opened. */
-  readDetail(item: Item, cx: Context | null): Promise<void> | undefined {
-    const id = item.content.id, repo = this.app.repo;
-
-    if (!id || !repo || this.details.get(id)?.busy) return undefined;
-
-    const kept = this.details.get(id);
-
-    if (kept && Date.now() - kept.at < 60000) return undefined;
-
-    this.details.set(id, { ...kept, busy: true, at: kept?.at ?? 0 });
-
-    const read = (async () => {
-      try {
-        this.details.set(id, { d: parseDetail(await graphql(repo, detailQuery, isDetailAnswer, [["id", id]])), at: Date.now() });
-      } catch (err) {
-        this.details.set(id, { error: err instanceof Error ? err.message : String(err), at: Date.now() });
-      }
-    })();
-
-    if (cx) this.app.spawn(cx, () => read);
-
-    return read;
+  /** A repo's labels and people, for the menus (projects-menus.ts still awaits them). */
+  choicesFor(full: string | null): Promise<Choices> {
+    return awaitRead(choicesFor(this, full), null);
   }
 
-  async choicesFor(full: string | null): Promise<Choices> {
-    const repo = this.app.repo;
-
-    if (!full || !repo) return { labels: [], users: [] };
-
-    const had = this.choices.get(full);
-
-    if (had) return had;
-
-    const c = parseChoices(await graphql(repo, choicesQuery(full), isChoicesAnswer));
-
-    this.choices.set(full, c);
-
-    return c;
-  }
 
   // ---- edits: shown at once, sent, rolled back when refused
 
