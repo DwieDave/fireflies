@@ -371,7 +371,7 @@ export default class Projects {
 
     return layout(b, v, this.filterText, {
       folded: v ? l.folded.get(v.id) ?? [] : [], lanesFolded: v ? l.lanes.get(v.id) ?? [] : [], limits,
-    }, { me: b.viewer ?? this.list?.viewer });
+    }, { me: b.viewer ?? this.list?.viewer, now: Date.now() });
   }
 
   /** The grid j / k walk (carrying: as it would look after the drop). */
