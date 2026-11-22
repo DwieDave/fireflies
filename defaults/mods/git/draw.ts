@@ -42,7 +42,7 @@ const readZoom = () => {
 
 /** Runs `draw` with the app's zoom, platform and look read once for it. */
 export function drawing<A>(draw: () => A): A {
-  frame = { zoom: readZoom(), dpr: appWindow().platform === "macos" ? 2 : 1, dithered: flat("#000000", 1) === null };
+  frame = { zoom: readZoom(), dpr: appWindow().platform === "macos" ? 2 : 1, dithered: flat(POPUP_SCRIM, 1) === null };
 
   try {
     return draw();
@@ -61,9 +61,11 @@ export const unzoomSize = (size: { readonly width: number; readonly height: numb
 
 /** A layer filling its parent with a 50% checker dither (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
-  const plain = cell > 2 || frame?.dithered ? null : flat(color, cell);
+  if (!frame?.dithered) {
+    const plain = flat(color, cell);
 
-  if (plain) return plain;
+    if (plain) return plain;
+  }
 
   const dpr = frame?.dpr ?? (appWindow().platform === "macos" ? 2 : 1);
 
