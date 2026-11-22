@@ -50,7 +50,7 @@ export const pollActions = (v: Actions, { fresh = false }: ReadOptions) => Effec
 
   v.runsCache.set(branch, { list: data ?? [], etag, at });
   v.useRuns();
-  v.expected = settled(v.expected, v.list());
+  v.expected = settled(v.expected, v.list(), at);
 
   if (v.sel === null || !Arr.some(v.list(), (r) => r.id === v.sel)) v.sel = v.list()[0]?.id ?? null;
 

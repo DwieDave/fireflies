@@ -4,7 +4,8 @@
 // re-run queued or running, a cancel finished. GitHub shows either a few
 // seconds after it took it; past EXPECT_FOR the tab's own pace is back.
 
-import { ghRun } from "./gh-await.ts";
+import { ghRun } from "./gh.ts";
+import { Array as Arr } from "effect";
 import type { Run } from "./model.ts";
 import { soon } from "./model.ts";
 import type { default as Actions } from "./actions.ts";
@@ -24,33 +25,32 @@ export interface Expected {
 /** How long a re-run or cancel is read again sooner than the pace, at most. */
 const EXPECT_FOR = 60000;
 
-/** The wait before the next read: the tab's pace, or sooner while a change is expected. */
-export function paced(e: Expected | null, pace: number): number {
-  return e && Date.now() - e.since < EXPECT_FOR ? Math.min(pace, soon(e.reads)) : pace;
+/** The wait before the next read at `now`: the tab's pace, or sooner while a change is expected. */
+export function paced(e: Expected | null, pace: number, now: number): number {
+  return e !== null && now - e.since < EXPECT_FOR ? Math.min(pace, soon(e.reads)) : pace;
 }
 
-/** After a read of the list: null once the expected change shows (or the bound passed), else one more read counted. */
-export function settled(e: Expected | null, list: readonly Run[]): Expected | null {
-  if (!e) return null;
+/** After a read of the list at `now`: null once the expected change shows (or the bound passed), else one more read counted. */
+export function settled(e: Expected | null, list: readonly Run[], now: number): Expected | null {
+  if (e === null) return null;
 
-  const r = list.find((x) => x.id === e.id);
-  const shown = r && (r.status !== "completed") === e.live;
+  const shown = Arr.some(list, (r) => r.id === e.id && (r.status !== "completed") === e.live);
 
-  return shown || Date.now() - e.since >= EXPECT_FOR ? null : { ...e, reads: e.reads + 1 };
+  return shown || now - e.since >= EXPECT_FOR ? null : { ...e, reads: e.reads + 1 };
 }
 
 /** R / A / e / X: asks, then re-runs or cancels the selected run (or its job), and expects the change. */
 export function runAction(tab: Actions, what: RunAction): void {
   const app = tab.app, r = tab.run(), repo = app.repo;
 
-  if (!r || !repo) return;
+  if (r === null || repo === null) return;
 
   const t = `#${r.run_number ?? ""} ${r.name ?? ""}`;
 
   const expect = (live: boolean) => () => {
     if (live) tab.jobs.delete(r.id);
 
-    tab.expected = { id: r.id, live, since: Date.now(), reads: 0 };
+    tab.expected = { id: r.id, live, since: app.now(), reads: 0 };
   };
 
   if (what === "failed") app.ask(`Re-run the failed jobs of ${t}?`, (cx) => app.act(ghRun(repo, ["run", "rerun", String(r.id), "--failed"]), `Re-running failed jobs of ${t}.`, cx, expect(true)));
@@ -59,6 +59,6 @@ export function runAction(tab: Actions, what: RunAction): void {
   else {
     const j = tab.job();
 
-    if (j) app.ask(`Re-run the job "${j.name ?? ""}"?`, (cx) => app.act(ghRun(repo, ["run", "rerun", "--job", String(j.id)]), `Re-running ${j.name ?? ""}.`, cx, expect(true)));
+    if (j !== null) app.ask(`Re-run the job "${j.name ?? ""}"?`, (cx) => app.act(ghRun(repo, ["run", "rerun", "--job", String(j.id)]), `Re-running ${j.name ?? ""}.`, cx, expect(true)));
   }
 }

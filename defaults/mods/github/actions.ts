@@ -352,7 +352,7 @@ export default class Actions {
   /** Runs and the selected run's jobs: what's moving decides the pace; a re-run or cancel GitHub
    *  doesn't show yet is read again sooner (run-actions.ts). */
   interval(): number {
-    return paced(this.expected, pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]));
+    return paced(this.expected, pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]), this.app.now());
   }
 
   live(): boolean {

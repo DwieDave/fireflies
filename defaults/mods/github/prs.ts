@@ -11,7 +11,8 @@ import type { Theme } from "herdr";
 import { arrayOf, isNumber, isString, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
 import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, graphql, slimmed } from "./gh-await.ts";
+import { ghJson, api, graphql, slimmed } from "./gh-await.ts";
+import * as Gh from "./gh.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
 import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
 import type { Pieces } from "./cache.ts";
@@ -492,7 +493,7 @@ export default class Prs {
   checkout(p: PrRow, cx: Context): void {
     const repo = this.app.repo;
 
-    if (repo) this.app.act(ghRun(repo, ["pr", "checkout", String(p.number)], { timeout: 120000 }), `Checked out #${p.number}.`, cx);
+    if (repo) this.app.act(Gh.ghRun(repo, ["pr", "checkout", String(p.number)], 120000), `Checked out #${p.number}.`, cx);
   }
 
   startComment(cx: Context): void {
@@ -519,7 +520,7 @@ export default class Prs {
       composer.release();
       this.composer = null;
       this.app.focusSelf();
-      this.app.act(ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
+      this.app.act(Gh.ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
         this.details.delete(p.number);
         this.scroll(1e9);
       });

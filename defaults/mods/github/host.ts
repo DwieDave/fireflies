@@ -6,8 +6,7 @@ import type { Effect } from "effect";
 import type { Context, MouseButtonEvent } from "gpui-kit";
 import type { RunOptions } from "@fireflies/kit";
 import type { GithubServices } from "./fx.ts";
-import type { Repo } from "./gh.ts";
-import type { Ran } from "./gh-await.ts";
+import type { GhError, Repo } from "./gh.ts";
 import type { Axis, Note } from "./kit.ts";
 import type { Pt } from "@fireflies/menu-place";
 
@@ -69,7 +68,8 @@ export interface Host {
   showRun(runId: number, jobId: number | null, cx: Context): void;
   showRuns(filter: RunFilter, cx: Context): void;
   ask(text: string, go: (cx: Context) => void): void;
-  act(promise: Promise<Ran>, ok: string, cx: Context, after?: () => void): void;
+  /** Runs a gh action: says how it went (`ok`, or gh's words), then reads again soon. */
+  act(effect: Effect.Effect<unknown, GhError, GithubServices>, ok: string, cx: Context, after?: () => void): void;
   kick(cx: Context): void;
   refresh(cx: Context, force?: boolean | ReadOptions): void;
   dragged(key: string): boolean;

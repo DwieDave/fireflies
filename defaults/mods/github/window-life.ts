@@ -6,13 +6,14 @@
 
 import { Effect, Option, String as Str } from "effect";
 import type { Context } from "gpui-kit";
-import { Commands, redraw } from "@fireflies/kit";
+import { Commands, Notify, redraw } from "@fireflies/kit";
 import type { Repo } from "./gh.ts";
 import { GhError, repoOf, viewRepo } from "./gh.ts";
 import { repoKey } from "./cache.ts";
 import * as store from "./store.ts";
 import { noteOf } from "./kit.ts";
 import type { default as GitHub } from "./main.ts";
+import type { GithubServices } from "./fx.ts";
 import { runCommand } from "./window-keys.ts";
 
 /** The same repo described the same way, its branch aside (that one may move). */
@@ -125,3 +126,18 @@ export const commands = (v: GitHub, cx: Context, focus: () => void) => Effect.fo
   })),
   Effect.andThen(redraw),
 ));
+
+/** A gh action's end (main.ts act): `after` and the note `ok` when it went, gh's words when not (and, from a pane,
+ *  a notification: the bar may be out of sight); then the tab is read again past its ETags. */
+export const acted = (v: GitHub, effect: Effect.Effect<unknown, GhError, GithubServices>, ok: string, cx: Context, after?: () => void) => Effect.matchEffect(effect, {
+  onSuccess: () => Effect.sync(() => {
+    after?.();
+    v.note = ok === "" ? null : noteOf(ok, "done", v.now());
+  }),
+  onFailure: (e) => Effect.andThen(
+    Effect.sync(() => {
+      v.note = noteOf(e.message, "failed", v.now());
+    }),
+    v.overlay === null ? Notify.use((n) => n.post({ title: "GitHub", body: e.message, level: "error" })) : Effect.void,
+  ),
+}).pipe(Effect.andThen(Effect.sync(() => v.refresh(cx, true))));
