@@ -129,6 +129,7 @@ const settle = async () => { for (let i = 0; i < 50 && work.length; i++) { while
 
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: Actions } = await import("../defaults/mods/github/actions.ts");
+const { awaitRead } = await import("../defaults/mods/github/gh-await.ts");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {
@@ -137,7 +138,7 @@ function makeApp() {
     note: null, picker: null, closed: false, tab: "prs", refreshed: 0,
     focusSelf() { focusedInput = null; }, kick() {}, openUrl() {}, openDiff() {},
     spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch (e) { app.thrown = e; } }); },
-    refresh(c: any) { app.refreshed++; c.spawn(() => app.tabObj?.poll({ all: true, fresh: true }, c)); },
+    refresh(c: any) { app.refreshed++; c.spawn(() => app.tabObj && awaitRead(app.tabObj.read({ all: true, fresh: true }), c)); },
   };
   return app;
 }

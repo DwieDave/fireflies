@@ -15,6 +15,7 @@
 // those are this app's, per project (shared state "github.boards").
 
 import { div, svg } from "gpui-kit";
+import { Semaphore } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { shared, setShared } from "herdr";
@@ -224,8 +225,8 @@ export default class Projects {
   chars = 24;
   fields: readonly Field[] = [];
 
-  /** The other tab's read behind this one, while it runs. */
-  warming: Promise<void> | null = null;
+  /** One read of this tab at a time (the shown tab's, and the read behind it: window-reads.ts). */
+  readonly reading = Semaphore.makeUnsafe(1);
 
   constructor(app: Host, kept: ProjectsKept = {}) {
     this.app = app;
@@ -430,8 +431,8 @@ export default class Projects {
   // ---- reading
 
   /** Reads the project list, the picked board and an open card's detail (projects-reads.ts). all: past the timers. */
-  poll(opts: ReadOptions, cx: Context | null): Promise<void> {
-    return awaitRead(pollProjects(this, opts), cx);
+  read(opts: ReadOptions) {
+    return pollProjects(this, opts);
   }
 
   /** The selected card's body and comments, read once it's opened: a run on the window. */

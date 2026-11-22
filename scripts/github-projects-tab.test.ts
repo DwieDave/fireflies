@@ -71,7 +71,7 @@ function makeApp() {
 async function open() {
   const app = makeApp();
   const tab = new Projects(app, {});
-  await tab.poll({ all: true }, cx);
+  await awaitRead(tab.read({ all: true }), cx);
   return { app, tab };
 }
 const press = (tab: any, ...keys: string[]) => { for (const k of keys) tab.key(k, { modifiers: {} }, cx); };
@@ -326,7 +326,7 @@ test("a token without the project scope gets the command that fixes it", async (
   gh.noScope = true;
   const app = makeApp();
   const tab = new Projects(app, {});
-  await tab.poll({ all: true }, cx);
+  await awaitRead(tab.read({ all: true }), cx);
   expect(tab.scope.command).toBe("gh auth refresh -s read:project");
   expect(() => drawn(tab)).not.toThrow();
 });

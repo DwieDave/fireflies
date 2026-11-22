@@ -10,13 +10,12 @@
 // lines from where the wheel left it.
 
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Option, Semaphore } from "effect";
 import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guard } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
-import { awaitRead } from "./gh-await.ts";
 import { pollActions, readLog } from "./actions-reads.ts";
 import type { Expected, RunAction } from "./run-actions.ts";
 import { paced, runAction } from "./run-actions.ts";
@@ -188,8 +187,8 @@ export default class Actions {
   /** A re-run (live) or cancel (not live) GitHub took and the list doesn't show yet: read again soon. */
   expected: Expected | null = null;
 
-  /** The other tab's read behind this one, while it runs. */
-  warming: Promise<void> | null = null;
+  /** One read of this tab at a time (the shown tab's, and the read behind it: window-reads.ts). */
+  readonly reading = Semaphore.makeUnsafe(1);
 
   constructor(app: Host, kept: ActionsKept = {}) {
     this.app = app;
@@ -361,8 +360,8 @@ export default class Actions {
 
   /** Reads the runs, then the selected run's jobs (and its workflow, at once): actions-reads.ts.
    *  all: past the timers; fresh: past the ETags. */
-  poll(opts: ReadOptions, cx: Context | null): Promise<void> {
-    return awaitRead(pollActions(this, opts), cx);
+  read(opts: ReadOptions) {
+    return pollActions(this, opts);
   }
 
   /** Keeps a job selected in the shown run, and (`load`) its log coming. */

@@ -4,13 +4,13 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div } from "gpui-kit";
+import { Semaphore } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import { arrayOf, isNumber, isString, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
-import { awaitRead } from "./gh-await.ts";
 import { pollPrs } from "./prs-reads.ts";
 import * as Gh from "./gh.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
@@ -122,8 +122,8 @@ export default class Prs {
   /** A pull request just made: selected once the list has it. */
   want: number | null = null;
 
-  /** The other tab's read behind this one, while it runs. */
-  warming: Promise<void> | null = null;
+  /** One read of this tab at a time (the shown tab's, and the read behind it: window-reads.ts). */
+  readonly reading = Semaphore.makeUnsafe(1);
 
   constructor(app: Host, kept: PrsKept = {}) {
     this.app = app;
@@ -259,8 +259,8 @@ export default class Prs {
 
   /** Reads GitHub (prs-reads.ts): the list, and the shown PR's view beside it (both at once).
    *  all: past the timers; fresh: past the ETags. */
-  poll(opts: ReadOptions, cx: Context | null): Promise<void> {
-    return awaitRead(pollPrs(this, opts), cx);
+  read(opts: ReadOptions) {
+    return pollPrs(this, opts);
   }
 
   wantsDetail(p: PrRow, all: boolean, now: number): boolean {
