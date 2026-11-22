@@ -3,7 +3,8 @@
 // and main.ts implements it. Nothing runs here.
 
 import type { Context, MouseButtonEvent } from "gpui-kit";
-import type { Ran, Repo } from "./gh.ts";
+import type { Repo } from "./gh.ts";
+import type { Ran } from "./gh-await.ts";
 import type { Axis, Note } from "./kit.ts";
 import type { Pt } from "@fireflies/menu-place";
 

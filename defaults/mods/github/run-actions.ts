@@ -4,7 +4,7 @@
 // re-run queued or running, a cancel finished. GitHub shows either a few
 // seconds after it took it; past EXPECT_FOR the tab's own pace is back.
 
-import { ghRun } from "./gh.ts";
+import { ghRun } from "./gh-await.ts";
 import type { Run } from "./model.ts";
 import { soon } from "./model.ts";
 import type { default as Actions } from "./actions.ts";

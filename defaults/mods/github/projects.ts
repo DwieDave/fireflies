@@ -24,7 +24,7 @@ import { arrayOf, isBoolean, isNumber, isString, nullable, object, readShared, s
 import type { JsonMap } from "./guards.ts";
 import { mapOf, maybe, toJson, toMap } from "./guards.ts";
 import type { Repo } from "./gh.ts";
-import { graphql } from "./gh.ts";
+import { graphql } from "./gh-await.ts";
 import type { WebLink } from "./model.ts";
 import { SLOW, linksIn } from "./model.ts";
 import type { Pieces, Piece } from "./cache.ts";

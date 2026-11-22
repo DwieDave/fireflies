@@ -13,7 +13,7 @@ import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, fileAt, plain } from "./gh.ts";
+import { ghJson, ghRun, api, fileAt, plain } from "./gh-await.ts";
 import type { Run } from "./model.ts";
 import { isEnvironments, isNamedList, isRunList, isWorkflows, soon } from "./model.ts";
 import { slug } from "./remotes.ts";

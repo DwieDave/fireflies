@@ -4,7 +4,7 @@
 
 import type { Context } from "gpui-kit";
 import type { Repo } from "./gh.ts";
-import { graphql, mutate } from "./gh.ts";
+import { graphql, mutate } from "./gh-await.ts";
 import { noteOf } from "./kit.ts";
 import type { Field, FieldValue, Item } from "./board.ts";
 import type { Op } from "./board-edits.ts";

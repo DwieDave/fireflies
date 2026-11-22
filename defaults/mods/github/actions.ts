@@ -15,7 +15,7 @@ import type { Theme } from "herdr";
 import type { Guard, Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
-import { api, ghRun, fileAt, slimmed } from "./gh.ts";
+import { api, ghRun, fileAt, slimmed } from "./gh-await.ts";
 import type { Expected, RunAction } from "./run-actions.ts";
 import { paced, runAction, settled } from "./run-actions.ts";
 import type { Job, Needs, NeedsOf, Run, Step } from "./model.ts";

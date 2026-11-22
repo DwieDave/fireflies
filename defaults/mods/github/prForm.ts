@@ -14,7 +14,7 @@ import { exec } from "herdr";
 import type { Theme } from "herdr";
 import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
-import { ghRun, api, graphql, plain } from "./gh.ts";
+import { ghRun, api, graphql, plain } from "./gh-await.ts";
 import { isNamed, isNamedList, isPrChoices } from "./model.ts";
 import { candidates } from "./remotes.ts";
 import type { Commit, LocalBranch, Numstat, PrFields, PushPlan } from "./pr-create.ts";

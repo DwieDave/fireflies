@@ -12,7 +12,7 @@ import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
 import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, graphql, slimmed } from "./gh.ts";
+import { ghJson, ghRun, api, graphql, slimmed } from "./gh-await.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
 import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
 import type { Pieces } from "./cache.ts";
