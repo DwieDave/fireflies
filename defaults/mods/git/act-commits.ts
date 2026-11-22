@@ -2,11 +2,12 @@
 // amend, moving and squashing (history.ts rewrites), cherry-picking, copying.
 
 import type { Context } from "gpui-kit";
-import { Effect, String as Str } from "effect";
+import { Array as Arr, Effect, Option, Order, String as Str } from "effect";
 import { run as herdrRun } from "herdr";
 import type { Rewrite } from "./history.ts";
 import { rewrite } from "./history.ts";
 import type { Env } from "./git.ts";
+import type { Copied } from "./state.ts";
 import type { Action } from "./keys.ts";
 import type { default as GitView } from "./main.ts";
 import { isCommit, isReflog, isStash, hashOf } from "./items.ts";
@@ -27,24 +28,25 @@ export const COMMIT_ACTIONS = {
     else {
       const hash = hashOf(c);
 
-      if (hash) enterSub(v, { kind: "commitFiles", hash, title: isReflog(c) ? c.short : short(hash), stash: false });
+      if (hash !== null) enterSub(v, { kind: "commitFiles", hash, title: isReflog(c) ? c.short : short(hash), stash: false });
     }
   },
   "checkout-commit": (v) => {
     const c = commitOf(v);
 
-    if (c) v.ask({ title: "Checkout commit", text: `Check out ${short(c.hash)} as a detached HEAD?`, go: () => git(v, "Checkout commit", ["checkout", c.hash]) });
+    if (c !== null) v.ask({ title: "Checkout commit", text: `Check out ${short(c.hash)} as a detached HEAD?`, go: () => git(v, "Checkout commit", ["checkout", c.hash]) });
   },
   reword: (v) => {
     const c = commitOf(v);
     const g = v.git;
 
-    if (!c || !g) return;
+    if (c === null || g === null) return;
 
     if (v.rebasing()) return v.error("Mid-rebase: press m to continue or abort first.");
 
     spawn(v, Effect.gen(function* () {
-      const msg = Str.trim(yield* g.out(["log", "-1", "--format=%B", c.hash]));
+      const body = yield* g.out(["log", "-1", "--format=%B", c.hash]);
+      const msg = Str.trim(body);
 
       v.commitPopup({
         title: `Reword ${short(c.hash)}`, value: msg,
@@ -59,7 +61,7 @@ export const COMMIT_ACTIONS = {
   "reword-editor": (v) => {
     const c = commitOf(v);
 
-    if (!c) return;
+    if (c === null) return;
 
     if (v.isHead(c)) return terminal(v, ["git", "commit", "--amend", "--only"], "git commit --amend --only");
 
@@ -67,9 +69,9 @@ export const COMMIT_ACTIONS = {
 
     if ("error" in plan) return v.error(plan.error);
 
-    const todo = plan.todo.replace(/^edit /m, "reword ");
+    const todo = Str.replace(/^edit /m, "reword ")(plan.todo);
 
-    terminal(v, ["env", `NOCTURNE_GIT_TODO=${todo}`, `GIT_SEQUENCE_EDITOR=sh -c 'printf "%s" "$NOCTURNE_GIT_TODO" > "$1"' -`, "git", "rebase", "-i", "--autostash", ...(plan.base ? [plan.base] : ["--root"])], `git rebase -i (reword ${short(c.hash)})`);
+    terminal(v, ["env", `NOCTURNE_GIT_TODO=${todo}`, `GIT_SEQUENCE_EDITOR=sh -c 'printf "%s" "$NOCTURNE_GIT_TODO" > "$1"' -`, "git", "rebase", "-i", "--autostash", ...(plan.base === null ? ["--root"] : [plan.base])], `git rebase -i (reword ${short(c.hash)})`);
   },
   squash: (v) => confirmRewrite(v, "squash", "Squash", "Squash this commit into the one below it? Their messages are combined."),
   fixup: (v) => confirmRewrite(v, "fixup", "Fixup", "Meld this commit into the one below it? Its message is dropped."),
@@ -81,35 +83,35 @@ export const COMMIT_ACTIONS = {
   "rebase-interactive": (v) => {
     const c = commitOf(v);
 
-    if (!c) return;
+    if (c === null) return;
 
     const base = c.parents[0];
 
-    terminal(v, ["git", "rebase", "-i", "--autostash", ...(base ? [base] : ["--root"])], `git rebase -i ${base ? short(base) : "--root"}`);
+    terminal(v, ["git", "rebase", "-i", "--autostash", ...(base === undefined ? ["--root"] : [base])], `git rebase -i ${base === undefined ? "--root" : short(base)}`);
   },
   "fixup-commit": (v) => {
     const c = commitOf(v);
 
-    if (c) git(v, "Create fixup commit", ["commit", `--fixup=${c.hash}`]);
+    if (c !== null) git(v, "Create fixup commit", ["commit", `--fixup=${c.hash}`]);
   },
   autosquash: (v) => {
     const c = commitOf(v);
 
-    if (!c) return;
+    if (c === null) return;
 
     const parent = c.parents[0];
 
     v.ask({
       title: "Apply fixup commits", text: `Squash every fixup! commit above ${short(c.hash)} into its target?`, danger: true,
-      go: () => git(v, "Apply fixup commits", ["rebase", "-i", "--autosquash", "--autostash", ...(parent ? [parent] : ["--root"])], { env: { GIT_SEQUENCE_EDITOR: "true" }, timeout: 120000 }),
+      go: () => git(v, "Apply fixup commits", ["rebase", "-i", "--autosquash", "--autostash", ...(parent === undefined ? ["--root"] : [parent])], { env: { GIT_SEQUENCE_EDITOR: "true" }, timeout: 120000 }),
     });
   },
   "amend-commit": (v) => {
     const c = commitOf(v);
 
-    if (!c) return;
+    if (c === null) return;
 
-    if (!(v.data.status?.files ?? []).some((f) => f.staged)) return v.error("Nothing is staged to amend with.");
+    if (!Arr.some(v.data.status?.files ?? [], (f) => f.staged)) return v.error("Nothing is staged to amend with.");
 
     const parent = c.parents[0] ?? "--root";
 
@@ -123,7 +125,7 @@ export const COMMIT_ACTIONS = {
   revert: (v) => {
     const c = commitOf(v);
 
-    if (!c) return;
+    if (c === null) return;
 
     v.ask({ title: "Revert", text: `Make a commit that undoes ${short(c.hash)}?`, danger: true, go: () => git(v, "Revert commit", ["revert", "--no-edit", ...(c.parents.length > 1 ? ["-m", "1"] : []), c.hash]) });
   },
@@ -131,9 +133,9 @@ export const COMMIT_ACTIONS = {
   "cherry-paste": (v) => {
     const g = v.git;
 
-    if (!v.copied.length || !g) return v.error("Nothing copied: C on a commit copies it.");
+    if (!Arr.isReadonlyArrayNonEmpty(v.copied) || g === null) return v.error("Nothing copied: C on a commit copies it.");
 
-    const list = [...v.copied].sort((a, b) => a.date - b.date).map((c) => c.hash);
+    const list = Arr.map(Arr.sort(v.copied, Order.mapInput(Order.Number, (c: Copied) => c.date)), (c) => c.hash);
 
     v.ask({
       title: "Cherry-pick", text: `Paste ${list.length} commit${list.length === 1 ? "" : "s"} onto ${v.data.status?.head ?? "HEAD"}?`,
@@ -155,13 +157,13 @@ export const COMMIT_ACTIONS = {
   "copy-hash": (v, cx) => {
     const hash = hashOf(it(v));
 
-    if (hash) v.copy(hash, cx);
+    if (hash !== null) v.copy(hash, cx);
   },
   "copy-menu": (v) => {
     const c = commitOf(v);
     const g = v.git;
 
-    if (!c || !g) return;
+    if (c === null || g === null) return;
 
     spawn(v, Effect.gen(function* () {
       const [msg, diff] = yield* Effect.all([g.out(["log", "-1", "--format=%B", c.hash]), g.out(["show", "--format=", c.hash])], { concurrency: "unbounded" });
@@ -172,25 +174,25 @@ export const COMMIT_ACTIONS = {
         items: [
           { key: "c", label: "Hash", sub: c.hash, go: (cx2) => v.copy(c.hash, cx2) },
           { key: "s", label: "Subject", sub: c.subject, go: (cx2) => v.copy(c.subject, cx2) },
-          { key: "m", label: "Message", go: (cx2) => v.copy(msg.trim(), cx2) },
+          { key: "m", label: "Message", go: (cx2) => v.copy(Str.trim(msg), cx2) },
           { key: "a", label: "Author", sub: `${c.author} <${c.email}>`, go: (cx2) => v.copy(`${c.author} <${c.email}>`, cx2) },
           { key: "d", label: "Diff", go: (cx2) => v.copy(diff, cx2) },
-          ...(url ? [{ key: "u", label: "Url", sub: url, go: (cx2: Context) => v.copy(url, cx2) }] : []),
+          ...(url === null ? [] : [{ key: "u", label: "Url", sub: url, go: (cx2: Context) => v.copy(url, cx2) }]),
         ],
       });
     }));
   },
   "open-commit-browser": (v) => {
     const hash = hashOf(it(v));
-    const url = hash && commitUrl(v, hash);
+    const url = hash === null ? null : commitUrl(v, hash);
 
-    if (!url) return v.error("No GitHub-style remote to open it on.");
+    if (url === null) return v.error("No GitHub-style remote to open it on.");
 
     herdrRun("app.open_url", { url, in: "system" });
   },
   "select-branch-commits": (v) => {
     const list = v.commitList();
-    const n = list.findIndex((c) => !v.data.notMain.has(c.hash));
+    const n = Option.getOrElse(Arr.findFirstIndex(list, (c) => !v.data.notMain.has(c.hash)), () => -1);
 
     if (n <= 0) return v.note("Every shown commit is on the main branch.");
 
@@ -212,13 +214,13 @@ export function cherryCopy(v: GitView) {
   for (const c of v.pickedRows()) {
     if (!isCommit(c) && !isReflog(c) && !isStash(c)) continue;
 
-    const i = v.copied.findIndex((x) => x.hash === c.hash);
+    const i = Option.getOrElse(Arr.findFirstIndex(v.copied, (x) => x.hash === c.hash), () => -1);
 
     if (i >= 0) v.copied.splice(i, 1);
     else v.copied.push({ hash: c.hash, subject: c.subject, date: c.date });
   }
 
-  v.note(v.copied.length ? `${v.copied.length} commit${v.copied.length === 1 ? "" : "s"} copied: V pastes them, ctrl-r forgets them` : "Copied commits forgotten");
+  v.note(Arr.isReadonlyArrayNonEmpty(v.copied) ? `${v.copied.length} commit${v.copied.length === 1 ? "" : "s"} copied: V pastes them, ctrl-r forgets them` : "Copied commits forgotten");
 }
 
 export function confirmRewrite(v: GitView, action: Rewrite, title: string, text: string) {
@@ -252,7 +254,7 @@ export function rebaseRewrite(v: GitView, action: Rewrite, env: Env = {}, after?
 
   if ("error" in plan) return v.error(plan.error);
 
-  if (!g) return;
+  if (g === null) return;
 
   spawn(v, Effect.gen(function* () {
     const r = yield* g.rebase(rewriteTitle(action), plan.base, plan.todo, env);
@@ -267,11 +269,11 @@ export function rebaseRewrite(v: GitView, action: Rewrite, env: Env = {}, after?
 
 /** https://host/owner/repo/commit/<hash> from the first remote's url, if it's a GitHub-style one. */
 export function commitUrl(v: GitView, hash: string) {
-  const url = v.data.remotes.find((r) => r.name === "origin")?.url ?? v.data.remotes[0]?.url;
+  const url = Option.getOrUndefined(Option.orElse(Option.map(Arr.findFirst(v.data.remotes, (r) => r.name === "origin"), (r) => r.url), () => Option.map(Arr.head(v.data.remotes), (r) => r.url)));
 
-  if (!url) return null;
+  if (url === undefined || Str.isEmpty(url)) return null;
 
   const m = /^(?:https?:\/\/|ssh:\/\/)?(?:[^@/]+@)?([^/:]+)[:/](.+?)(?:\.git)?\/?$/.exec(url);
 
-  return m ? `https://${m[1] ?? ""}/${m[2] ?? ""}/commit/${hash}` : null;
+  return m === null ? null : `https://${m[1] ?? ""}/${m[2] ?? ""}/commit/${hash}`;
 }
