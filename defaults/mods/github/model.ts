@@ -440,29 +440,3 @@ export const PrChoicesSchema = Schema.Struct({
 
 export type PrChoices = typeof PrChoicesSchema.Type;
 
-// ---- guards over the schemas, for the readers that still take guards (gh.ts api, graphql)
-
-export const isTone = Schema.is(ToneSchema);
-export const isActor = Schema.is(ActorSchema);
-export const isLabel = Schema.is(LabelSchema);
-export const isCheck = Schema.is(CheckSchema);
-export const isRun = Schema.is(RunSchema);
-export const isStep = Schema.is(StepSchema);
-export const isJob = Schema.is(JobSchema);
-export const isPrView = Schema.is(PrViewSchema);
-export const isReviewComment = Schema.is(ReviewCommentSchema);
-export const isPrRow = Schema.is(PrRowSchema);
-export const isPrFilter = Schema.is(PrFilterSchema);
-export const isPrList = Schema.is(PrListSchema);
-export const isNamed = Schema.is(NamedSchema);
-export const isNamedList = Schema.is(NamedListSchema);
-export const isEnvironments = Schema.is(EnvironmentsSchema);
-export const isWorkflow = Schema.is(WorkflowSchema);
-export const isWorkflows = Schema.is(WorkflowsSchema);
-export const isRunList = Schema.is(RunListSchema);
-export const isRuns = Schema.is(RunsSchema);
-export const isJobList = Schema.is(JobListSchema);
-export const isJobs = Schema.is(JobsSchema);
-export const isReviewComments = Schema.is(ReviewCommentsSchema);
-export const isFileContent = Schema.is(FileContentSchema);
-export const isPrChoices = Schema.is(PrChoicesSchema);

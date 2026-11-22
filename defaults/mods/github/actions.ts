@@ -10,17 +10,14 @@
 // lines from where the wheel left it.
 
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
-import { Array as Arr, Option, Semaphore } from "effect";
+import { Array as Arr, Option, Schema, Semaphore } from "effect";
 import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Guard } from "./guard.ts";
-import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
-import { isList, maybe } from "./guards.ts";
 import { pollActions, readLog } from "./actions-reads.ts";
 import type { Expected, RunAction } from "./run-actions.ts";
 import { paced, runAction } from "./run-actions.ts";
 import type { Job, Needs, NeedsOf, Run, Step } from "./model.ts";
-import { pollEvery, jobColumns, jobParents, isRun, isJob } from "./model.ts";
+import { JobSchema, RunSchema, maybe, pollEvery, jobColumns, jobParents } from "./model.ts";
 import type { Hint } from "./kit.ts";
 import { splitter, unzoom } from "./kit.ts";
 import type { Parents } from "./graph.ts";
@@ -82,17 +79,18 @@ interface Tag {
 /** A finished job's log by step, or why it didn't come. */
 export type JobLog = ReadonlyMap<number, string[]> | { readonly error: string };
 
-/** A workflow job as the cache keeps it: [key, { name, needs }]. */
-const isNeedsOf = object({ name: nullable(isString), needs: arrayOf(isString) });
+/** A workflow job's name and the jobs it needs. */
+const NeedsOfSchema = Schema.Struct({ name: Schema.NullOr(Schema.String), needs: Schema.Array(Schema.String) });
 
-const isNeedEntry: Guard<readonly [string, NeedsOf]> = (value: unknown): value is readonly [string, NeedsOf] =>
-  isList(value) && value.length === 2 && isString(value[0]) && isNeedsOf(value[1]);
+/** A workflow job's needs, as the cache keeps them: [key, { name, needs }]. */
+const NeedEntrySchema = Schema.Tuple([Schema.String, NeedsOfSchema]);
 
-const isRunsPiece = object({ list: arrayOf(isRun) }, { etag: maybe(isString), at: maybe(isNumber) });
+/** The cache's pieces of this tab: a branch's runs, a run's jobs, a workflow's needs (each with its ETag and when). */
+const isRunsPiece = Schema.is(Schema.Struct({ list: Schema.Array(RunSchema), etag: maybe(Schema.String), at: maybe(Schema.Finite) }));
 
-const isJobsPiece = object({ jobs: arrayOf(isJob) }, { etag: maybe(isString), at: maybe(isNumber) });
+const isJobsPiece = Schema.is(Schema.Struct({ jobs: Schema.Array(JobSchema), etag: maybe(Schema.String), at: maybe(Schema.Finite) }));
 
-const isNeedsPiece = object({ jobs: arrayOf(isNeedEntry) }, { at: maybe(isNumber) });
+const isNeedsPiece = Schema.is(Schema.Struct({ jobs: Schema.Array(NeedEntrySchema), at: maybe(Schema.Finite) }));
 
 /** The cache's part for this tab (cache.ts entry.actions). */
 export interface ActionsCached {

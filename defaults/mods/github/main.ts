@@ -51,9 +51,9 @@ import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
 import type { Repo } from "./gh.ts";
 import type { GhError } from "./gh.ts";
-import { runtime } from "./fx.ts";
+import { nowMs, runtime } from "./fx.ts";
 import type { GithubFx, GithubServices } from "./fx.ts";
-import { acted, commands, start, switchFork } from "./window-life.ts";
+import { acted, commands, kicked, start, switchFork, takeFocus, ticks } from "./window-life.ts";
 import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
@@ -227,7 +227,7 @@ export default class GitHub extends View implements Host {
 
     // Opened to write (nocturne's githubForm): the form, once the repo is known. Only a fresh ask:
     // the same props come back when the window is restored or reloaded, and must not open it again.
-    const ask = pr.create !== undefined && Date.now() - (pr.at ?? 0) < CREATE_FRESH;
+    const ask = pr.create !== undefined && this.now() - (pr.at ?? 0) < CREATE_FRESH;
 
     this.wantForm = ask ? pr.create ?? null : null;
     this.prs = new Prs(this, same ? kept.prs : {});
@@ -246,14 +246,12 @@ export default class GitHub extends View implements Host {
     handle.focus();
 
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
-    if (this.overlay) {
-      for (const ms of [60, 250, 600]) {
-        cx.timer.after(ms, () => {
-          const tab = this.shown();
+    if (this.overlay !== null) {
+      this.fx.run(takeFocus(() => {
+        const tab = this.shown();
 
-          if (!this.closed && !tab.composer && !tab.form) handle.focus();
-        });
-      }
+        if (!this.closed && !tab.composer && !tab.form) handle.focus();
+      }), { redraw: false });
     }
 
     this.beat();
@@ -264,7 +262,7 @@ export default class GitHub extends View implements Host {
     if (doc) this.fromCache(doc);
 
     this.start(cx);
-    cx.timer.every(1000, (cx) => this.tick(cx));
+    this.fx.run(ticks(this, cx), { key: "tick", redraw: false });
     this.fx.run(commands(this, cx, () => handle.focus()), { key: "commands" });
   }
 
@@ -323,7 +321,7 @@ export default class GitHub extends View implements Host {
   beat(): void {
     if (!this.overlay) return;
 
-    this.beatAt = Date.now();
+    this.beatAt = this.now();
     writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: this.beatAt });
   }
 
@@ -342,7 +340,7 @@ export default class GitHub extends View implements Host {
     if (what === "pr") {
       const req = readShared(shared, CREATE_KEY, null);
       const folder = req?.folder;
-      const mine = req && Date.now() - (req.at ?? 0) < CREATE_FRESH && (!folder || !repo.root || folder.startsWith(repo.root) || repo.root.startsWith(folder));
+      const mine = req && this.now() - (req.at ?? 0) < CREATE_FRESH && (!folder || !repo.root || folder.startsWith(repo.root) || repo.root.startsWith(folder));
 
       if (req) writeShared(setShared, CREATE_KEY, null);
 
@@ -361,19 +359,19 @@ export default class GitHub extends View implements Host {
 
     if (this.wantForm) this.openForm(cx);
 
-    if (Date.now() - this.beatAt >= BEAT) this.beat();
+    if (this.now() - this.beatAt >= BEAT) this.beat();
     this.save(false);
 
     let redraw = false;
 
-    if (this.note && Date.now() - this.note.at > 5000) {
+    if (this.note && this.now() - this.note.at > 5000) {
       this.note = null;
       redraw = true;
     }
 
-    if (this.state === "ready" && Date.now() >= this.next) this.refresh(cx);
+    if (this.state === "ready" && this.now() >= this.next) this.refresh(cx);
 
-    if (this.dirty && !this.saving && Date.now() - this.savedAt >= SAVE_EVERY) void this.persist();
+    if (this.dirty && !this.saving && this.now() - this.savedAt >= SAVE_EVERY) void this.persist();
 
     // "updated 2m ago" changes once a minute.
     const said = this.readWord();
@@ -412,12 +410,10 @@ export default class GitHub extends View implements Host {
     return at ? `updated ${readAgo(at, this.now())}` : "";
   }
 
-  /** Soon: a selection changed, its details want reading. */
+  /** Soon: a selection changed, its details want reading (window-life.ts kicked). */
   kick(cx: Context): void {
-    this.next = Math.min(this.next, Date.now() + 150);
-    cx.timer.after(160, (cx) => {
-      if (!this.closed && Date.now() >= this.next) this.refresh(cx);
-    });
+    this.next = Math.min(this.next, this.now() + 150);
+    this.fx?.run(kicked(this, this.acx ?? cx), { key: "kick", redraw: false });
   }
 
 
@@ -433,7 +429,7 @@ export default class GitHub extends View implements Host {
   }
 
   now(): number {
-    return Date.now();
+    return nowMs();
   }
 
   run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void {
@@ -512,7 +508,7 @@ export default class GitHub extends View implements Host {
       const back = { mod: "github", props: { folder: this.folder, on: this.on, tab: "prs" } };
       const id = openOverlay({ mod: "git", kind: "window", key: "github", frame: "none", scrim: true, width: 0.85, height: 0.85, props: { ...diff, back } });
 
-      writeShared(setShared, WINDOW_KEY, { id, beat: Date.now() }); // the review holds the window now (and renews this)
+      writeShared(setShared, WINDOW_KEY, { id, beat: this.now() }); // the review holds the window now (and renews this)
     } else {
       const pane = besidePane(this);
 

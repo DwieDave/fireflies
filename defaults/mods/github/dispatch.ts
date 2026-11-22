@@ -5,8 +5,7 @@
 // turns its inputs into form fields, checks the answers, builds
 // `gh workflow run` and finds the run it started.
 
-import type { Guarded } from "./guard.ts";
-import { isString, literal } from "./guard.ts";
+import { Predicate, Schema, String as Str } from "effect";
 import type { Run } from "./model.ts";
 
 // ---- a small YAML reader (what workflow files use)
@@ -349,9 +348,11 @@ function triggers(doc: Yaml): Yaml {
 }
 
 /** The kinds of input a workflow_dispatch declares. */
-export const isInputType = literal("string", "choice", "boolean", "number", "environment");
+export const InputTypeSchema = Schema.Literals(["string", "choice", "boolean", "number", "environment"]);
 
-export type InputType = Guarded<typeof isInputType>;
+export const isInputType = Schema.is(InputTypeSchema);
+
+export type InputType = typeof InputTypeSchema.Type;
 
 /** A workflow_dispatch input as the file declares it. */
 export interface Input {
@@ -415,7 +416,7 @@ export function startValue(input: Input): string | boolean {
 
 /** What's wrong with an answer, or "" (required ones filled, numbers numeric, choices among the options). */
 export function inputError(input: Input, value: string | boolean | null | undefined, envs: readonly string[] | null = null): string {
-  const v = isString(value) ? value.trim() : value;
+  const v = Predicate.isString(value) ? Str.trim(value) : value;
 
   if (input.type === "boolean") return "";
 
