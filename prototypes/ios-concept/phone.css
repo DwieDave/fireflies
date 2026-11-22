@@ -1,0 +1,150 @@
+/* The nocturne look on a phone: moonfly's colours (defaults/themes/moonfly.json),
+   Departure Mono, square corners, 50% checker dither for plates and lit rows
+   (toolground's dither()), dithered diamonds for status. Frames are 393x852. */
+
+:root {
+  --bg: #080808;
+  --fg: #c6c6c6;
+  --bright: #e4e4e4;
+  --muted: #949494;
+  --dim: #5f6d6d;
+  --edge: #323437;
+  --hover: #1c1c1c;
+  --accent: #80a0ff;
+  --working: #e3c78a;
+  --blocked: #ff5189;
+  --done: #8cc85f;
+  --red: #ff5d5d;
+  --cyan: #79dac8;
+  --purple: #cf87e8;
+  --night: #1d2438;
+  --hit: 48px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { background: #000; }
+body {
+  font-family: "Departure Mono", ui-monospace, monospace;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.35;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  padding: 32px 32px 48px;
+}
+
+/* ---- the sheet the phones sit on */
+.page-head { max-width: 1760px; margin: 0 auto 28px; display: grid; gap: 6px; }
+.page-head h1 { font-size: 22px; font-weight: normal; color: var(--bright); letter-spacing: 0.02em; }
+.page-head p { color: var(--muted); max-width: 92ch; }
+.page-head .gain { color: var(--done); }
+.page-head .cost { color: var(--working); }
+.row { display: flex; flex-wrap: wrap; gap: 40px; justify-content: flex-start; max-width: 1760px; margin: 0 auto; }
+.shot { display: grid; gap: 12px; width: 393px; }
+.shot > figcaption { color: var(--muted); font-size: 12px; min-height: 3.2em; }
+.shot > figcaption b { color: var(--fg); font-weight: normal; }
+
+/* ---- a phone: 393x852, safe areas 59 top, 34 bottom */
+.phone {
+  position: relative;
+  width: 393px;
+  height: 852px;
+  background: var(--bg);
+  overflow: hidden;
+  outline: 1px solid #222;
+  border-radius: 54px; /* the device's glass, not the UI: UI corners stay square */
+  isolation: isolate;
+}
+.status {
+  position: absolute; z-index: 30; top: 0; left: 0; right: 0; height: 54px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 36px 0 48px; font-size: 15px; color: var(--bright);
+  pointer-events: none;
+}
+.status .island { position: absolute; left: 50%; top: 11px; width: 124px; height: 36px; margin-left: -62px; background: #000; border-radius: 20px; }
+.status .sig { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--fg); }
+.home-ind { position: absolute; z-index: 30; bottom: 8px; left: 50%; width: 136px; margin-left: -68px; height: 5px; border-radius: 3px; background: var(--fg); opacity: 0.85; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.safe-top { height: 59px; flex: none; }
+.safe-bot { height: 34px; flex: none; }
+
+/* ---- dither: a 50% checker of 1 CSS px cells in --c */
+.dith, .lit, .plate {
+  --c: var(--edge);
+  background-image: conic-gradient(var(--c) 25%, transparent 0 50%, var(--c) 0 75%, transparent 0);
+  background-size: 2px 2px;
+  image-rendering: pixelated;
+}
+.lit { position: relative; }
+.lit::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.rule { height: 1px; background: var(--edge); flex: none; }
+.rule.d { height: 2px; --c: var(--muted); background-image: conic-gradient(var(--c) 25%, transparent 0 50%, var(--c) 0 75%, transparent 0); background-size: 2px 2px; background-color: transparent; opacity: 0.6; }
+canvas.px { image-rendering: pixelated; display: block; }
+
+/* ---- type */
+.eyebrow { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.t-muted { color: var(--muted); }
+.t-dim { color: var(--dim); }
+.t-bright { color: var(--bright); }
+.t-acc { color: var(--accent); }
+.t-work { color: var(--working); }
+.t-block { color: var(--blocked); }
+.t-done { color: var(--done); }
+.t-red { color: var(--red); }
+.t-cyan { color: var(--cyan); }
+.big { font-size: 34px; color: var(--bright); letter-spacing: 0.02em; }
+.h { font-size: 17px; color: var(--bright); }
+.sm { font-size: 12px; }
+.xs { font-size: 11px; }
+
+/* ---- art */
+.art { display: inline-block; flex: none; line-height: 0; }
+.art svg { width: 100%; height: 100%; display: block; }
+.pip { width: 8px; height: 8px; }
+.pip.working { color: var(--working); animation: breathe 1.6s ease-in-out infinite alternate; }
+.pip.blocked { color: var(--blocked); animation: blink 0.7s linear infinite alternate; }
+.pip.done { color: var(--done); }
+.pip.idle { color: var(--muted); }
+@keyframes breathe { from { opacity: 0.3; } to { opacity: 1; } }
+@keyframes blink { from { opacity: 0.15; } to { opacity: 1; } }
+.logo { width: 32px; height: 32px; }
+
+/* ---- touch rows and chips */
+.list { display: flex; flex-direction: column; }
+.item { min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 20px; position: relative; }
+.item + .item { border-top: 1px solid #141414; }
+.item .grow { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.item .grow > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--edge); color: var(--muted); font-size: 12px; white-space: nowrap; }
+.chip.on { color: var(--bright); border-color: var(--accent); --c: #1f2a48; background-image: conic-gradient(var(--c) 25%, transparent 0 50%, var(--c) 0 75%, transparent 0); background-size: 2px 2px; }
+.tag { font-size: 10px; padding: 1px 5px; border: 1px solid var(--edge); color: var(--muted); letter-spacing: 0.04em; }
+.tag.m-studio { color: var(--cyan); border-color: #2c4c47; }
+.tag.m-lab { color: var(--purple); border-color: #4a3354; }
+.tag.m-air { color: var(--working); border-color: #4d4430; }
+.btn { height: var(--hit); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--edge); color: var(--fg); }
+.btn.solid { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.scroll { flex: 1; overflow: hidden; position: relative; }
+
+/* ---- terminal */
+.term { font-size: 12.5px; line-height: 1.42; padding: 8px 10px; white-space: pre; color: #bdbdbd; overflow: hidden; }
+.cur { background: #8e8e8e; color: var(--bg); }
+.keyrow { display: flex; gap: 0; height: 46px; border-top: 1px solid var(--edge); background: #0d0d0d; flex: none; }
+.keyrow .k { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--fg); font-size: 13px; border-right: 1px solid #1a1a1a; }
+.keyrow .k.on { color: var(--bg); background: var(--working); }
+.keyrow .k.lit { color: var(--accent); }
+.kbd { flex: none; height: 291px; background: #1b1b1d; display: grid; grid-template-rows: repeat(4, 1fr); gap: 11px; padding: 9px 3px 50px; }
+.kbd .r { display: flex; gap: 6px; justify-content: center; }
+.kbd .r span { width: 33px; height: 43px; background: #3a3a3c; color: #e4e4e4; display: flex; align-items: center; justify-content: center; font: 20px -apple-system, system-ui, sans-serif; border-radius: 5px; box-shadow: 0 1px 0 #000; }
+.kbd .r span.w { width: 46px; background: #2b2b2d; font-size: 14px; }
+.kbd .r span.sp { width: 182px; font-size: 15px; }
+.pad { position: absolute; z-index: 20; width: 156px; height: 156px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); background: rgba(8, 8, 8, 0.82); border: 1px solid var(--edge); }
+.pad span { display: flex; align-items: center; justify-content: center; color: var(--bright); font-size: 18px; }
+.pad .arrow { border: 1px solid #1d1d1d; }
+.pad .enter { color: var(--bg); background: var(--accent); font-size: 13px; }
+.pad .grip { color: var(--dim); font-size: 10px; }
+
+/* ---- annotations on the sheet */
+.note { position: absolute; z-index: 40; font-size: 10.5px; color: var(--bg); background: var(--working); padding: 2px 6px; white-space: nowrap; }
+.note.right { right: -2px; }
