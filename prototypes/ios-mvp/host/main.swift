@@ -16,7 +16,7 @@ final class GPUIView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let scale = Float(window?.screen.scale ?? UIScreen.main.scale)
+        let scale = Float(window?.windowScene?.screen.scale ?? traitCollection.displayScale)
         layer.contentsScale = CGFloat(scale)
         let (w, h) = (Float(bounds.width), Float(bounds.height))
         if !started, w > 0 {
@@ -63,15 +63,26 @@ final class GPUIView: UIView {
 }
 
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(_ app: UIApplication, configurationForConnecting session: UISceneSession,
+                     options _: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: nil, sessionRole: session.role)
+        config.delegateClass = SceneDelegate.self
+        return config
+    }
+}
+
+/// iOS 27 requires the scene lifecycle: the window hangs off the scene.
+@objc(SceneDelegate)
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
-    func application(_ app: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        let w = UIWindow(frame: UIScreen.main.bounds)
+    func scene(_ scene: UIScene, willConnectTo _: UISceneSession, options _: UIScene.ConnectionOptions) {
+        guard let scene = scene as? UIWindowScene else { return }
+        let w = UIWindow(windowScene: scene)
         let vc = UIViewController()
         vc.view = GPUIView(frame: w.bounds)
         w.rootViewController = vc
         w.makeKeyAndVisible()
         window = w
-        return true
     }
 }
 
