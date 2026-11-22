@@ -188,8 +188,8 @@ parameter (`no-unknown-parameters`): guard first, then pass the proven value
 message string. A value of known type tested outside a guard needs no
 `typeof`: `const v = x ?? null; v === null ? … : …`.
 
-A mod's own guards beyond guard.ts go in a file of its own (github's
-`guards.ts`), never into guard.ts, which is a shared copy:
+A mod's own guards beyond guard.ts go in a file of its own, never into
+guard.ts, which is a shared copy:
 
 - A field that may be left out, null or undefined (JSON from a program, a
   copy slimmed field by field): `maybe(g)`, `T | null | undefined`, written as
