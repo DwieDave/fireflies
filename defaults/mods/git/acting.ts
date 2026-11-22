@@ -27,6 +27,20 @@ export function spawn<E>(v: GitView, job: Effect.Effect<void, E, GitServices>, o
   v.spawn(job, options);
 }
 
+/** A prompt's answer, trimmed, handed on when it isn't empty. */
+export function answered(text: string, go: (said: string) => void): void {
+  const said = Str.trim(text);
+
+  if (Str.isNonEmpty(said)) go(said);
+}
+
+/** An upstream ("origin/feat/x") as its remote and its branch there. */
+export function upstreamParts(up: string): readonly [string, string] {
+  const [rem = "", ...rest] = Str.split(up, "/");
+
+  return [rem, Arr.join(rest, "/")];
+}
+
 /** The ref a branch / tag / commit / remote branch row stands for. */
 export function refOf(v: GitView, x: Item | null = it(v)): string | null {
   if (x === null) return null;
