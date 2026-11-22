@@ -473,7 +473,7 @@ export default class GitHub extends View implements Host {
   readWord(): string {
     const at = this.state === "ready" ? this.shown().readAt() : 0;
 
-    return at ? `updated ${readAgo(at)}` : "";
+    return at ? `updated ${readAgo(at, this.now())}` : "";
   }
 
   /** Soon: a selection changed, its details want reading. */

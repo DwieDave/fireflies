@@ -50,7 +50,10 @@ const { default: Actions, graphHeight } = await import("../defaults/mods/github/
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: GitHub } = await import("../defaults/mods/github/main.ts");
 
-const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {}, now: () => 0 });
+/** The stand-in window's clock: one fixed time, so ages read the same on every run. */
+const NOW = Date.parse("2026-11-22T12:00:00Z");
+
+const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {}, now: () => NOW });
 const last = (h: Handle) => h.calls[h.calls.length - 1]?.[0];
 
 beforeEach(() => { zoomNow = 1; });
@@ -209,7 +212,7 @@ test("a pull request's header says when it was opened only once its view is read
   drawn.length = 0;
   p.mainPanel(theme);
   expect(drawn.filter((s) => s.startsWith("opened"))).toEqual([]);
-  p.details.set(5, { pr: { number: 5, title: "a", createdAt: new Date(Date.now() - 3 * 3600_000).toISOString() }, review: [], reviewTag: null, at: Date.now() });
+  p.details.set(5, { pr: { number: 5, title: "a", createdAt: new Date(NOW - 3 * 3600_000).toISOString() }, review: [], reviewTag: null, at: Date.now() });
   drawn.length = 0;
   p.mainPanel(theme);
   expect(drawn.filter((s) => s.startsWith("opened"))).toEqual(["opened 3h ago"]);

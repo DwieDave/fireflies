@@ -397,7 +397,7 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
     .child(h_flex().flex_wrap().gap_x(10).gap_y(2).text_size(11).text_color(t.muted)
       .when(Boolean(c.repo), (el) => el.child(div().child(c.repo ?? "")))
       .child(div().text_color(state[1]).child(state[0]))
-      .when(Boolean(d?.createdAt), (el) => el.child(div().text_color(t.dim).child(`opened ${ago(d?.createdAt)} ago${d?.author ? ` by ${d.author}` : ""}`))))
+      .when(Boolean(d?.createdAt), (el) => el.child(div().text_color(t.dim).child(`opened ${ago(d?.createdAt, proj.app.now())} ago${d?.author ? ` by ${d.author}` : ""}`))))
     .child(grid2)
     .child(div().relative().h(2).child(dither(edgeTone(t), 1)))
     .child(kept?.error ? div().text_size(11).text_color(t.blocked).child(kept.error) : md(`pd-body-${c.id ?? item.id}`, d ? d.body : c.id ? "_Reading…_" : ""))
@@ -405,7 +405,7 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
       .child(h_flex().pt(8).gap(8).items_center().child(div().text_size(10).text_color(t.muted).child(`COMMENTS · ${comments.length + (d?.more ?? 0)}`)).child(div().relative().flex_1().h(2).child(dither(edgeTone(t), 1))))
       .children(comments.map((cm, i) => v_flex().id(`pdc-${i}`).relative().gap(4).pl(12).py(6)
         .child(div().absolute().left(2).top(6).bottom(6).w(2).child(dither(edgeTone(t), 1)))
-        .child(h_flex().gap(8).text_size(11).child(div().text_color(t.accent).child(cm.who)).child(div().flex_1()).child(div().text_color(t.dim).child(ago(cm.at))))
+        .child(h_flex().gap(8).text_size(11).child(div().text_color(t.accent).child(cm.who)).child(div().flex_1()).child(div().text_color(t.dim).child(ago(cm.at, proj.app.now()))))
         .child(md(`pd-c-${c.id ?? ""}-${i}`, cm.body)))))
     .child(div().h(20));
 
@@ -425,7 +425,7 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
     })
     .child(content);
 
-  return frame(view, kept?.at ? `read ${readAgo(kept.at)}` : c.id ? "reading…" : "");
+  return frame(view, kept?.at ? `read ${readAgo(kept.at, proj.app.now())}` : c.id ? "reading…" : "");
 }
 
 /** The open menu, lazygit's: a framed list over the board. */

@@ -571,7 +571,7 @@ export default class Prs {
           cx.stop_propagation();
         })
         .child(v_virtual_list("prs", list.length, ROW, (i) => String(list[i]?.number ?? i),
-          (range) => list.slice(range.start, range.end).map((p) => prRow(t, p, p === cur, active)))
+          (range) => list.slice(range.start, range.end).map((p) => prRow(t, p, p === cur, active, this.app.now())))
           .on_item_click((key, cx) => {
             this.focus = "list";
             this.select(list.findIndex((p) => String(p.number) === key), cx);
@@ -621,7 +621,7 @@ export default class Prs {
       this.openCheck(c, cx);
       this.app.focusSelf();
       cx.notify();
-    }));
+    }, this.app.now()));
 
     const h = this.checksH ?? Math.min(checks.length, 8) * CHECK_ROW + 26;
 
@@ -638,7 +638,7 @@ export default class Prs {
 
     // Its view once read, else its row.
     const pr: PrView = d?.pr ?? p;
-    const head = prHead(t, pr);
+    const head = prHead(t, pr, this.app.now());
 
     const md = (id: string, text: string | null | undefined) => markdown(t, id, text?.trim() ? text : "_No description._", { onLink: (url, cx) => this.app.openUrl(url, cx) });
     const items = d ? this.timeline(d) : [];
@@ -660,7 +660,7 @@ export default class Prs {
       .when(items.length > 0, (el) => el.child(h_flex().pt(18).pb(4).gap(8).items_center()
         .child(eyebrow(t, `Conversation · ${items.length}`))
         .child(div().flex_1().h(2).relative().child(dither(edge(t), 1)))))
-      .children(items.map((c, i) => saidCard(t, c, i, md)))
+      .children(items.map((c, i) => saidCard(t, c, i, md, this.app.now())))
       .when(composer !== null, (el) => (composer ? el.child(v_flex().mt(12).gap(6).p(8).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
         .child(eyebrow(t, "Your comment"))
@@ -693,7 +693,7 @@ export default class Prs {
       .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3).top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
         .child(dither(active ? t.accent : t.muted, 1))));
 
-    const right = !d ? "reading…" : `read ${readAgo(d.at)}`;
+    const right = !d ? "reading…" : `read ${readAgo(d.at, this.app.now())}`;
 
     return panel(t, "pr-main", "Pull request", active, view, { right }).flex_1().h_full();
   }

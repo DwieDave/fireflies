@@ -21,7 +21,7 @@ import { ROW, STEP, LINE } from "./actions.ts";
 import { edge } from "@fireflies/tones";
 
 /** A run in the list: its tone, workflow and title; number, branch, event, how long or how long ago. */
-export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element {
+export function runRow(t: Theme, r: Run, sel: boolean, active: boolean, now: number): Element {
   const k = tone(r.status, r.conclusion);
   const live = k === "working" || k === "queued";
 
@@ -37,12 +37,12 @@ export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element
       .child(div().flex_none().text_color(sel ? t.accent : t.muted).child(`#${r.run_number ?? ""}`))
       .child(div().flex_1().min_w(0).truncate().text_color(t.ansi5).child(r.head_branch ?? ""))
       .child(div().flex_none().child(r.event ?? ""))
-      .child(div().flex_none().text_color(live ? t.working : t.dim).child(live ? duration(r.run_started_at, null) : TONE_WORD[k] === "passed" ? ago(r.updated_at) : TONE_WORD[k])));
+      .child(div().flex_none().text_color(live ? t.working : t.dim).child(live ? duration(r.run_started_at, null, now) : TONE_WORD[k] === "passed" ? ago(r.updated_at, now) : TONE_WORD[k])));
 }
 
 /** The runs down the left, the run-workflow chip on its title; right-click for the menu. */
 export function runsPanel(v: Actions, t: Theme): Element {
-  const list = v.list(), cur = v.run(), active = v.focus === "runs";
+  const list = v.list(), cur = v.run(), active = v.focus === "runs", now = v.app.now();
 
   const body = v.runs === null ? empty(t, "Reading runs…", null, { small: true })
     : list.length === 0 ? empty(t, "No runs", v.filter === null ? "This repo hasn't run a workflow yet." : `Nothing ran on ${v.filter.label}. b shows every run.`, { moon: 1 })
@@ -53,7 +53,7 @@ export function runsPanel(v: Actions, t: Theme): Element {
         cx.stop_propagation();
       })
       .child(v_virtual_list("runs", list.length, ROW, (i) => String(list[i]?.id ?? i),
-        (range) => Arr.map(within(list, range.start, range.end), (r) => runRow(t, r, r === cur, active)))
+        (range) => Arr.map(within(list, range.start, range.end), (r) => runRow(t, r, r === cur, active, now)))
         .on_item_click((key, cx) => {
           v.focus = "runs";
           v.selectRun(runIndex(list, key), cx);
@@ -196,7 +196,7 @@ export function graphPanel(v: Actions, t: Theme): Element {
     })
     .child(c.el);
 
-  const right = `${TONE_WORD[k]} · ${duration(r.run_started_at, k === "working" || k === "queued" ? null : r.updated_at)}`;
+  const right = `${TONE_WORD[k]} · ${duration(r.run_started_at, k === "working" || k === "queued" ? null : r.updated_at, v.app.now())}`;
 
   return panel(t, "graph", title, active, body, { right });
 }

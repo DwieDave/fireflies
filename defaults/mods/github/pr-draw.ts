@@ -30,7 +30,7 @@ export type Said =
   };
 
 /** A row of the list: its number and title, then author, branch, review, size and age. */
-export function prRow(t: Theme, p: PrRow, sel: boolean, active: boolean): Element {
+export function prRow(t: Theme, p: PrRow, sel: boolean, active: boolean, now: number): Element {
   const tone = rowTone(p);
   const [rev, revTone] = REVIEW.get(p.reviewDecision ?? "") ?? [null, null];
 
@@ -48,14 +48,14 @@ export function prRow(t: Theme, p: PrRow, sel: boolean, active: boolean): Elemen
       .when(p.isDraft, (el) => el.child(div().flex_none().child("draft")))
       .child(div().flex_none().text_color(t.ansi2).child(`+${p.additions}`))
       .child(div().flex_none().text_color(t.ansi1).child(`-${p.deletions}`))
-      .child(div().flex_none().child(ago(p.updatedAt))));
+      .child(div().flex_none().child(ago(p.updatedAt, now))));
 }
 
 /** The PR's header on the right: number and title, who, branches, review, size, age; its labels. */
-export function prHead(t: Theme, pr: PrView): Element {
+export function prHead(t: Theme, pr: PrView, now: number): Element {
   const [rev, revTone] = REVIEW.get(pr.reviewDecision ?? "") ?? [null, null];
   const labels = pr.labels ?? [];
-  const opened = ago(pr.createdAt);
+  const opened = ago(pr.createdAt, now);
 
   return v_flex().gap(6).pb(10)
     .child(h_flex().gap(8).items_center()
@@ -86,7 +86,7 @@ function saidWhat(c: Said): readonly [string, Tone | null] {
 }
 
 /** One entry of the conversation: who and what (a review's verdict, the line a comment is on), when, its words (`md` draws them). */
-export function saidCard(t: Theme, c: Said, i: number, md: (id: string, text: string) => Element): Element {
+export function saidCard(t: Theme, c: Said, i: number, md: (id: string, text: string) => Element, now: number): Element {
   const [what, tone] = saidWhat(c);
 
   const reply = c.kind === "line" && c.reply;
@@ -97,12 +97,12 @@ export function saidCard(t: Theme, c: Said, i: number, md: (id: string, text: st
       .child(div().text_color(t.accent).child(c.who ?? "ghost"))
       .when(Boolean(what), (el) => el.child(h_flex().gap(4).items_center().when(tone !== null, (e2) => e2.child(pip(t, tone, 6))).child(div().text_color(tone === null ? t.muted : toneColor(t, tone)).truncate().child(what))))
       .child(div().flex_1())
-      .child(div().text_color(t.dim).child(ago(c.at))))
+      .child(div().text_color(t.dim).child(ago(c.at, now))))
     .when(Str.isNonEmpty(Str.trim(c.body)), (el) => el.child(md(`c-md-${i}`, c.body)));
 }
 
 /** A check of the selected PR: its tone, workflow / name, how long it ran (a sweep while it runs); `onClick` opens it. */
-export function checkRow(t: Theme, c: CheckRow, i: number, sel: boolean, onClick: (cx: Context) => void): Element {
+export function checkRow(t: Theme, c: CheckRow, i: number, sel: boolean, onClick: (cx: Context) => void, now: number): Element {
   return h_flex().id(`check-${i}`).relative().h(CHECK_ROW).px(10).gap(7).items_center().flex_none().text_size(11)
     .hover((s) => s.bg(`${edge(t)}55`))
     .on_mouse_down("left", stop)
@@ -111,7 +111,7 @@ export function checkRow(t: Theme, c: CheckRow, i: number, sel: boolean, onClick
     .when(c.tone === "working", (el) => el.child(div().absolute().inset_0().overflow_hidden().child(sweepLite(t))))
     .child(pip(t, c.tone, 7))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : t.muted).child(c.workflow === null || c.workflow === "" ? c.name : `${c.workflow} / ${c.name}`))
-    .child(div().relative().flex_none().text_color(c.tone === "working" ? t.working : t.dim).child(c.started === null || c.started === "" ? TONE_WORD[c.tone] : duration(c.started, c.ended)));
+    .child(div().relative().flex_none().text_color(c.tone === "working" ? t.working : t.dim).child(c.started === null || c.started === "" ? TONE_WORD[c.tone] : duration(c.started, c.ended, now)));
 }
 
 /** A faint sweep for a running check's row. */
