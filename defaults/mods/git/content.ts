@@ -3,7 +3,7 @@
 // its end), a worktree, a stash entry, a range in diff mode, a ctrl-p pane's diff.
 // Each is read on the copy's reads lane (main.ts `read`), so it ends with the window.
 
-import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { Array as Arr, Clock, Effect, Match, Option, String as Str } from "effect";
 import { localStamp } from "@fireflies/kit";
 import { LOG_LIMIT, LOG_FULL_LIMIT } from "./git.ts";
 import type { DiffOptions, Git, GitError } from "./git.ts";
@@ -86,6 +86,13 @@ export function readMore(v: GitView, what: More): void {
 
 const REF_COLOR = { head: "ansi6", branch: "ansi2", ref: "ansi1", tag: "ansi3", detached: "ansi6" } as const;
 
+/** A ref as git log --decorate prints it. */
+const refName = (r: { readonly kind: keyof typeof REF_COLOR; readonly name: string }): string => Match.value(r.kind).pipe(
+  Match.when("head", () => `HEAD -> ${r.name}`),
+  Match.when("tag", () => `tag: ${r.name}`),
+  Match.orElse(() => r.name),
+);
+
 /** lazygit's branch log (git log --graph with whole headers): a block of
  *  rows per commit, the commit line on the lane graph's node, the others
  *  with the lanes running through, in the Commits panel's colors. `more`:
@@ -110,7 +117,7 @@ export function logRows(v: GitView, ref: string): Read<{ readonly rows: readonly
 
       const w = usedWidth(gr);
       const line = (parts: readonly Part[]) => rows.push({ kind: "log", g: gr, w, node: false, parts });
-      const refs = Arr.flatMap(c.refs, (r, k): Part[] => [[k > 0 ? ", " : " (", "ansi3"], [r.kind === "head" ? `HEAD -> ${r.name}` : r.kind === "tag" ? `tag: ${r.name}` : r.name, REF_COLOR[r.kind]]]);
+      const refs = Arr.flatMap(c.refs, (r, k): Part[] => [[k > 0 ? ", " : " (", "ansi3"], [refName(r), REF_COLOR[r.kind]]]);
 
       rows.push({ kind: "log", g: gr, w, node: true, head: c.hash === head, parts: [[`commit ${c.short}`, "ansi3"], ...refs, ...(Arr.isReadonlyArrayNonEmpty(refs) ? [[")", "ansi3"] as const] : [])] });
 
@@ -250,7 +257,8 @@ export function showContent(v: GitView, s: Exclude<Show, { kind: "review" }>): R
       }
 
       case "stash": {
-        const files = Arr.filter(yield* g.stashShow(s.ref, opts), (f) => s.path === undefined || Str.isEmpty(s.path) || f.path === s.path);
+        const all = yield* g.stashShow(s.ref, opts);
+        const files = Arr.filter(all, (f) => s.path === undefined || Str.isEmpty(s.path) || f.path === s.path);
 
         return { title: `Stash · ${short(s.ref)}${pathNote(s.path)}`, rows: filesOr(files, "Empty stash entry.") };
       }
@@ -380,8 +388,8 @@ export function mainContent(v: GitView): Read<MainContent> {
         const path = pathOf(x) ?? "";
 
         const files = s.stash
-          ? Arr.filter(yield* g.stashShow(s.hash, opts), (d) => d.path === path)
-          : Option.match(yield* g.show(s.hash, { ...opts, path }), { onNone: (): readonly DiffFile[] => [], onSome: (c) => c.files });
+          ? yield* Effect.map(g.stashShow(s.hash, opts), Arr.filter((d) => d.path === path))
+          : yield* Effect.map(g.show(s.hash, { ...opts, path }), Option.match({ onNone: (): readonly DiffFile[] => [], onSome: (c) => c.files }));
 
         return { title: `${short(s.hash)} · ${path}`, rows: filesOr(files, "No text changes.") };
       }

@@ -136,7 +136,7 @@ export function loadAll(v: GitView): Effect.Effect<void, GitError, GitServices> 
 
     if (v.ctxOf(v.panel) === "reflog" || Arr.isReadonlyArrayNonEmpty(v.data.reflog)) v.data.reflog = yield* g.reflog();
 
-    yield* Effect.forEach(Arr.flatten(Rec.values(v.subs)), (s) => loadSub(v, s), { discard: true });
+    yield* Effect.forEach(Arr.flatten(Rec.values(v.subs)), (s) => loadSub(v, s), { concurrency: 1, discard: true });
 
     if (v.tabOf.files === "review" || Arr.isReadonlyArrayNonEmpty(v.review.files)) {
       yield* v.review.load();

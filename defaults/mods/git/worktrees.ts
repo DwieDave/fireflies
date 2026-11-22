@@ -43,7 +43,8 @@ const slashes = Str.replace(/\\/g, "/");
  *  read, fails with what to fix. */
 export function rootFor(userHome: string): Effect.Effect<string, WorktreeSetting, Files> {
   return Effect.gen(function* () {
-    const raw = Option.getOrElse(yield* Files.use((f) => f.read(`${appHome()}/settings.json`)), () => "{}");
+    const read = yield* Files.use((f) => f.read(`${appHome()}/settings.json`));
+    const raw = Option.getOrElse(read, () => "{}");
 
     if (Option.isNone(anySettings(raw))) return yield* settingError("settings.json has errors: fix it first.");
 
@@ -77,7 +78,7 @@ export const slug = (branch: string): string => {
 
   let hash = 2166136261;
 
-  for (const char of normalized) hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 16777619);
+  for (const char of normalized) hash = Math.imul(hash ^ Option.getOrElse(Str.codePointAt(char, 0), () => 0), 16777619);
 
   return `branch-${Str.padStart(8, "0")((hash >>> 0).toString(16))}`;
 };
@@ -308,7 +309,8 @@ export function mainOf(g: Git): Effect.Effect<string, GitError, Exec> {
 export function pathFor(g: Git, branch: string): Effect.Effect<string, GitError | WorktreeSetting, Exec | Files> {
   return Effect.gen(function* () {
     const main = yield* mainOf(g);
-    const root = yield* rootFor(yield* userHomeOn(g.on));
+    const home = yield* userHomeOn(g.on);
+    const root = yield* rootFor(home);
 
     return `${root}/${repoName(main)}/${slug(branch)}`;
   });
