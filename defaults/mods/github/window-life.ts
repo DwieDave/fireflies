@@ -141,3 +141,15 @@ export const acted = (v: GitHub, effect: Effect.Effect<unknown, GhError, GithubS
     v.overlay === null ? Notify.use((n) => n.post({ title: "GitHub", body: e.message, level: "error" })) : Effect.void,
   ),
 }).pipe(Effect.andThen(Effect.sync(() => v.refresh(cx, true))));
+
+/** The window's second (main.ts tick): what runs moves on screen, the note fades, a read when one is due, the
+ *  cache when dirty. As long as the window is open. */
+export const ticks = (v: GitHub, cx: Context) => Effect.forever(Effect.andThen(Effect.sleep(1000), Effect.sync(() => v.tick(cx))));
+
+/** Soon after a selection changed: its details are read (unless a read came sooner). */
+export const kicked = (v: GitHub, cx: Context) => Effect.andThen(Effect.sleep(160), Effect.sync(() => {
+  if (v.now() >= v.next) v.refresh(cx);
+}));
+
+/** A window doesn't take the keyboard when it opens: `focus` takes it, again once it's shown (60, 250, 600 ms in). */
+export const takeFocus = (focus: () => void) => Effect.forEach([60, 190, 350], (ms) => Effect.andThen(Effect.sleep(ms), Effect.sync(focus)), { concurrency: 1, discard: true });
