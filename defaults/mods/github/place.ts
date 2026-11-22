@@ -12,27 +12,22 @@
 import { panes, focused, run, openOverlay, closeOverlay, shared, setShared } from "herdr";
 import type { OverlaySpec, PaneInfo } from "herdr";
 import type { Context } from "gpui-kit";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
-import { isPrsKept } from "./prs.ts";
-import { isActionsKept } from "./actions.ts";
-import { isProjectsKept } from "./projects.ts";
+import { Option, Schema } from "effect";
+import { decodeJsonOption, readShared, sharedKey, writeShared } from "@fireflies/kit";
+import { isString, object } from "./guard.ts";
+import type { Kept } from "./kept.ts";
+import { KeptSchema } from "./kept.ts";
 import { keepSpace, shownSpace, spaceKept } from "./lastview.ts";
 import type { default as GitHub } from "./main.ts";
 
-/** What the window keeps in shared state (its folder, tab and each tab's own), so it comes back
- *  where it was (after git's review, say, or a move); a pane keeps the same in its localStorage. */
-export const isKept = object({}, {
-  // The tabs (window-chrome.ts isTabId: that file imports this one).
-  folder: nullable(isString), tab: literal("prs", "actions", "projects"), prs: isPrsKept, actions: isActionsKept, projects: isProjectsKept,
-});
+export type { Kept } from "./kept.ts";
 
-export type Kept = Guarded<typeof isKept>;
-
-export const STATE = sharedKey("github.state", isKept);
+/** What the window keeps in shared state (kept.ts), so it comes back where it was (after git's review,
+ *  say, or a move); a pane keeps the same in its localStorage. */
+export const STATE = sharedKey("github.state", KeptSchema);
 
 /** The open window, for the toggle (nocturne's sky): its overlay id and when it last said so. */
-export const WINDOW_KEY = sharedKey("github.window", nullable(object({ id: isString, beat: isNumber })));
+export const WINDOW_KEY = sharedKey("github.window", Schema.NullOr(Schema.Struct({ id: Schema.String, beat: Schema.Finite })));
 
 /** How long the old copy stays after a move (closed in the same turn, the new copy's first tasks went with it). */
 export const STEP_ASIDE = 300;
@@ -107,7 +102,7 @@ const spaceOf = new WeakMap<GitHub, string | null>();
 /** A pane keeps what it shows (per slot), for the next start; its space keeps the window's (every
  *  change: `all` false, the window's tick) or this copy's (`all`: a close, a move, a review). */
 export function saveCopy(v: GitHub, kept: Kept, all = true): void {
-  if (all || !inPane(v)) keepSpace(spaceOf.get(v) ?? null, kept);
+  if (all || !inPane(v)) keepSpace(spaceOf.get(v) ?? null, kept, v.now());
 
   if (!inPane(v) || !v.slot) return;
 
@@ -131,9 +126,9 @@ export function keptFor(v: GitHub): Kept {
 
     try { text = store()?.getItem("kept") ?? null; } catch { /* none */ }
 
-    const own = text ? parseJson(text, isKept) : undefined;
+    const own = text === null || text === "" ? null : Option.getOrNull(decodeJsonOption(KeptSchema)(text));
 
-    if (own && own.folder === v.folder) return own;
+    if (own !== null && own.folder === v.folder) return own;
   }
 
   const here = spaceKept(space);

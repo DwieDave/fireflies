@@ -39,6 +39,7 @@
 // in a web pane beside the pane underneath and closes the window.
 
 import { View, div } from "gpui-kit";
+import { Schema } from "effect";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
@@ -46,7 +47,8 @@ import { v_flex, ScrollHandle } from "gpui-base";
 import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
+import { isNumber, isString, literal, nullable, object } from "./guard.ts";
+import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Ran, Repo } from "./gh-await.ts";
 import { runtime } from "./fx.ts";
 import type { GithubFx } from "./fx.ts";
@@ -74,7 +76,9 @@ export const WINDOW = "github.window";
 // read when github.new-pr arrives or the window opens with create "pr".
 export const CREATE = "github.create";
 
-const CREATE_KEY = sharedKey(CREATE, nullable(object({}, { folder: nullable(isString), on: nullable(isString), head: nullable(isString), at: isNumber })));
+const maybeText = Schema.optionalKey(Schema.NullOr(Schema.String));
+
+const CREATE_KEY = sharedKey(CREATE, Schema.NullOr(Schema.Struct({ folder: maybeText, on: maybeText, head: maybeText, at: Schema.optionalKey(Schema.Finite) })));
 
 const CREATE_FRESH = 30000;
 const BEAT = 4000;

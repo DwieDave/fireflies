@@ -1,41 +1,48 @@
 // Where the window was last left in each space, so a window opened in a space
 // comes back there, also after a restart: shared "github.spaces" (shared() is
 // persisted), keyed by the space's id, the newest SPACES_KEPT kept. A record
-// is what the window keeps anyway (place.ts isKept: its folder, tab and each
-// tab's selection, filter and sizes); it is used when the window opens on the
-// same folder.
+// is what the window keeps anyway (kept.ts: its folder, tab and each tab's
+// selection, filter and sizes) and when it was kept; it is used when the
+// window opens on the same folder. Read entry by entry (the kit's mapOf): a
+// space's record in another shape is left out, the others still read.
 
+import { Array as Arr, Option, Order, Schema } from "effect";
 import { shared, setShared, spaces } from "herdr";
-import { isNumber, object, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
-import type { Kept } from "./place.ts";
-import { isKept } from "./place.ts";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
+import type { Kept } from "./kept.ts";
+import { KeptSchema, sameKept } from "./kept.ts";
 
-const isSpaceKept = (value: unknown): value is Kept & { readonly at: number } => isKept(value) && object({ at: isNumber })(value);
+/** A space's record: what the window kept there, and when (ms). */
+const SpaceKeptSchema = Schema.Struct({ ...KeptSchema.fields, at: Schema.Finite });
 
-export const SPACES_KEY = sharedMapKey("github.spaces", isSpaceKept);
+type SpaceKept = typeof SpaceKeptSchema.Type;
+
+export const SPACES_KEY = sharedKey("github.spaces", mapOf(SpaceKeptSchema));
 
 /** How many spaces' records are kept (the least recently changed go first). */
 export const SPACES_KEPT = 30;
 
 /** The shown space's id (the space a window opens in), null before there is one. */
-export const shownSpace = (): string | null => spaces().find((s) => s.active)?.id ?? null;
+export const shownSpace = (): string | null => Option.getOrNull(Option.map(Arr.findFirst(spaces(), (s) => s.active), (s) => s.id));
 
 /** What the window kept in `space` (null: nothing kept there). */
 export function spaceKept(space: string | null): Kept | null {
-  return space ? readSharedMap(shared, SPACES_KEY).get(space) ?? null : null;
+  return space === null ? null : readShared(shared, SPACES_KEY, new Map()).get(space) ?? null;
 }
 
-/** Keeps `kept` as `space`'s record (written only when it changed). */
-export function keepSpace(space: string | null, kept: Kept): void {
-  if (!space) return;
+/** Oldest first: the newest is last, and a stable sort keeps that among records of the same ms. */
+const byAge = Order.mapInput(Order.Number, ([, k]: readonly [string, SpaceKept]) => k.at);
 
-  const map = new Map(readSharedMap(shared, SPACES_KEY));
+/** Keeps `kept` as `space`'s record at `now` (written only when it changed). */
+export function keepSpace(space: string | null, kept: Kept, now: number): void {
+  if (space === null) return;
+
+  const map = new Map(readShared(shared, SPACES_KEY, new Map()));
   const was = map.get(space);
 
-  if (was && JSON.stringify({ ...was, at: 0 }) === JSON.stringify({ ...kept, at: 0 })) return;
+  if (was !== undefined && sameKept(was, kept)) return;
 
-  // Kept oldest first, the newest last (a stable sort keeps that among records of the same ms).
   map.delete(space);
-  map.set(space, { ...kept, at: Date.now() });
-  writeSharedMap(setShared, SPACES_KEY, new Map([...map].sort((a, b) => a[1].at - b[1].at).slice(-SPACES_KEPT)));
+  map.set(space, { ...kept, at: now });
+  writeShared(setShared, SPACES_KEY, new Map(Arr.takeRight(Arr.sort(Arr.fromIterable(map), byAge), SPACES_KEPT)));
 }
