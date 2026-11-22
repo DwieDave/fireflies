@@ -305,7 +305,12 @@ memory ("ask each time", found ones); they reach the client through its
 environment or a 0600 file in the window's private temp folder, never a
 command line, shared state, settings, the log or the history. It keeps
 `data/databases/connections.json` (no secrets), `history/<id>.json` (a
-password literal blanked) and `queries/<id>.json` (each tab's text). Commands
+password literal blanked) and `queries/<id>.json` (each tab's text). Where it
+was left in each space (its connection, panel, open table and query tab; a
+sent connection as its `databases.connect` request, never a secret) is kept in
+shared `databases.spaces` under the space's id: a window opened in that space
+(also after a restart) connects again and goes back there; a connection that
+doesn't come up leaves the list shown with why. Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
 rows and structure, the cursor in [2] on its row), `databases.cancel`, `databases.stop` (what esc does to a
