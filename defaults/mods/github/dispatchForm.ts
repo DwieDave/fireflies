@@ -13,12 +13,11 @@ import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, fileAt, plain } from "./gh-await.ts";
-import type { Run } from "./model.ts";
-import { isEnvironments, isNamedList, isRunList, isWorkflows, soon } from "./model.ts";
+import { ghRun, awaitRead } from "./gh-await.ts";
+import { readRefs, readWorkflows, reread, runsOf, waitForRun } from "./dispatch-form-reads.ts";
 import { slug } from "./remotes.ts";
 import type { Input, InputType } from "./dispatch.ts";
-import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.ts";
+import { startValue, inputError, dispatchArgs, shellLine, workflowFile } from "./dispatch.ts";
 import type { Command, Field, FormHost, Outcome, Values } from "./form-fields.ts";
 import { textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
@@ -26,7 +25,6 @@ import type { Note } from "./kit.ts";
 import { panel, empty, lit, noteOf } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
-const WAIT_FOR = 120000; // how long to look for the new run (how often: model.ts soon, a backoff)
 
 /** A field's kind for an input's type. */
 function kindOf(type: InputType): "text" | "number" | "toggle" | "choice" {
@@ -40,7 +38,7 @@ function kindOf(type: InputType): "text" | "number" | "toggle" | "choice" {
 }
 
 /** A workflow that can be run by hand, with its inputs at the default branch. */
-interface Runnable {
+export interface Runnable {
   readonly id: number;
   readonly name: string;
   readonly path: string;
@@ -48,7 +46,7 @@ interface Runnable {
 }
 
 /** A branch or a tag to run on. */
-interface Ref {
+export interface Ref {
   readonly name: string;
   readonly kind: "branch" | "tag";
 }
@@ -72,6 +70,9 @@ export interface Waiting {
 export interface DispatchHost extends FormHost {
   note: Note | null;
   readonly closed?: boolean;
+  /** The window's own cx (init's): good after the handler that asked has returned. */
+  readonly acx?: Context | null;
+  now(): number;
 }
 
 /** What the form asks of the Actions tab: the form gone, the run waited for, then shown. */
@@ -83,6 +84,9 @@ export interface DispatchTab {
 }
 
 export class DispatchForm {
+  /** The cx of the last ask (load, a send): the window's own is used when it has one. */
+  lastCx: Context | null = null;
+
   readonly app: DispatchHost;
   readonly actions: DispatchTab;
   readonly repo: Repo;
@@ -196,99 +200,21 @@ export class DispatchForm {
 
   // ---- reading
 
+  /** The workflows and the refs, at once (dispatch-form-reads.ts). */
   load(cx: Context): void {
-    const repo = this.repo;
-
-    this.app.spawn(cx, async (cx) => {
-      try {
-        const list = (await ghJson(repo, ["workflow", "list", "--json", "id,name,path,state", "--limit", "100"], isWorkflows)) ?? [];
-
-        const read = await Promise.all(list.filter((w) => w.state === "active" && w.path).map(async (w): Promise<Runnable[]> => {
-          const yaml = await fileAt(repo, w.path, repo.base ?? "HEAD");
-          const d = yaml ? dispatchOf(yaml) : null;
-
-          return d ? [{ id: w.id, name: w.name, path: w.path, inputs: d.inputs }] : [];
-        }));
-
-        this.workflows = read.flat().sort((a, b) => a.name.localeCompare(b.name));
-      } catch (err) {
-        this.workflows = [];
-        this.listError = err instanceof Error ? err.message : String(err);
-      }
-
-      if (this.closed) return;
-
-      const all = this.workflows;
-      const first = all.find((w) => w.path === this.want) ?? (all.length === 1 ? all[0] : null);
-
-      if (first && !this.form.text("workflow")) {
-        this.form.set("workflow", first.path);
-        await this.reread(cx);
-      }
-    });
-
-    this.app.spawn(cx, async (cx) => {
-      const [b, t] = await Promise.all([
-        api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
-        api(repo, `repos/${repo.full}/tags?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
-      ]);
-
-      const names = (b.data ?? []).map((x) => x.name);
-      const order = [repo.base, repo.branch].flatMap((n, i, a) => (n && names.includes(n) && a.indexOf(n) === i ? [n] : []));
-
-      this.refs = [
-        ...[...order, ...names.filter((n) => !order.includes(n))].map((name): Ref => ({ name, kind: "branch" })),
-        ...(t.data ?? []).map((x): Ref => ({ name: x.name, kind: "tag" })),
-      ];
-
-      // Your branch when GitHub has it (and you didn't pick another meanwhile).
-      if (repo.branch && names.includes(repo.branch) && !this.form.field("ref")?.touched && this.form.text("ref") !== repo.branch) {
-        this.form.set("ref", repo.branch);
-        await this.reread(cx);
-      }
-    });
+    this.lastCx = cx;
+    this.app.run(readWorkflows(this));
+    this.app.run(readRefs(this));
   }
 
-  /** The workflow or the ref changed: its inputs as that ref's file has them. */
-  async reread(cx: Context): Promise<void> {
-    const w = this.workflow(), ref = this.ref();
-    const key = w && ref ? `${w.path}@${ref}` : "";
+  /** The workflow or the ref changed: its inputs as that ref's file has them, the newest ask winning. */
+  reread(_cx: Context): void {
+    this.app.run(reread(this), { key: "dispatch-inputs" });
+  }
 
-    if (key === this.inputsFor) return;
-
-    const gen = ++this.gen;
-
-    this.inputsFor = key;
-    this.inputs = null;
-    this.inputsError = "";
-    this.form.setFields(this.fields());
-    cx.notify();
-
-    if (!w || !key) return;
-
-    const yaml = await fileAt(this.repo, w.path, ref);
-
-    if (gen !== this.gen || this.closed) return;
-
-    const d = yaml ? dispatchOf(yaml) : null;
-
-    if (!yaml) {
-      this.inputsError = `${ref} has no ${w.path}, or GitHub has no ref ${ref}.`;
-      this.inputs = [];
-    } else if (!d) {
-      this.inputsError = `At ${ref}, ${workflowFile(w.path)} can't be run by hand (no workflow_dispatch).`;
-      this.inputs = [];
-    } else this.inputs = d.inputs;
-
-    this.form.setFields(this.fields());
-
-    if (this.inputs.some((i) => i.type === "environment") && !this.envs) {
-      const { data } = await api(this.repo, `repos/${this.repo.full}/environments`, plain(isEnvironments)).catch(() => ({ data: null }));
-
-      this.envs = (data?.environments ?? []).map((e) => e.name);
-    }
-
-    cx.notify();
+  /** A cx good after the handler that asked has returned: the window's own, else the last one handed in. */
+  cx(): Context | null {
+    return this.app.acx ?? this.lastCx;
   }
 
   /** The footer's line: the command it will run. */
@@ -350,62 +276,27 @@ export class DispatchForm {
 
   // ---- sending, then finding the run
 
-  async runsOf(w: Runnable): Promise<readonly Run[]> {
-    try {
-      const r = await api(this.repo, `repos/${this.repo.full}/actions/workflows/${w.id}/runs?event=workflow_dispatch&per_page=20`, plain(isRunList), { fresh: true });
-
-      return r.data?.workflow_runs ?? [];
-    } catch {
-      return [];
-    }
-  }
-
   async send(): Promise<Outcome<Dispatched>> {
     const w = this.workflow(), ref = this.ref();
 
     if (!w) return { ok: false, err: "Pick a workflow." };
 
-    const known = (await this.runsOf(w)).map((r) => r.id);
+    const known = (await awaitRead(runsOf(this, w), null)).map((r) => r.id);
     const since = Date.now();
     const r = await ghRun(this.repo, this.args(), { timeout: 60000 });
 
     return r.ok ? { ok: true, workflow: w, ref, since, known } : { ok: false, err: r.err };
   }
 
-  /** Sent: the form goes; the run is looked for with a backoff (1, 2, 3, 5, 8 s, then every 10 s,
-   *  for WAIT_FOR at most, never once the window closed) and selected when GitHub lists it. */
+  /** Sent: the form goes; the run is looked for (dispatch-form-reads.ts waitForRun) and selected when GitHub lists it. */
   wait(r: Dispatched, cx: Context): void {
     const a = this.actions;
 
+    this.lastCx = cx;
     a.closeForm();
     a.waiting = { name: r.workflow.name, ref: r.ref, since: r.since };
-    this.app.note = noteOf(`Started ${r.workflow.name} on ${r.ref}; waiting for its run…`, "working", Date.now());
-    // The task's own cx: the one handed in belongs to a call that has returned by the first await.
-    this.app.spawn(cx, async (cx) => {
-      for (let n = 0; Date.now() - r.since < WAIT_FOR && !this.app.closed && a.waiting?.since === r.since; n++) {
-        const wait = Math.min(soon(n), WAIT_FOR - (Date.now() - r.since)); // the last look at the bound
-
-        await new Promise<void>((ok) => cx.timer.after(wait, () => ok()));
-
-        if (this.app.closed || a.waiting?.since !== r.since) return;
-
-        const run = newRun(await this.runsOf(r.workflow), r);
-
-        if (!run) continue;
-
-        a.waiting = null;
-        this.app.note = noteOf(`${r.workflow.name} #${run.run_number ?? ""} is ${run.status === "queued" ? "queued" : "running"}.`, "done", Date.now());
-        a.show(run.id, null, cx);
-        a.focus = "runs";
-
-        return;
-      }
-
-      if (a.waiting?.since === r.since) {
-        a.waiting = null;
-        this.app.note = noteOf("GitHub took it, but its run hasn't shown up yet: r reads again.", "working", Date.now());
-      }
-    });
+    this.app.note = noteOf(`Started ${r.workflow.name} on ${r.ref}; waiting for its run…`, "working", this.app.now());
+    this.app.run(waitForRun(this, r));
   }
 
   // ---- beside the form
