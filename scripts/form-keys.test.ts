@@ -88,7 +88,7 @@ test("ctrl-tab: a root says when a form has its keyboard; the bound tab reaches 
 test("every form's root takes the bound tab and hands it to its key handler; init binds it", () => {
   // The GitHub window says when its form has the keyboard (ctrl-tab from any stop).
   const gh = readFileSync(`${root}mods/github/main.ts`, "utf8");
-  expect(gh).toContain("const formOpen = !!this.shown().form;");
+  expect(gh).toContain("const formOpen = this.shown().form !== null;");
   expect(gh).toContain("tabActions(el, (e, cx) => this.key(e, cx), formOpen)");
   for (const [file, call, init = file] of ROOTS) {
     const src = readFileSync(`${root}${file}`, "utf8");

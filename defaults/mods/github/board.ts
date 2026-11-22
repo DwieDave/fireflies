@@ -12,11 +12,18 @@
 //   item   { id, db, type, archived, content: { kind, id, number, title, state, url, repo, assignees, labels, milestone }, values: fieldId -> value (a Map; an object on disk) }
 //   value  { optionId, name } | { iterationId, title, startDate, duration } | { text } | { number } | { date } | { names }
 
-import { Array as Arr, Predicate, Record as Rec, Schema } from "effect";
+import { Array as Arr, Order, Predicate, Record as Rec, Schema, String as Str } from "effect";
+import { lit } from "./board-edits.ts";
 import type { Codec } from "@fireflies/kit";
 import { maybe } from "./model.ts";
 
 export const text = maybe(Schema.String);
+
+/** A string that is there and not empty. */
+const given = (s: string | null | undefined): s is string => s !== null && s !== undefined && s !== "";
+
+/** Iterations by when they start. */
+const byStart = Order.mapInput(Order.String, (it: { readonly startDate: string }) => it.startDate);
 
 /** A list's items that `schema` reads (the others, nulls GitHub sends for what it won't show, left out). */
 const proven = <A, I>(list: readonly unknown[] | null | undefined, schema: Codec<A, I>): A[] => Arr.getSomes(Arr.map(list ?? [], (x) => Schema.decodeUnknownOption(schema)(x)));
@@ -41,9 +48,8 @@ export interface ListedRepo {
 
 /** The projects a repo shows: linked to it (and to its parent, for a fork) and its owner's. */
 export function projectListQuery(repo: ListedRepo): string {
-  const [owner, name] = repo.full.split("/");
-  const parent = repo.parent ? repo.parent.split("/") : null;
-  const lit = JSON.stringify;
+  const [owner = "", name = ""] = Str.split(repo.full, "/");
+  const parent = repo.parent === null || repo.parent === undefined || repo.parent === "" ? null : Str.split(repo.parent, "/");
 
   return `query {
   viewer { login }
@@ -53,8 +59,8 @@ export function projectListQuery(repo: ListedRepo): string {
     owner { __typename login
       ... on User { projectsV2(first: 30, ${ORDER}) { nodes { ${PROJECT} } } }
       ... on Organization { projectsV2(first: 30, ${ORDER}) { nodes { ${PROJECT} } } } }
-  }${parent ? `
-  parent: repository(owner: ${lit(parent[0])}, name: ${lit(parent[1])}) { nameWithOwner projectsV2(first: 30, ${ORDER}) { nodes { ${PROJECT} } } }` : ""}
+  }${parent === null ? "" : `
+  parent: repository(owner: ${lit(parent[0])}, name: ${lit(parent[1] ?? "")}) { nameWithOwner projectsV2(first: 30, ${ORDER}) { nodes { ${PROJECT} } } }`}
 }`;
 }
 
@@ -263,7 +269,7 @@ export const StoredBoardSchema = Schema.Struct({ project: BoardProjectSchema, vi
 export type StoredBoard = typeof StoredBoardSchema.Type;
 
 /** A board read back from the cache. */
-export const boardOf = (b: StoredBoard): Board => ({ ...b, items: b.items.map((i) => ({ ...i, values: new Map(Rec.toEntries(i.values)) })) });
+export const boardOf = (b: StoredBoard): Board => ({ ...b, items: Arr.map(b.items, (i) => ({ ...i, values: new Map(Rec.toEntries(i.values)) })) });
 
 // ---- GitHub's answers
 
@@ -315,9 +321,9 @@ const TYPES = new Map<string, FieldType>([
 function fieldType(dataType: string | null | undefined): FieldType {
   const known = TYPES.get(dataType ?? "");
 
-  if (known) return known;
+  if (known !== undefined) return known;
 
-  const lower = (dataType ?? "").toLowerCase();
+  const lower = Str.toLowerCase(dataType ?? "");
 
   return Schema.is(PlainTypeSchema)(lower) ? lower : "other";
 }
@@ -326,14 +332,13 @@ function parseField(n: typeof FieldNodeSchema.Type): Field {
   const base = { id: n.id, name: n.name ?? "" };
   const type = fieldType(n.dataType);
 
-  if (type === "single") return { ...base, type, options: proven(n.options, OptionNodeSchema).map((o) => ({ id: o.id, name: o.name, color: o.color ?? "GRAY" })) };
+  if (type === "single") return { ...base, type, options: Arr.map(proven(n.options, OptionNodeSchema), (o) => ({ id: o.id, name: o.name, color: o.color ?? "GRAY" })) };
 
   if (type === "iteration") {
     const it = (x: typeof IterationNodeSchema.Type, done: boolean): Iteration => ({ id: x.id, title: x.title, startDate: x.startDate, duration: x.duration, done });
     const c = n.configuration;
 
-    const iterations = [...proven(c?.completedIterations, IterationNodeSchema).map((x) => it(x, true)), ...proven(c?.iterations, IterationNodeSchema).map((x) => it(x, false))]
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const iterations = Arr.sort([...Arr.map(proven(c?.completedIterations, IterationNodeSchema), (x) => it(x, true)), ...Arr.map(proven(c?.iterations, IterationNodeSchema), (x) => it(x, false))], byStart);
 
     return { ...base, type, iterations };
   }
@@ -342,12 +347,16 @@ function parseField(n: typeof FieldNodeSchema.Type): Field {
 }
 
 function parseView(n: typeof ViewNodeSchema.Type): View {
-  const ids = (c: typeof nodes.Type) => proven(c?.nodes, NamedNodeSchema).map((x) => x.id);
+  const ids = (c: typeof nodes.Type) => Arr.map(proven(c?.nodes, NamedNodeSchema), (x) => x.id);
 
   return {
-    id: n.id, number: n.number ?? null, name: n.name ?? "", layout: (n.layout ?? "BOARD_LAYOUT").replace(/_LAYOUT$/, "").toLowerCase(),
+    id: n.id, number: n.number ?? null, name: n.name ?? "", layout: Str.toLowerCase(Str.replace(/_LAYOUT$/, "")(n.layout ?? "BOARD_LAYOUT")),
     filter: n.filter ?? "", visible: ids(n.fields), columnBy: ids(n.verticalGroupByFields)[0] ?? null, groupBy: ids(n.groupByFields)[0] ?? null,
-    sort: proven(n.sortByFields?.nodes, SortNodeSchema).flatMap((s) => (s.field?.id ? [{ field: s.field.id, dir: s.direction === "DESC" ? -1 : 1 } as const] : [])),
+    sort: Arr.flatMap(proven(n.sortByFields?.nodes, SortNodeSchema), (s) => {
+      const field = s.field?.id ?? "";
+
+      return field === "" ? [] : [{ field, dir: s.direction === "DESC" ? -1 : 1 } as const];
+    }),
   };
 }
 
@@ -355,9 +364,9 @@ function parseView(n: typeof ViewNodeSchema.Type): View {
 function parseValue(v: typeof ValueNodeSchema.Type): FieldValue | null {
   switch (v.__typename) {
     case "ProjectV2ItemFieldSingleSelectValue":
-      return v.optionId ? { optionId: v.optionId, name: v.name ?? "" } : null;
+      return given(v.optionId) ? { optionId: v.optionId, name: v.name ?? "" } : null;
     case "ProjectV2ItemFieldIterationValue":
-      return v.iterationId ? { iterationId: v.iterationId, title: v.title ?? "", startDate: v.startDate ?? "", duration: v.duration ?? 0 } : null;
+      return given(v.iterationId) ? { iterationId: v.iterationId, title: v.title ?? "", startDate: v.startDate ?? "", duration: v.duration ?? 0 } : null;
     case "ProjectV2ItemFieldTextValue":
       return { text: v.text ?? "" };
     case "ProjectV2ItemFieldNumberValue":
@@ -383,7 +392,7 @@ export function parseItem(n: ItemNode): Item {
     const id = v.field?.id;
     const value = parseValue(v);
 
-    if (id && value) values.set(id, value);
+    if (given(id) && value !== null) values.set(id, value);
   }
 
   return {
@@ -391,8 +400,8 @@ export function parseItem(n: ItemNode): Item {
     content: {
       kind, id: c?.id ?? null, number: c?.number ?? null, title: c?.title ?? (kind === "redacted" ? "(no access)" : ""),
       state: kind === "draft" ? "DRAFT" : c?.state ?? null, isDraft: Boolean(c?.isDraft), url: c?.url ?? null, repo: c?.repository?.nameWithOwner ?? null,
-      assignees: proven(c?.assignees?.nodes, AssigneeNodeSchema).map((a) => ({ id: a.id ?? null, login: a.login })),
-      labels: proven(c?.labels?.nodes, LabelNodeSchema).map((l) => ({ id: l.id ?? null, name: l.name, color: l.color ?? "666666" })),
+      assignees: Arr.map(proven(c?.assignees?.nodes, AssigneeNodeSchema), (a) => ({ id: a.id ?? null, login: a.login })),
+      labels: Arr.map(proven(c?.labels?.nodes, LabelNodeSchema), (l) => ({ id: l.id ?? null, name: l.name, color: l.color ?? "666666" })),
       milestone: c?.milestone?.title ?? null,
     },
     values,
@@ -403,14 +412,14 @@ export function parseItem(n: ItemNode): Item {
 export function parseBoard(data: BoardAnswer | null | undefined): Board | null {
   const p = data?.node;
 
-  if (!p?.id) return null;
+  if (p === null || p === undefined || !given(p.id)) return null;
 
   const board: Board = {
     project: { id: p.id, number: p.number ?? null, title: p.title ?? "", url: p.url ?? null, closed: Boolean(p.closed), owner: p.owner?.login ?? null },
     viewer: data?.viewer?.login ?? null,
-    fields: proven(p.fields?.nodes, FieldNodeSchema).map(parseField),
-    views: proven(p.views?.nodes, ViewNodeSchema).map(parseView),
-    repos: proven(p.repositories?.nodes, RepoNodeSchema).map((r) => ({ id: r.id, full: r.nameWithOwner })),
+    fields: Arr.map(proven(p.fields?.nodes, FieldNodeSchema), parseField),
+    views: Arr.map(proven(p.views?.nodes, ViewNodeSchema), parseView),
+    repos: Arr.map(proven(p.repositories?.nodes, RepoNodeSchema), (r) => ({ id: r.id, full: r.nameWithOwner })),
     items: [], total: 0, more: null,
   };
 
@@ -420,8 +429,8 @@ export function parseBoard(data: BoardAnswer | null | undefined): Board | null {
 /** Adds a page of items: { ...board, items, total, more: the next cursor or null }. */
 export function addPage(board: Board, data: BoardAnswer | null | undefined): Board {
   const c = data?.node?.items;
-  const items = [...board.items, ...proven(c?.nodes, ItemNodeSchema).map(parseItem)];
-  const more = c?.pageInfo?.hasNextPage && items.length < MAX_ITEMS ? c.pageInfo.endCursor ?? null : null;
+  const items = [...board.items, ...Arr.map(proven(c?.nodes, ItemNodeSchema), parseItem)];
+  const more = c?.pageInfo?.hasNextPage === true && items.length < MAX_ITEMS ? c.pageInfo.endCursor ?? null : null;
 
   return { ...board, items, total: c?.totalCount ?? items.length, more };
 }
@@ -479,22 +488,22 @@ export interface Detail {
 export function parseDetail(data: DetailAnswer | null | undefined): Detail | null {
   const n = data?.node;
 
-  if (!n) return null;
+  if (n === null || n === undefined) return null;
 
   const comments = proven(n.comments?.nodes, CommentNodeSchema);
 
   return {
     body: n.body ?? "", url: n.url ?? null, createdAt: n.createdAt ?? null, author: n.author?.login ?? n.creator?.login ?? null,
-    comments: comments.map((c) => ({ who: c.author?.login ?? "ghost", body: c.body ?? "", at: c.createdAt ?? null, url: c.url ?? null })),
+    comments: Arr.map(comments, (c) => ({ who: c.author?.login ?? "ghost", body: c.body ?? "", at: c.createdAt ?? null, url: c.url ?? null })),
     more: Math.max(0, (n.comments?.totalCount ?? 0) - (n.comments?.nodes?.length ?? 0)),
   };
 }
 
 /** A repo's labels and the people who can be assigned, for the field menu. */
 export function choicesQuery(full: string): string {
-  const [owner, name] = full.split("/");
+  const [owner = "", name = ""] = Str.split(full, "/");
 
-  return `query { repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { labels(first: 100) { nodes { id name color } } assignableUsers(first: 100) { nodes { id login } } } }`;
+  return `query { repository(owner: ${lit(owner)}, name: ${lit(name)}) { labels(first: 100) { nodes { id name color } } assignableUsers(first: 100) { nodes { id login } } } }`;
 }
 
 /** choicesQuery's answer. */
@@ -516,8 +525,8 @@ export function parseChoices(data: ChoicesAnswer | null | undefined): Choices {
   const r = data?.repository;
 
   return {
-    labels: proven(r?.labels?.nodes, ChoiceLabelSchema).map((l) => ({ id: l.id, name: l.name, color: l.color ?? null })),
-    users: proven(r?.assignableUsers?.nodes, UserSchema).map((u) => ({ id: u.id, login: u.login })),
+    labels: Arr.map(proven(r?.labels?.nodes, ChoiceLabelSchema), (l) => ({ id: l.id, name: l.name, color: l.color ?? null })),
+    users: Arr.map(proven(r?.assignableUsers?.nodes, UserSchema), (u) => ({ id: u.id, login: u.login })),
   };
 }
 
@@ -525,13 +534,13 @@ export function parseChoices(data: ChoicesAnswer | null | undefined): Choices {
 
 /** A board as the cache keeps it: no item still on its way (temp-), values as an object. */
 export function slimBoard(b: Board | null | undefined): StoredBoard | null {
-  if (!b) return null;
+  if (b === null || b === undefined) return null;
 
   return {
     project: b.project, viewer: b.viewer, fields: b.fields, views: b.views, repos: b.repos, total: b.total, more: null,
-    items: b.items.filter((i) => !i.id.startsWith("temp-")).map((i) => ({
+    items: Arr.map(Arr.filter(b.items, (i) => !Str.startsWith("temp-")(i.id)), (i) => ({
       id: i.id, db: i.db, type: i.type, archived: i.archived, values: Rec.fromEntries(i.values),
-      content: { ...i.content, assignees: i.content.assignees.map((a) => ({ id: a.id, login: a.login })), labels: i.content.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })) },
+      content: { ...i.content, assignees: Arr.map(i.content.assignees, (a) => ({ id: a.id, login: a.login })), labels: Arr.map(i.content.labels, (l) => ({ id: l.id, name: l.name, color: l.color })) },
     })),
   };
 }

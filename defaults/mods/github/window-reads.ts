@@ -114,8 +114,8 @@ export function warm(v: GitHub, _cx: Context): void {
 /** Writes what's shown to the cache (store.ts), at most every SAVE_EVERY. It runs on the mod's runtime, not the
  *  copy's, so a close (which awaits it) doesn't cut it off; a write that fails leaves the window dirty, tried again
  *  at the next save. */
-export function persist(v: GitHub): Promise<void> | null {
-  if (v.repo === null || v.saving !== null || v.state !== "ready") return v.saving;
+export function persist(v: GitHub): void {
+  if (v.repo === null || v.saving !== null || v.state !== "ready") return;
 
   v.dirty = false;
   v.savedAt = v.now();
@@ -131,7 +131,5 @@ export function persist(v: GitHub): Promise<void> | null {
     })),
   );
 
-  v.saving = runtime.runtime.runPromise(save);
-
-  return v.saving;
+  v.saving = runtime.runtime.runFork(save);
 }

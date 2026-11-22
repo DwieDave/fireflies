@@ -112,7 +112,7 @@ const escaped = (c: string): string => ESCAPES.get(c) ?? (c < " " ? `\\u${Str.pa
 const quoted = (s: string): string => `"${Arr.join(Arr.map(Str.split(s, ""), escaped), "")}"`;
 
 /** A GraphQL literal of a string or a list of strings (written as JSON writes them). */
-const lit = (v: string | readonly string[]): string => (Predicate.isString(v) ? quoted(v) : `[${Arr.join(Arr.map(v, quoted), ",")}]`);
+export const lit = (v: string | readonly string[]): string => (Predicate.isString(v) ? quoted(v) : `[${Arr.join(Arr.map(v, quoted), ",")}]`);
 
 /** The GraphQL value of a field edit. */
 function valueLiteral(field: Field, value: FieldValue): string {

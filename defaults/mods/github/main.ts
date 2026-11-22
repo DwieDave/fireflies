@@ -39,21 +39,21 @@
 // in a web pane beside the pane underneath and closes the window.
 
 import { View, div } from "gpui-kit";
-import { Schema } from "effect";
-import type { Effect } from "effect";
-import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
+import { Effect, Fiber, Option, Schema, String as Str } from "effect";
+import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { readShared, sharedKey, writeShared } from "@fireflies/kit";
+import { hereOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
 import type { Repo } from "./gh.ts";
 import type { GhError } from "./gh.ts";
 import { nowMs, runtime } from "./fx.ts";
 import type { GithubFx, GithubServices } from "./fx.ts";
 import { acted, commands, kicked, start, switchFork, takeFocus, ticks } from "./window-life.ts";
+import type { Fork } from "./window-life.ts";
 import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
@@ -122,17 +122,36 @@ interface Place {
   readonly on: string | null;
 }
 
-/** The shown space's folder and machine (when opened without props). */
+/** The shown space's folder and machine (when opened without props): the kit's one rule (hereOf). */
 function here(): Place {
-  const space = spaces().find((s) => s.active) ?? null;
-  const tab = space?.tabs.find((c) => c.active)?.id ?? null;
-  const f = focused();
-  const ps = panes();
-  const pane = ps.find((p) => p.focused && p.tab === tab) ?? ps.find((p) => p.tab === tab && p.terminal !== null && p.cwd);
-  const cwd = pane && pane.terminal !== null ? pane.cwd : null;
+  const h = hereOf({ spaces: spaces(), panes: panes(), focused: focused() });
 
-  // A space attached to a folder (space.folder) uses it over where its panes are.
-  return { folder: (space?.attached && space.folder) || cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
+  return { folder: Option.getOrNull(h.folder), on: h.on };
+}
+
+/** A tab with a comment being written (the Pull requests tab's composer). */
+const composing = (tab: Tab): boolean => {
+  const c = tab.composer ?? null;
+
+  return c !== null && c !== false;
+};
+
+/** p's way from `r`: to the parent of a fork, or back to the fork from its parent; null when neither. */
+function forkOf(r: Repo | null): Fork | null {
+  if (r === null) return null;
+
+  if (r.parent !== null && r.parent !== "") return { full: r.parent, host: r.host, child: r.full };
+
+  return r.child !== null && r.child !== "" ? { full: r.child, host: r.host, child: null } : null;
+}
+
+/** The note's color: failed, done, or at work. */
+function noteColor(t: Theme, note: Note): Color {
+  switch (note.tone) {
+    case "failed": return t.blocked;
+    case "done": return t.done;
+    default: return t.working;
+  }
 }
 
 export default class GitHub extends View implements Host {
@@ -186,7 +205,8 @@ export default class GitHub extends View implements Host {
   located = false;
   dirty = false;
   savedAt = 0;
-  saving: Promise<void> | null = null;
+  /** The cache write on its way (window-reads.ts persist), on the mod's runtime. */
+  saving: Fiber.Fiber<void> | null = null;
   closed = false;
   switching = false;
   gen = 0;
@@ -215,7 +235,7 @@ export default class GitHub extends View implements Host {
     this.overlay = pr.overlay ?? null;
     this.slot = pr.slot ?? null;
 
-    const h: Place = pr.folder ? { folder: pr.folder, on: pr.on ?? null } : here();
+    const h: Place = pr.folder === null || pr.folder === undefined || pr.folder === "" ? here() : { folder: pr.folder, on: pr.on ?? null };
 
     this.folder = h.folder;
     this.on = h.on;
@@ -250,7 +270,7 @@ export default class GitHub extends View implements Host {
       this.fx.run(takeFocus(() => {
         const tab = this.shown();
 
-        if (!this.closed && !tab.composer && !tab.form) handle.focus();
+        if (!this.closed && !composing(tab) && tab.form === null) handle.focus();
       }), { redraw: false });
     }
 
@@ -259,7 +279,7 @@ export default class GitHub extends View implements Host {
     // Opened before in this run: the cache is in memory, shown in the first frame.
     const doc = store.peek();
 
-    if (doc) this.fromCache(doc);
+    if (doc !== null) this.fromCache(doc);
 
     this.start(cx);
     this.fx.run(ticks(this, cx), { key: "tick", redraw: false });
@@ -272,9 +292,9 @@ export default class GitHub extends View implements Host {
   fromCache(doc: Doc): boolean {
     this.checked = true;
 
-    const e = this.folder ? lookup(doc, this.folder, this.on) : null;
+    const e = this.folder === null || this.folder === "" ? null : lookup(doc, this.folder, this.on);
 
-    if (!e?.repo?.full || this.repo) return false;
+    if ((e?.repo?.full ?? "") === "" || this.repo !== null || e?.repo === undefined || e.repo === null) return false;
 
     this.repo = { ...e.repo };
     this.prs.hydrate(e.prs);
@@ -300,17 +320,17 @@ export default class GitHub extends View implements Host {
     this.gen++;
     this.busy = false; // a read of the old repo is dropped
     this.stale = "";
-    this.state = repo ? "ready" : "norepo";
+    this.state = repo === null ? "norepo" : "ready";
 
-    if (repo) this.refresh(cx, { all: true });
+    if (repo !== null) this.refresh(cx, { all: true });
   }
 
   /** p: a fork's parent, or back to the fork. The choice is kept per folder (in the cache). */
   switchFork(cx: Context): void {
     const r = this.repo;
-    const to = r?.parent ? { full: r.parent, host: r.host, child: r.full } : r?.child ? { full: r.child, host: r.host, child: null } : null;
+    const to = forkOf(r);
 
-    if (!r || !to || this.switching) return;
+    if (r === null || to === null || this.switching) return;
 
     this.switching = true;
     this.note = noteOf(`Opening ${to.full}…`, "working", this.now());
@@ -319,7 +339,7 @@ export default class GitHub extends View implements Host {
 
   /** Tells the toggle (nocturne's sky) this window is still open. */
   beat(): void {
-    if (!this.overlay) return;
+    if (this.overlay === null) return;
 
     this.beatAt = this.now();
     writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: this.beatAt });
@@ -329,7 +349,7 @@ export default class GitHub extends View implements Host {
   openForm(cx: Context): void {
     const repo = this.repo;
 
-    if (!this.wantForm || this.state !== "ready" || !repo || !this.located) return;
+    if (this.wantForm === null || this.state !== "ready" || repo === null || !this.located) return;
 
     const what = this.wantForm;
 
@@ -340,9 +360,9 @@ export default class GitHub extends View implements Host {
     if (what === "pr") {
       const req = readShared(shared, CREATE_KEY, null);
       const folder = req?.folder;
-      const mine = req && this.now() - (req.at ?? 0) < CREATE_FRESH && (!folder || !repo.root || folder.startsWith(repo.root) || repo.root.startsWith(folder));
+      const mine = req !== null && this.now() - (req.at ?? 0) < CREATE_FRESH && (folder === null || folder === undefined || folder === "" || repo.root === "" || Str.startsWith(repo.root)(folder) || Str.startsWith(folder)(repo.root));
 
-      if (req) writeShared(setShared, CREATE_KEY, null);
+      if (req !== null) writeShared(setShared, CREATE_KEY, null);
 
       this.tab = "prs";
       this.prs.newPr(cx, { head: mine ? req.head ?? null : null });
@@ -357,21 +377,21 @@ export default class GitHub extends View implements Host {
   tick(cx: Context): void {
     if (this.closed) return;
 
-    if (this.wantForm) this.openForm(cx);
+    if (this.wantForm !== null) this.openForm(cx);
 
     if (this.now() - this.beatAt >= BEAT) this.beat();
     this.save(false);
 
     let redraw = false;
 
-    if (this.note && this.now() - this.note.at > 5000) {
+    if (this.note !== null && this.now() - this.note.at > 5000) {
       this.note = null;
       redraw = true;
     }
 
     if (this.state === "ready" && this.now() >= this.next) this.refresh(cx);
 
-    if (this.dirty && !this.saving && this.now() - this.savedAt >= SAVE_EVERY) void this.persist();
+    if (this.dirty && this.saving === null && this.now() - this.savedAt >= SAVE_EVERY) this.persist();
 
     // "updated 2m ago" changes once a minute.
     const said = this.readWord();
@@ -386,7 +406,11 @@ export default class GitHub extends View implements Host {
   }
 
   shown(): Tab {
-    return this.tab === "prs" ? this.prs : this.tab === "projects" ? this.projects : this.actions;
+    switch (this.tab) {
+      case "prs": return this.prs;
+      case "projects": return this.projects;
+      default: return this.actions;
+    }
   }
 
   /** Reads the shown tab now. force (true, or { all, fresh }): all reads past the
@@ -399,15 +423,16 @@ export default class GitHub extends View implements Host {
     warm(this, cx);
   }
 
-  persist(): Promise<void> | null {
-    return persist(this);
+  persist(): void {
+    persist(this);
   }
+
 
   /** The bar's word for the shown data's age: "updated 2m ago". */
   readWord(): string {
     const at = this.state === "ready" ? this.shown().readAt() : 0;
 
-    return at ? `updated ${readAgo(at, this.now())}` : "";
+    return at === 0 ? "" : `updated ${readAgo(at, this.now())}`;
   }
 
   /** Soon: a selection changed, its details want reading (window-life.ts kicked). */
@@ -436,18 +461,21 @@ export default class GitHub extends View implements Host {
     this.fx?.run(effect, options);
   }
 
-  override async close(): Promise<void> {
+  override close(): Promise<void> | undefined {
     this.closed = true;
     this.save();
 
-    if (this.dirty) void this.persist();
+    if (this.dirty) this.persist();
 
     const w = readShared(shared, WINDOW_KEY, null);
 
-    if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
+    if (this.overlay !== null && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
 
-    // The last read goes to the cache (the app gives cleanup a quarter second); what still runs ends.
-    await Promise.all([this.saving, this.fx?.close()]);
+    // What still runs of this copy ends; the last cache write (on the mod's runtime, window-reads.ts persist) is
+    // waited for, within the quarter second the app gives cleanup.
+    const closing = this.fx?.close(), saving = this.saving;
+
+    return saving === null ? closing : runtime.runtime.runPromise(Effect.asVoid(Fiber.await(saving)));
   }
 
   /** Opens a link like any mod's (a web pane beside the focused pane, or the
@@ -455,11 +483,11 @@ export default class GitHub extends View implements Host {
    *  in a web pane closes the window, so the page isn't hidden under it; the
    *  pane goes beside the one the window floated over. */
   openUrl(url: string, cx: Context): void {
-    if (!url) return;
+    if (url === "") return;
 
     const inApp = settings().links !== "system" && appWindow().platform === "macos" && /^https?:/i.test(url);
 
-    if (!this.overlay || !inApp) {
+    if (this.overlay === null || !inApp) {
       cx.open_url(url);
 
       return;
@@ -470,7 +498,7 @@ export default class GitHub extends View implements Host {
   }
 
   closeWindow(): void {
-    if (this.overlay) closeOverlay(this.overlay);
+    if (this.overlay !== null) closeOverlay(this.overlay);
   }
 
   // ---- between the tabs and the outside
@@ -498,13 +526,13 @@ export default class GitHub extends View implements Host {
   openDiff(number: number): void {
     const repo = this.repo;
 
-    if (!repo) return;
+    if (repo === null) return;
 
     const diff = { folder: repo.root, on: this.on, pr: number, repo: slug(repo) };
 
     this.save();
 
-    if (this.overlay) {
+    if (this.overlay !== null) {
       const back = { mod: "github", props: { folder: this.folder, on: this.on, tab: "prs" } };
       const id = openOverlay({ mod: "git", kind: "window", key: "github", frame: "none", scrim: true, width: 0.85, height: 0.85, props: { ...diff, back } });
 
@@ -512,7 +540,7 @@ export default class GitHub extends View implements Host {
     } else {
       const pane = besidePane(this);
 
-      run("pane.split", pane ? { direction: "auto", pane, mod: "git", props: diff } : { direction: "auto", mod: "git", props: diff });
+      run("pane.split", pane !== null ? { direction: "auto", pane, mod: "git", props: diff } : { direction: "auto", mod: "git", props: diff });
     }
   }
 
@@ -556,7 +584,7 @@ export default class GitHub extends View implements Host {
   pressAt(e: { readonly position: Pt }): Pt | null {
     const b = this.bodyBox;
 
-    return b ? { x: unzoom(e.position.x - b.x), y: unzoom(e.position.y - b.y) } : null;
+    return b === null ? null : { x: unzoom(e.position.x - b.x), y: unzoom(e.position.y - b.y) };
   }
 
   pickerPanel(t: Theme): Element {
@@ -567,13 +595,13 @@ export default class GitHub extends View implements Host {
   barHints(): Hint[] {
     const form = this.shown().form;
 
-    if (form && !this.picker && !this.help) return form.hints();
+    if (form !== null && this.picker === null && !this.help) return form.hints();
 
-    if (this.picker) return [["j/k", "move"], ["enter", "open"], ["esc", "close"]];
+    if (this.picker !== null) return [["j/k", "move"], ["enter", "open"], ["esc", "close"]];
 
     if (this.help) return [["esc", "close keys"], ["?", "keys"]];
 
-    return this.state === "ready" ? this.shown().hints() : [[this.overlay ? "esc" : "q", "close"], ["?", "keys"]];
+    return this.state === "ready" ? this.shown().hints() : [[this.overlay === null ? "q" : "esc", "close"], ["?", "keys"]];
   }
 
   override render(): Element {
@@ -590,24 +618,24 @@ export default class GitHub extends View implements Host {
     const note = this.note;
 
     const endResize = (cx: Context) => {
-      if (this.resizing) {
+      if (this.resizing !== null) {
         this.resizing = null;
         this.save();
         cx.notify();
       }
     };
 
-    const right = note ? div().text_color(note.tone === "failed" ? t.blocked : note.tone === "done" ? t.done : t.working).truncate().max_w(420).child(note.text)
-      : this.stale ? div().text_color(t.muted).truncate().max_w(420).child(this.stale) : null;
+    const right = note !== null ? div().text_color(noteColor(t, note)).truncate().max_w(420).child(note.text)
+      : this.stale !== "" ? div().text_color(t.muted).truncate().max_w(420).child(this.stale) : null;
 
     const handle = this.handle, resizing = this.resizing, picker = this.picker, confirm = this.confirm;
     // A window draws its frame; a pane has the pane's (place.ts).
     const root = v_flex().id("github").size_full().bg(t.background);
-    const view = this.overlay ? root.border(1).border_color(t.muted) : root;
+    const view = this.overlay === null ? root : root.border(1).border_color(t.muted);
     // A form open: ctrl-tab moves through it from any stop, not the app's tabs.
-    const formOpen = !!this.shown().form;
+    const formOpen = this.shown().form !== null;
 
-    return (handle ? view.track_focus(handle) : view)
+    return (handle === null ? view : view.track_focus(handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
       .on_size_change((drawn, cx) => {
@@ -622,7 +650,7 @@ export default class GitHub extends View implements Host {
       .on_mouse_move((e, cx) => {
         const r = this.resizing;
 
-        if (!r) return;
+        if (r === null) return;
 
         const moved = unzoom((r.axis === "x" ? e.position.x : e.position.y) - r.at) * r.sign;
 
@@ -645,7 +673,7 @@ export default class GitHub extends View implements Host {
         .child(body)
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(picker !== null, (el) => el.child(this.pickerPanel(t))))
-      .when(confirm !== null, (el) => (confirm ? el.child(confirmBar(this, t, confirm)) : el))
+      .when(confirm !== null, (el) => (confirm !== null ? el.child(confirmBar(this, t, confirm)) : el))
       .child(hints(t, this.barHints(), right, {
         on: this.help, toggle: () => {
           this.help = !this.help;

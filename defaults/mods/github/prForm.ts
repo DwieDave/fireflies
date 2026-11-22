@@ -8,7 +8,7 @@
 // `gh pr create`. The last step shows both commands; nothing runs before it.
 
 import { div } from "gpui-kit";
-import { Effect, String as Str } from "effect";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
 import type { Context, Element, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
@@ -60,6 +60,13 @@ interface HeadState {
   readonly onRemote: boolean | null;
 }
 
+/** What the head list says beside a local branch: its upstream and what it has to push, or that it isn't pushed. */
+function upstreamWord(b: LocalBranch): string {
+  if (b.upstream === null || b.upstream === "") return "not pushed";
+
+  return b.ahead > 0 ? `${b.upstream} · ${b.ahead} to push` : b.upstream;
+}
+
 /** The new pull request form's answers. */
 const fieldsOf = (v: Values, headOwner: string | null): PrFields => ({
   base: textIn(v, "base"), head: textIn(v, "head"), title: textIn(v, "title"), body: textIn(v, "body"), draft: flagIn(v, "draft"),
@@ -94,7 +101,9 @@ export class PrForm {
     this.repo = repo;
     // From a fork shown as its parent (p): the head lives in the fork.
     this.headRepo = repo.child ?? repo.full;
-    this.headOwner = repo.child ? repo.child.split("/")[0] ?? null : null;
+    const child = repo.child ?? "";
+
+    this.headOwner = child === "" ? null : Str.split(child, "/")[0];
     this.form = new Form<Created>(app, {
       title: "New pull request",
       sendWord: "Create pull request",
@@ -117,14 +126,14 @@ export class PrForm {
     return [
       {
         id: "base", label: "base", kind: "choice", value: base, required: true, hint: "merged into", group: "branches", pair: true, join: "←",
-        options: () => this.remoteBranches?.map((b) => branchRow(b, b === this.repo.base ? "default branch" : "")) ?? null,
+        options: () => (this.remoteBranches === null ? null : Arr.map(this.remoteBranches, (b) => branchRow(b, b === this.repo.base ? "default branch" : ""))),
         onChange: (_v, cx) => {
           this.reread(cx);
         },
       },
       {
-        id: "head", label: "head", kind: "choice", value: head, required: true, free: true, hint: this.headOwner ? `from your fork, ${this.headRepo}` : "the branch with the changes",
-        options: () => this.local?.map((b) => branchRow(b.name, b.upstream ? `${b.upstream}${b.ahead ? ` · ${b.ahead} to push` : ""}` : "not pushed")) ?? null,
+        id: "head", label: "head", kind: "choice", value: head, required: true, free: true, hint: this.headOwner === null ? "the branch with the changes" : `from your fork, ${this.headRepo}`,
+        options: () => (this.local === null ? null : Arr.map(this.local, (b) => branchRow(b.name, upstreamWord(b)))),
         onChange: (_v, cx) => {
           this.reread(cx);
         },
@@ -139,11 +148,11 @@ export class PrForm {
       },
       {
         id: "labels", label: "labels", kind: "multi", value: [], placeholder: "none", half: true,
-        options: () => this.choices?.labels.map((l) => ({ value: l.name, label: l.name, sub: l.description ?? "" })) ?? null,
+        options: () => (this.choices === null ? null : Arr.map(this.choices.labels, (l) => ({ value: l.name, label: l.name, sub: l.description ?? "" }))),
       },
       {
         id: "milestone", label: "milestone", kind: "choice", value: "", placeholder: "none", half: true,
-        options: () => this.choices?.milestones.map((m) => ({ value: m.title, label: m.title, right: m.dueOn ? `due ${m.dueOn.slice(0, 10)}` : "" })) ?? null,
+        options: () => (this.choices === null ? null : Arr.map(this.choices.milestones, (m) => ({ value: m.title, label: m.title, right: m.dueOn === null || m.dueOn === undefined || m.dueOn === "" ? "" : `due ${Str.slice(0, 10)(m.dueOn)}` }))),
       },
     ];
   }
@@ -155,11 +164,11 @@ export class PrForm {
     const e = prErrors(f, { commits: r?.head === f.head && r.base === f.base ? r.commits : null });
     const out = new Map<string, string>();
 
-    if (e.base) out.set("base", e.base);
+    if (e.base !== undefined) out.set("base", e.base);
 
-    if (e.head) out.set("head", e.head);
+    if (e.head !== undefined) out.set("head", e.head);
 
-    if (e.title) out.set("title", e.title);
+    if (e.title !== undefined) out.set("title", e.title);
 
     return out;
   }
@@ -168,7 +177,7 @@ export class PrForm {
   summary(): string {
     const r = this.range, base = this.form.text("base");
 
-    if (!r?.commits) return base ? `into ${base}` : "";
+    if (r === null || r.commits === null) return base === "" ? "" : `into ${base}`;
 
     const n = r.commits.length, files = r.stat?.files.length ?? 0;
 
@@ -179,11 +188,11 @@ export class PrForm {
   people(withMe: boolean): Choice[] | null {
     const c = this.choices;
 
-    if (!c) return null;
+    if (c === null) return null;
 
-    const rows = c.users.flatMap((u) => (u.login === c.me ? [] : [{ value: u.login, label: u.login, sub: u.name ?? "" }]));
+    const rows = Arr.flatMap(c.users, (u) => (u.login === c.me ? [] : [{ value: u.login, label: u.login, sub: u.name ?? "" }]));
 
-    return withMe && c.me ? [{ value: "@me", label: c.me, sub: "you" }, ...rows] : rows;
+    return withMe && c.me !== null && c.me !== "" ? [{ value: "@me", label: c.me, sub: "you" }, ...rows] : rows;
   }
 
   // ---- reading
@@ -203,20 +212,22 @@ export class PrForm {
     const r = this.range;
     const f = fillFrom(r?.commits ?? [], this.form.text("head"));
 
-    if (r?.commits) this.form.set("title", f.title);
+    const read = r !== null && r.commits !== null;
 
-    this.form.set("body", startBody(this.template, r?.commits ? f.body : ""));
+    if (read) this.form.set("title", f.title);
+
+    this.form.set("body", startBody(this.template, read ? f.body : ""));
   }
 
   /** The push toggle, there only while head needs pushing. */
   plan(): PushPlan | null {
     const head = this.form.text("head"), s = this.headState;
 
-    if (!s || s.head !== head || s.onRemote === null) return null;
+    if (s === null || s.head !== head || s.onRemote === null) return null;
 
-    const b = this.local?.find((x) => x.name === head);
+    const b = Option.getOrUndefined(Arr.findFirst(this.local ?? [], (x) => x.name === head));
 
-    if (!b) return null; // only on the remote: nothing to push
+    if (b === undefined) return null; // only on the remote: nothing to push
 
     const tracking = Boolean(this.remote && b.upstream === `${this.remote}/${head}`);
 
@@ -226,9 +237,9 @@ export class PrForm {
   /** The push toggle goes right after draft, in the options (the side panel says why it's there). */
   syncPush(): void {
     const plan = this.plan();
-    const list = this.form.fields.filter((f) => f.id !== "push");
+    const list = Arr.filter(this.form.fields, (f) => f.id !== "push");
 
-    if (plan) list.splice(list.findIndex((f) => f.id === "draft") + 1, 0, { id: "push", label: "push first", kind: "toggle", value: true, note: shellLine("git", plan.args), hint: plan.why });
+    if (plan !== null) list.splice(Option.getOrElse(Arr.findFirstIndex(list, (f) => f.id === "draft"), () => -1) + 1, 0, { id: "push", label: "push first", kind: "toggle", value: true, note: shellLine("git", plan.args), hint: plan.why });
 
     this.form.setFields(list);
   }
@@ -240,7 +251,7 @@ export class PrForm {
     const f = fieldsOf(v, this.headOwner);
     const out: Command[] = [];
 
-    if (plan && flagIn(v, "push")) out.push({ label: `push ${f.head} (${plan.why})`, line: shellLine("git", plan.args) });
+    if (plan !== null && flagIn(v, "push")) out.push({ label: `push ${f.head} (${plan.why})`, line: shellLine("git", plan.args) });
 
     const args = [...prArgs(f), "-R", this.repo.full];
 
@@ -268,13 +279,13 @@ export class PrForm {
   side(t: Theme, _size: Size): Element {
     const r = this.range, plan = this.plan();
     const commits = r?.commits ?? [];
-    const right = !r ? "" : r.commits ? `${commits.length} commit${commits.length === 1 ? "" : "s"} · ${r.stat?.files.length ?? 0} files` : "reading…";
+    const right = r === null ? "" : r.commits === null ? "reading…" : `${commits.length} commit${commits.length === 1 ? "" : "s"} · ${r.stat?.files.length ?? 0} files`;
     let body: Element;
 
-    if (!r) body = empty(t, "Pick base and head", "The commits between them show here.", { small: true });
-    else if (r.error) body = empty(t, "Can't compare yet", r.error, { small: true });
-    else if (!r.commits) body = empty(t, "Reading the commits…", null, { small: true });
-    else if (!commits.length) body = empty(t, "Nothing to merge", `${r.head} has no commits that ${r.base} doesn't.`, { small: true });
+    if (r === null) body = empty(t, "Pick base and head", "The commits between them show here.", { small: true });
+    else if (r.error !== "") body = empty(t, "Can't compare yet", r.error, { small: true });
+    else if (r.commits === null) body = empty(t, "Reading the commits…", null, { small: true });
+    else if (commits.length === 0) body = empty(t, "Nothing to merge", `${r.head} has no commits that ${r.base} doesn't.`, { small: true });
     else {
       const stat = r.stat ?? { files: [], add: 0, del: 0 };
       const fileRows = stat.files.slice(0, 40);
@@ -287,11 +298,11 @@ export class PrForm {
         .when(Boolean(plan), (el) => el.child(h_flex().relative().mb(6).px(8).py(5).gap(8).items_start()
           .child(div().absolute().inset_0().opacity(0.5).child(dither(`${t.ansi3}55`, 1)))
           .child(div().relative().flex_1().min_w(0).text_color(t.foreground).child(`${plan?.why ?? ""}: "push first" sends it before the pull request is made.`))))
-        .children([...commits].reverse().map((c, i) => h_flex().id(`pc-${i}`).h(18).gap(8).items_center()
-          .child(div().flex_none().text_color(t.muted).child(c.sha.slice(0, 7)))
+        .children(Arr.map(Arr.reverse(commits), (c, i) => h_flex().id(`pc-${i}`).h(18).gap(8).items_center()
+          .child(div().flex_none().text_color(t.muted).child(Str.slice(0, 7)(c.sha)))
           .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(c.subject))))
         .child(div().relative().h(2).my(8).child(dither(edge(t), 1)))
-        .children(fileRows.map((f, i) => h_flex().id(`pf-${i}`).h(18).gap(8).items_center()
+        .children(Arr.map(fileRows, (f, i) => h_flex().id(`pf-${i}`).h(18).gap(8).items_center()
           .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(f.path))
           .child(div().flex_none().text_color(f.binary ? t.dim : t.ansi2).child(f.binary ? "bin" : `+${f.add}`))
           .when(!f.binary, (el) => el.child(div().flex_none().w(36).text_color(t.ansi1).child(`-${f.del}`)))))

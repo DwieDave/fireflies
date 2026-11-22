@@ -28,7 +28,7 @@
 //   (shares its row with the next field, `join` between them).
 
 import { div } from "gpui-kit";
-import { Effect } from "effect";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, InputState, TextareaState } from "gpui-base";
 import { window as appWindow } from "herdr";
@@ -101,13 +101,13 @@ export class Form<R> {
 
   /** Replaces the fields, keeping what was typed in the ones that stay (by id). */
   setFields(list: readonly Field[]): void {
-    const was = new Map(this.fields.map((f) => [f.id, f]));
+    const was = new Map(Arr.map(this.fields, (f) => [f.id, f] as const));
     const cur = this.stops()[this.at]?.id;
 
-    this.fields = list.map((f) => {
+    this.fields = Arr.map(list, (f) => {
       const old = was.get(f.id);
 
-      if (old && !f.reset) keep(f, old);
+      if (old !== undefined && f.reset !== true) keep(f, old);
 
       return f;
     });
@@ -115,13 +115,13 @@ export class Form<R> {
     for (const [id, f] of was) {
       const input = inputOfField(f);
 
-      if (input && !this.fields.some((x) => x.id === id && inputOfField(x) === input)) input.release();
+      if (input !== undefined && !Arr.some(this.fields, (x) => x.id === id && inputOfField(x) === input)) input.release();
     }
 
     // Inputs are made here, never while drawing (the runtime refuses that).
     for (const f of this.fields) if (isText(f)) this.typingOf(f);
 
-    const i = this.stops().findIndex((s) => s.id === cur);
+    const i = Option.getOrElse(Arr.findFirstIndex(this.stops(), (s) => s.id === cur), () => -1);
 
     this.at = Math.max(0, Math.min(this.stops().length - 1, i < 0 ? this.at : i));
   }
@@ -132,7 +132,7 @@ export class Form<R> {
     if (this.stage !== "edit") return [{ id: "form-send", kind: "button", submit: true }, { id: "form-back", kind: "button" }];
 
     return [
-      ...this.fields.map((f): Stop => ({ id: f.id, kind: f.kind === "number" ? "text" : f.kind })),
+      ...Arr.map(this.fields, (f): Stop => ({ id: f.id, kind: f.kind === "number" ? "text" : f.kind })),
       { id: "form-review", kind: "button", submit: true },
       { id: "form-cancel", kind: "button" },
     ];
@@ -143,7 +143,7 @@ export class Form<R> {
   }
 
   field(id: string): Field | null {
-    return this.fields.find((f) => f.id === id) ?? null;
+    return Option.getOrNull(Arr.findFirst(this.fields, (f) => f.id === id));
   }
 
   value(id: string): FieldValue | undefined {
@@ -156,14 +156,14 @@ export class Form<R> {
   }
 
   values(): Values {
-    return new Map(this.fields.map((f) => [f.id, f.value]));
+    return new Map(Arr.map(this.fields, (f) => [f.id, f.value] as const));
   }
 
   /** Sets a text or choice field's value from outside (a fill, a default): text inputs follow, unless the person typed there. */
   set(id: string, value: string, { force = false } = {}): void {
     const f = this.field(id);
 
-    if (!f || (f.touched && !force)) return;
+    if (f === null || f === undefined || (f.touched === true && !force)) return;
 
     if (isText(f)) {
       f.value = value;
@@ -178,7 +178,7 @@ export class Form<R> {
 
   /** The one-line field's input. */
   inputOf(f: TextField): InputState {
-    if (f.input) return f.input;
+    if (f.input !== undefined) return f.input;
 
     const input = InputState.new({ placeholder: f.placeholder ?? "", value: f.value });
 
@@ -200,7 +200,7 @@ export class Form<R> {
 
   /** The body's input: cmd-enter there reviews. */
   areaOf(f: AreaField): TextareaState {
-    if (f.input) return f.input;
+    if (f.input !== undefined) return f.input;
 
     const input = TextareaState.new({ placeholder: f.placeholder ?? "", value: f.value, rows: 8 });
 
@@ -220,7 +220,7 @@ export class Form<R> {
 
     // The body eats cmd-enter as a new line and says so: take it back and review.
     input.on("submit", (e, cx) => {
-      if (!e.secondary) return;
+      if (e.secondary !== true) return;
 
       if (f.before !== undefined) {
         f.value = f.before;
@@ -245,12 +245,12 @@ export class Form<R> {
   focusField(cx: Context | null): void {
     const f = this.fields[this.at];
 
-    if (f && isText(f) && this.stage === "edit" && !this.picker) {
+    if (f !== undefined && isText(f) && this.stage === "edit" && this.picker === null) {
       const input = this.typingOf(f);
 
       input.focus();
       cx?.timer.after(40, () => {
-        if (this.fields[this.at] === f && this.stage === "edit" && !this.picker && !this.gone) input.focus();
+        if (this.fields[this.at] === f && this.stage === "edit" && this.picker === null && !this.gone) input.focus();
       });
     } else this.app.focusSelf();
   }
@@ -264,13 +264,13 @@ export class Form<R> {
   place(i: number): { readonly y: number; readonly h: number } | null {
     const c = cellOf(this.lay(), i);
 
-    return c ? { y: c.y, h: c.h } : null;
+    return c === null ? null : { y: c.y, h: c.h };
   }
 
   reveal(): void {
     const p = this.place(this.at);
 
-    if (!p) return;
+    if (p === null) return;
 
     if (p.y < this.scrollY) this.scrollY = Math.max(0, p.y - TOP);
     else if (p.y + p.h > this.scrollY + this.viewH - 8) this.scrollY = p.y + p.h - this.viewH + 12;
@@ -282,7 +282,7 @@ export class Form<R> {
   key(k: string, e: KeyEvent, cx: Context): boolean | "typing" {
     const m = e.modifiers;
 
-    if (this.picker) return (m.platform || m.alt) && k !== "enter" ? false : this.pickerKey(this.picker, k, e, cx);
+    if (this.picker !== null) return (m.platform || m.alt) && k !== "enter" ? false : this.pickerKey(this.picker, k, e, cx);
 
     if (this.stage === "sending") return !(m.platform || m.alt);
 
@@ -305,7 +305,7 @@ export class Form<R> {
 
       const a = formKey(stops, this.confirmAt, k, m, e.key_char ?? null);
 
-      if (!a) return false;
+      if (a === null) return false;
 
       if (a.act === "move") this.confirmAt = a.to;
       else if (a.act === "submit" || (a.act === "press" && this.confirmAt === 0)) this.send(cx);
@@ -316,7 +316,7 @@ export class Form<R> {
 
     const a = formKey(stops, this.at, k, m, e.key_char ?? null);
 
-    if (!a) return false;
+    if (a === null) return false;
 
     const f = this.fields[this.at];
 
@@ -328,7 +328,7 @@ export class Form<R> {
     else if (a.act === "press") {
       if (stops[this.at]?.id === "form-review") this.review(cx);
       else this.cancel();
-    } else if (!f) return true;
+    } else if (f === undefined) return true;
     else if (a.act === "step") this.step(f, a.by, cx);
     else if (a.act === "flip") this.flip(f, cx);
     else if (a.act === "open") {
@@ -344,12 +344,12 @@ export class Form<R> {
 
     const opts = f.options() ?? [];
 
-    if (!opts.length) return;
+    if (opts.length === 0) return;
 
-    const i = opts.findIndex((o) => o.value === f.value);
+    const i = Option.getOrElse(Arr.findFirstIndex(opts, (o) => o.value === f.value), () => -1);
     const next = opts[wrap(opts.length, i < 0 ? (by > 0 ? -1 : 0) : i, by)];
 
-    if (!next) return;
+    if (next === undefined) return;
 
     f.value = next.value;
     f.touched = true;
@@ -374,7 +374,7 @@ export class Form<R> {
   }
 
   clear(f: Field, cx: Context): void {
-    if (f.required) return;
+    if (f.required === true) return;
 
     f.touched = true;
 
@@ -414,7 +414,7 @@ export class Form<R> {
   review(cx: Context): void {
     this.errors = new Map(this.spec.check?.(this.values()) ?? []);
 
-    const bad = this.fields.findIndex((f) => this.errors.has(f.id));
+    const bad = Option.getOrElse(Arr.findFirstIndex(this.fields, (f) => this.errors.has(f.id)), () => -1);
 
     if (bad >= 0) {
       this.go(bad, cx);
@@ -450,16 +450,16 @@ export class Form<R> {
   // ---- lists
 
   openPicker(f: ListField, typed: string, cx: Context): void {
-    const query = InputState.new({ placeholder: f.free ? "filter, or type a name" : "filter", value: typed });
+    const query = InputState.new({ placeholder: f.free === true ? "filter, or type a name" : "filter", value: typed });
 
     query.on("change", (_e, cx) => {
-      if (this.picker) this.picker.at = 0;
+      if (this.picker !== null) this.picker.at = 0;
 
       cx.notify();
     });
 
     const rows = this.rows(f, typed);
-    const cur = f.kind === "choice" ? (rows ?? []).findIndex((r) => r.value === f.value) : -1;
+    const cur = f.kind === "choice" ? Option.getOrElse(Arr.findFirstIndex(rows ?? [], (r) => r.value === f.value), () => -1) : -1;
 
     this.picker = { field: f, query, at: Math.max(0, cur), top: 0 };
     query.focus();
@@ -472,13 +472,13 @@ export class Form<R> {
   rows(f: ListField, q: string): Choice[] | null {
     const all = f.options();
 
-    if (!all) return null;
+    if (all === null) return null;
 
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const out = all.filter((o) => words.every((w) => `${o.label} ${o.sub ?? ""}`.toLowerCase().includes(w)));
-    const typed = q.trim();
+    const words = Arr.filter(Str.split(Str.toLowerCase(q), /\s+/), Str.isNonEmpty);
+    const out = Arr.filter(all, (o) => Arr.every(words, (w) => Str.includes(w)(Str.toLowerCase(`${o.label} ${o.sub ?? ""}`))));
+    const typed = Str.trim(q);
 
-    if (f.free && typed && !all.some((o) => o.value === typed)) out.push({ value: typed, label: typed, sub: "as typed", typed: true });
+    if (f.free === true && typed !== "" && !Arr.some(all, (o) => o.value === typed)) out.push({ value: typed, label: typed, sub: "as typed", typed: true });
 
     return out;
   }
@@ -524,7 +524,7 @@ export class Form<R> {
     if (k === "enter") {
       const r = rows[p.at];
 
-      if (r) this.pick(f, r, cx);
+      if (r !== undefined) this.pick(f, r, cx);
 
       return true;
     }
@@ -540,7 +540,7 @@ export class Form<R> {
     if (f.kind === "multi") {
       const on = f.value.includes(r.value);
 
-      f.value = on ? f.value.filter((v) => v !== r.value) : [...f.value, r.value];
+      f.value = on ? Arr.filter(f.value, (v) => v !== r.value) : [...f.value, r.value];
       f.onChange?.(f.value, cx);
 
       return;
@@ -554,7 +554,7 @@ export class Form<R> {
   }
 
   hints(): FormHint[] {
-    if (this.picker) {
+    if (this.picker !== null) {
       return this.picker.field.kind === "multi"
         ? [["type", "filter"], ["↑↓", "move"], ["enter", "on / off"], ["esc", "done"]]
         : [["type", "filter"], ["↑↓", "move"], ["enter", "choose"], ["esc", "back"]];
@@ -579,7 +579,7 @@ export class Form<R> {
     const left = panel(t, "form", title, true, review ? reviewBody(this, t) : body(this, t), { right: step }).h_full()
       .when(this.stage === "sending", (el) => el.border_color(t.working))
       .when(cols.side > 0, (el) => el.w(cols.form).flex_none())
-      .when(!cols.side, (el) => el.flex_1());
+      .when(cols.side === 0, (el) => el.flex_1());
 
     return div().id("form-wrap").relative().size_full()
       .child(h_flex().size_full().gap(6)
@@ -588,7 +588,7 @@ export class Form<R> {
   }
 
   isAt(id: string): boolean {
-    return this.stage === "edit" && !this.picker && this.stops()[this.at]?.id === id;
+    return this.stage === "edit" && this.picker === null && this.stops()[this.at]?.id === id;
   }
 
   /** Where the open list sits and which of its rows show (form-draw.ts). */
