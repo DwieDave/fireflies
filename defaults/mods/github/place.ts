@@ -12,27 +12,22 @@
 import { panes, focused, run, openOverlay, closeOverlay, shared, setShared } from "herdr";
 import type { OverlaySpec, PaneInfo } from "herdr";
 import type { Context } from "gpui-kit";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
-import { isPrsKept } from "./prs.ts";
-import { isActionsKept } from "./actions.ts";
-import { isProjectsKept } from "./projects.ts";
+import { Array as Arr, Option, Schema } from "effect";
+import { decodeJsonOption, readShared, sharedKey, writeShared } from "@fireflies/kit";
+import type { Kept } from "./kept.ts";
+import { KeptSchema } from "./kept.ts";
 import { keepSpace, shownSpace, spaceKept } from "./lastview.ts";
+import { nowMs, randomId } from "./fx.ts";
 import type { default as GitHub } from "./main.ts";
 
-/** What the window keeps in shared state (its folder, tab and each tab's own), so it comes back
- *  where it was (after git's review, say, or a move); a pane keeps the same in its localStorage. */
-export const isKept = object({}, {
-  // The tabs (window-chrome.ts isTabId: that file imports this one).
-  folder: nullable(isString), tab: literal("prs", "actions", "projects"), prs: isPrsKept, actions: isActionsKept, projects: isProjectsKept,
-});
+export type { Kept } from "./kept.ts";
 
-export type Kept = Guarded<typeof isKept>;
-
-export const STATE = sharedKey("github.state", isKept);
+/** What the window keeps in shared state (kept.ts), so it comes back where it was (after git's review,
+ *  say, or a move); a pane keeps the same in its localStorage. */
+export const STATE = sharedKey("github.state", KeptSchema);
 
 /** The open window, for the toggle (nocturne's sky): its overlay id and when it last said so. */
-export const WINDOW_KEY = sharedKey("github.window", nullable(object({ id: isString, beat: isNumber })));
+export const WINDOW_KEY = sharedKey("github.window", Schema.NullOr(Schema.Struct({ id: Schema.String, beat: Schema.Finite })));
 
 /** How long the old copy stays after a move (closed in the same turn, the new copy's first tasks went with it). */
 export const STEP_ASIDE = 300;
@@ -46,28 +41,31 @@ export function windowSpec(props: PlaceProps): OverlaySpec {
 }
 
 /** A new pane's slot. */
-export const newSlot = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+export const newSlot = (): string => randomId(4);
 
 /** This copy is a pane (or a tab's only pane): no overlay. */
-export const inPane = (v: GitHub) => v.overlay === null;
+export const inPane = (v: GitHub): boolean => v.overlay === null;
 
 /** A pane's props as far as its slot. */
-const isSlotted = object({}, { slot: isString });
+const slotted = Schema.is(Schema.Struct({ slot: Schema.String }));
+
+/** A string that is there and not empty. */
+const given = (s: string | null | undefined): s is string => s !== null && s !== undefined && s !== "";
 
 /** This copy's pane, found by its slot. */
 export function ownPane(v: GitHub): PaneInfo | null {
   const slot = v.slot;
 
-  if (!inPane(v) || !slot) return null;
+  if (!inPane(v) || !given(slot)) return null;
 
-  return panes().find((p) => p.mod === "github" && isSlotted(p.props) && p.props.slot === slot) ?? null;
+  return Option.getOrNull(Arr.findFirst(panes(), (p) => p.mod === "github" && slotted(p.props) && p.props.slot === slot));
 }
 
 /** The window is open (its fresh note), and its id. */
 function openWindow(): string | null {
   const w = readShared(shared, WINDOW_KEY, null);
 
-  return w && Date.now() - w.beat < 10000 ? w.id : null;
+  return w !== null && nowMs() - w.beat < 10000 ? w.id : null;
 }
 
 /** keys.json's github.<name> reach every copy: one acts. The window while one is open; else
@@ -75,13 +73,13 @@ function openWindow(): string | null {
 export function actsOnCommands(v: GitHub): boolean {
   const open = openWindow();
 
-  if (!inPane(v)) return !open || open === v.overlay;
+  if (!inPane(v)) return open === null || open === v.overlay;
 
-  if (open) return false;
+  if (open !== null) return false;
 
   const me = ownPane(v);
 
-  return me ? me.focused || focused()?.pane === me.pane : true;
+  return me === null ? true : me.focused || focused()?.pane === me.pane;
 }
 
 /** What links and "beside" open next to: this pane. */
@@ -101,21 +99,26 @@ function store(): Store | null {
   }
 }
 
+/** A record as a pane keeps it in its localStorage (none: it couldn't be written). */
+const keptText = Schema.encodeOption(Schema.fromJsonString(KeptSchema));
+
 /** The space each copy opened in (lastview.ts keeps a record per space). */
 const spaceOf = new WeakMap<GitHub, string | null>();
 
 /** A pane keeps what it shows (per slot), for the next start; its space keeps the window's (every
  *  change: `all` false, the window's tick) or this copy's (`all`: a close, a move, a review). */
 export function saveCopy(v: GitHub, kept: Kept, all = true): void {
-  if (all || !inPane(v)) keepSpace(spaceOf.get(v) ?? null, kept);
+  if (all || !inPane(v)) keepSpace(spaceOf.get(v) ?? null, kept, v.now());
 
-  if (!inPane(v) || !v.slot) return;
+  if (!inPane(v) || !given(v.slot)) return;
+
+  const s = store(), text = keptText(kept);
+
+  // A record its schema can't write isn't kept (the pane opens where the window kept it).
+  if (s === null || Option.isNone(text)) return;
 
   try {
-    const text = JSON.stringify(kept);
-    const s = store();
-
-    if (s && s.getItem("kept") !== text) s.setItem("kept", text);
+    if (s.getItem("kept") !== text.value) s.setItem("kept", text.value);
   } catch { /* not kept */ }
 }
 
@@ -126,40 +129,40 @@ export function keptFor(v: GitHub): Kept {
 
   spaceOf.set(v, space);
 
-  if (inPane(v) && v.slot) {
+  if (inPane(v) && given(v.slot)) {
     let text: string | null = null;
 
     try { text = store()?.getItem("kept") ?? null; } catch { /* none */ }
 
-    const own = text ? parseJson(text, isKept) : undefined;
+    const own = text === null || text === "" ? null : Option.getOrNull(decodeJsonOption(KeptSchema)(text));
 
-    if (own && own.folder === v.folder) return own;
+    if (own !== null && own.folder === v.folder) return own;
   }
 
   const here = spaceKept(space);
 
-  return here && here.folder === v.folder ? here : readShared(shared, STATE, {});
+  return here !== null && here.folder === v.folder ? here : readShared(shared, STATE, {});
 }
 
 /** The props a copy of this folder opens with (slot: a pane's). */
 function placeProps(v: GitHub, slot: string | null): PlaceProps {
-  const base: PlaceProps = v.on ? { folder: v.folder, on: v.on } : { folder: v.folder };
+  const base: PlaceProps = given(v.on) ? { folder: v.folder, on: v.on } : { folder: v.folder };
 
-  return slot ? { ...base, slot } : base;
+  return given(slot) ? { ...base, slot } : base;
 }
 
 /** ◧ / ctrl-t in the window: the same view in a pane beside the focused pane under it; the window steps aside. */
 export function toPane(v: GitHub, cx: Context): void {
   const id = v.overlay;
 
-  if (!id) return;
+  if (!given(id)) return;
 
   v.save();
 
   const f = focused();
   const props = placeProps(v, newSlot());
 
-  run("pane.split", f?.pane ? { direction: "auto", pane: f.pane, mod: "github", props } : { direction: "auto", mod: "github", props });
+  run("pane.split", given(f?.pane) ? { direction: "auto", pane: f.pane, mod: "github", props } : { direction: "auto", mod: "github", props });
   cx.timer.after(STEP_ASIDE, () => closeOverlay(id));
 }
 
@@ -171,15 +174,15 @@ export function toWindow(v: GitHub, cx: Context): void {
 
   const open = openWindow();
 
-  if (open) closeOverlay(open);
+  if (open !== null) closeOverlay(open);
 
   const id = openOverlay(windowSpec(placeProps(v, null)));
 
-  writeShared(setShared, WINDOW_KEY, { id, beat: Date.now() });
+  writeShared(setShared, WINDOW_KEY, { id, beat: nowMs() });
 
   const me = ownPane(v);
 
-  cx.timer.after(STEP_ASIDE, () => run("pane.close", me ? { pane: me.pane } : {}));
+  cx.timer.after(STEP_ASIDE, () => run("pane.close", me === null ? {} : { pane: me.pane }));
 }
 
 /** ctrl-t: wherever this copy is, to the other place. */
@@ -200,5 +203,5 @@ export function leave(v: GitHub, key: string): void {
 
   const me = ownPane(v);
 
-  run("pane.close", me ? { pane: me.pane } : {});
+  run("pane.close", me === null ? {} : { pane: me.pane });
 }

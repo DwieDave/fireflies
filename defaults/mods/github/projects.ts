@@ -20,7 +20,7 @@ import { h_flex, v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { shared, setShared } from "herdr";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
+import { arrayOf, isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { JsonMap } from "./guards.ts";
 import { mapOf, maybe, toJson, toMap } from "./guards.ts";
 import type { Repo } from "./gh.ts";
@@ -88,9 +88,9 @@ function localJson(l: Local): Guarded<typeof isLocalJson> {
 }
 
 /** What the tab keeps in shared state between openings (main.ts STATE). */
-export const isProjectsKept = object({}, { pick: nullable(isString), view: nullable(isString), sel: nullable(isString), filter: isString, detail: isBoolean });
+import type { ProjectsKept } from "./kept.ts";
 
-export type ProjectsKept = Guarded<typeof isProjectsKept>;
+export type { ProjectsKept };
 
 /** The picker's list as the cache keeps it, with when it was read. */
 const isListPiece = object({ projects: arrayOf(isListedProject) }, { viewer: nullable(isString), repoId: nullable(isString), at: maybe(isNumber) });

@@ -6,7 +6,7 @@
 // effects from a view"). A test gives the window a runtime over the kit's test
 // layers instead (main.ts `runtime()`).
 
-import { Clock, Layer } from "effect";
+import { Clock, Layer, Random, String as Str } from "effect";
 import { modRuntime } from "@fireflies/kit";
 import type { Commands, Exec, Files, ModRuntime, Notify, Shared, ViewFx, ViewServices } from "@fireflies/kit";
 import { CommandsLive, ExecLive, FilesLive, NotifyLive, SharedLive } from "@fireflies/kit/live";
@@ -25,3 +25,6 @@ export const runtime: ModRuntime<GithubApp> = modRuntime(Layer.mergeAll(ExecLive
 
 /** The time now (ms): one read per render or key, so everything drawn agrees. */
 export const nowMs = (): number => runtime.now(Clock.currentTimeMillis);
+
+/** A short random id: the clock's ms and a random part, base 36 (a pane's slot). */
+export const randomId = (n: number): string => nowMs().toString(36) + Str.padStart(n, "0")(runtime.now(Random.nextIntBetween(0, 36 ** n)).toString(36));
