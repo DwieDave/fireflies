@@ -3,6 +3,8 @@
 // card's fields and their values; the keys while one is open.
 
 import type { Context, KeyEvent } from "gpui-kit";
+import { Effect } from "effect";
+import { choicesFor } from "./projects-reads.ts";
 import type { Board, Field, Item, ListedProject } from "./board.ts";
 import type { Layout } from "./board-layout.ts";
 import { selectOf } from "./board-filter.ts";
@@ -70,7 +72,7 @@ export function openLimit(proj: Projects, lay: Layout, col: number): void {
 }
 
 /** e: the card's fields on the left, the chosen one's values on the right. */
-export function openFields(proj: Projects, item: Item, cx: Context): void {
+export function openFields(proj: Projects, item: Item, _cx: Context): void {
   const b = proj.board();
 
   if (!b) return;
@@ -84,13 +86,8 @@ export function openFields(proj: Projects, item: Item, cx: Context): void {
   const repo = item.content.repo ?? proj.app.repo?.full ?? null;
 
   if (fields.some((f) => f.type === "labels" || f.type === "assignees")) {
-    proj.app.spawn(cx, async (_cx) => {
-      try {
-        await proj.choicesFor(repo);
-      } catch {
-        /* the menu says it */
-      }
-    });
+    // A repo's labels and people that can't be read: the menu offers none (and says so).
+    proj.app.run(Effect.ignore(choicesFor(proj, repo)));
   }
 }
 

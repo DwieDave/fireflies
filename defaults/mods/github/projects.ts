@@ -24,8 +24,7 @@ import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { JsonMap } from "./guards.ts";
 import { mapOf, maybe, toJson, toMap } from "./guards.ts";
-import { awaitRead } from "./gh-await.ts";
-import { choicesFor, pollProjects, readDetail } from "./projects-reads.ts";
+import { pollProjects, readDetail } from "./projects-reads.ts";
 import type { WebLink } from "./model.ts";
 import { SLOW, linksIn } from "./model.ts";
 import type { Pieces, Piece } from "./cache.ts";
@@ -440,10 +439,6 @@ export default class Projects {
     this.app.run(readDetail(this, item));
   }
 
-  /** A repo's labels and people, for the menus (projects-menus.ts still awaits them). */
-  choicesFor(full: string | null): Promise<Choices> {
-    return awaitRead(choicesFor(this, full), null);
-  }
 
 
   // ---- edits: shown at once, sent, rolled back when refused
