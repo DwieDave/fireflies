@@ -60,16 +60,18 @@ Open work from the last batch, if any, is in [.claude/HANDOFF.md](.claude/HANDOF
    - End the task with a "Done means" list: the tests, the screenshots, the docs.
 3. **Launch** it as a tab in Developer's fireflies space, then label it:
    ```sh
-   T=$(herdr-app do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude","--model","claude-opus-5-5","--effort","high",$b],folder:"'$W'"}')" | jq -r .terminal)
-   ~/.local/bin/hc label $T nocturne.name=<name>
+   T=$(fireflies do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude","--model","claude-opus-5-5","--effort","high",$b],folder:"'$W'"}')" | jq -r .terminal)
+   fireflies label $T nocturne.name=<name>
    ```
    Agents run on Opus 5.5 at high effort (the `--model` and `--effort` above).
-   `hc` is at `~/.local/bin/hc` (not on the Bash tool's PATH). Without
+   herdr-core's commands run as `fireflies <command>`, exactly as `hc`
+   (`hc` is at `~/.local/bin/hc`, off the Bash tool's PATH, and stays for the
+   Herdr iOS app); `fireflies app ls` is the window's list. Without
    `space`, the tab lands in whatever space is focused. Then start its
    watcher (Notify Developer), and tell Developer every choice the brief made
    for him, so he can overrule it while the agent is early.
-4. **Follow-ups** go to a live agent with `hc send <t> "<task>"`; check it's
-   alive first (`hc get <t>`). Each carries his words quoted and an item
+4. **Follow-ups** go to a live agent with `fireflies send <t> "<task>"`; check it's
+   alive first (`fireflies get <t>`). Each carries his words quoted and an item
    number, one commit per item. An agent with a long list reports finished
    items in batches, so they merge while it works on. Tell it when files it was
    told to leave change hands. A new area, or faults its author and you both
@@ -92,16 +94,16 @@ Push to his phone with the `pushover` skill on two events:
   decision he owes).
 - **An agent is blocked**: its status is `blocked` (a permission prompt or a
   question on its screen), or its report asks something only Developer can
-  answer. Read its screen first (`hc read --lines 0 <t>`); the push names the
+  answer. Read its screen first (`fireflies read --lines 0 <t>`); the push names the
   agent and quotes what it asks.
 
-Agent tabs aren't your children, so hc tells you nothing when one stops or
+Agent tabs aren't your children, so herdr-core tells you nothing when one stops or
 blocks. A **watcher** per agent does: run it as a background command once the
 agent shows `working`, after its launch and after each follow-up to an agent
 that had stopped (its status stays `done` for a few seconds after the send).
 
 ```sh
-T=<t>; while s=$(~/.local/bin/hc get $T | jq -r 'if .state != "live" then "exited" else .status.state // "working" end'); [ "$s" = working ]; do ~/.local/bin/hc wait $T --timeout 600 >/dev/null 2>&1; done; echo "$T $s"
+T=<t>; while s=$(fireflies get $T | jq -r 'if .state != "live" then "exited" else .status.state // "working" end'); [ "$s" = working ]; do fireflies wait $T --timeout 600 >/dev/null 2>&1; done; echo "$T $s"
 ```
 
 It ends when the agent leaves `working` and prints why: `blocked` (push);
@@ -206,11 +208,11 @@ one by its command, never by importing it.
   under his home as `~/…`.
 - **Cleanup**: a worktree goes when its branch is on main (or, after a
   rebase, on the tagged old main) and no live agent sits in it
-  (`hc ls | jq '.terminals[] | select(.state=="live") | .cwd'`). Look at
+  (`fireflies ls | jq '.terminals[] | select(.state=="live") | .cwd'`). Look at
   untracked files before `git worktree remove --force`.
 - Developer's screen recordings arrive as scrawl captures: the agent opens
   `contact-sheet.png` and `frames/` before changing anything; pass the
   capture path on unchanged.
 - `ls` is aliased to eza and can hang in big git trees; use `/bin/ls`.
 - Never touch Developer's running app or core; demo or inspect his session only
-  through `herdr-app do` / `hc` commands he asked for.
+  through `fireflies` commands he asked for.
