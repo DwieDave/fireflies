@@ -43,14 +43,14 @@ import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButton
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
-import { appHome, theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
+import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Ran, Repo } from "./gh-await.ts";
 import { runtime } from "./fx.ts";
 import type { GithubFx } from "./fx.ts";
-import { start, switchFork } from "./window-life.ts";
+import { commands, start, switchFork } from "./window-life.ts";
 import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
@@ -64,7 +64,7 @@ import Actions from "./actions.ts";
 import Projects from "./projects.ts";
 import type { Confirm, TabId } from "./window-chrome.ts";
 import { isTabId, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
-import { windowKey, pickerKey, runCommand } from "./window-keys.ts";
+import { windowKey, pickerKey } from "./window-keys.ts";
 import { refresh, warm, persist, SAVE_EVERY } from "./window-reads.ts";
 import { STATE, WINDOW_KEY, besidePane, keptFor, saveCopy } from "./place.ts";
 
@@ -257,16 +257,7 @@ export default class GitHub extends View implements Host {
 
     this.start(cx);
     cx.timer.every(1000, (cx) => this.tick(cx));
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const c = (await nextCommand()).replace(/^github\./, "");
-
-        if (c === "focus") handle.focus();
-        else runCommand(this, c, cx);
-
-        cx.notify();
-      }
-    });
+    this.fx.run(commands(this, cx, () => handle.focus()), { key: "commands" });
   }
 
   // ---- life

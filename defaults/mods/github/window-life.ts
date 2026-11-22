@@ -4,15 +4,16 @@
 // interrupts it, and a failure says why on the window (its error card, the
 // bar, the note) instead of being dropped.
 
-import { Effect, Option } from "effect";
+import { Effect, Option, String as Str } from "effect";
 import type { Context } from "gpui-kit";
-import { redraw } from "@fireflies/kit";
+import { Commands, redraw } from "@fireflies/kit";
 import type { Repo } from "./gh.ts";
 import { GhError, repoOf, viewRepo } from "./gh.ts";
 import { repoKey } from "./cache.ts";
 import * as store from "./store.ts";
 import { noteOf } from "./kit.ts";
 import type { default as GitHub } from "./main.ts";
+import { runCommand } from "./window-keys.ts";
 
 /** The same repo described the same way, its branch aside (that one may move). */
 function sameRepo(a: Repo, b: Repo): boolean {
@@ -112,3 +113,15 @@ export const switchFork = (v: GitHub, cx: Context, r: Repo, to: Fork) => viewRep
     v.switching = false;
   })),
 );
+
+/** The window's key commands (github.prs, github.refresh, …: keys.json), one at a time for as long as it's
+ *  open; github.focus takes the keyboard (`focus`). */
+export const commands = (v: GitHub, cx: Context, focus: () => void) => Effect.forever(Commands.use((c) => c.next).pipe(
+  Effect.flatMap((said) => Effect.sync(() => {
+    const c = Str.replace(/^github\./, "")(said);
+
+    if (c === "focus") focus();
+    else runCommand(v, c, cx);
+  })),
+  Effect.andThen(redraw),
+));
