@@ -49,7 +49,7 @@ import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, sp
 import type { Theme } from "herdr";
 import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
-import type { Repo } from "./gh-await.ts";
+import type { Repo } from "./gh.ts";
 import type { GhError } from "./gh.ts";
 import { runtime } from "./fx.ts";
 import type { GithubFx, GithubServices } from "./fx.ts";

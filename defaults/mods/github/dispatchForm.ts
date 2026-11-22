@@ -13,8 +13,9 @@ import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
-import { ghRun, awaitRead } from "./gh-await.ts";
-import { readRefs, readWorkflows, reread, runsOf, waitForRun } from "./dispatch-form-reads.ts";
+import type { Effect } from "effect";
+import type { GithubServices } from "./fx.ts";
+import { readRefs, readWorkflows, reread, sendDispatch, waitForRun } from "./dispatch-form-reads.ts";
 import { slug } from "./remotes.ts";
 import type { Input, InputType } from "./dispatch.ts";
 import { startValue, inputError, dispatchArgs, shellLine, workflowFile } from "./dispatch.ts";
@@ -70,8 +71,6 @@ export interface Waiting {
 export interface DispatchHost extends FormHost {
   note: Note | null;
   readonly closed?: boolean;
-  /** The window's own cx (init's): good after the handler that asked has returned. */
-  readonly acx?: Context | null;
   now(): number;
 }
 
@@ -276,16 +275,9 @@ export class DispatchForm {
 
   // ---- sending, then finding the run
 
-  async send(): Promise<Outcome<Dispatched>> {
-    const w = this.workflow(), ref = this.ref();
-
-    if (!w) return { ok: false, err: "Pick a workflow." };
-
-    const known = (await awaitRead(runsOf(this, w), null)).map((r) => r.id);
-    const since = Date.now();
-    const r = await ghRun(this.repo, this.args(), { timeout: 60000 });
-
-    return r.ok ? { ok: true, workflow: w, ref, since, known } : { ok: false, err: r.err };
+  /** gh workflow run (the runs listed before it, to tell the new one): how it went. */
+  send(): Effect.Effect<Outcome<Dispatched>, never, GithubServices> {
+    return sendDispatch(this);
   }
 
   /** Sent: the form goes; the run is looked for (dispatch-form-reads.ts waitForRun) and selected when GitHub lists it. */

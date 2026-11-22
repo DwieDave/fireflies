@@ -125,7 +125,7 @@ export interface FormSpec<R> {
   readonly summary?: () => string;
   readonly check?: (values: Values) => ReadonlyMap<string, string>;
   readonly commands?: () => readonly Command[];
-  readonly send: (cx: Context) => Promise<Outcome<R>>;
+  readonly send: (cx: Context) => Effect.Effect<Outcome<R>, never, GithubServices>;
   readonly done?: (r: R & { readonly ok: true }, cx: Context) => void;
   readonly cancel?: () => void;
   readonly sendWord?: string;
@@ -137,6 +137,8 @@ export interface FormSpec<R> {
 export interface FormHost {
   focusSelf(): void;
   spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
+  /** The window's own cx (init's): good after the handler that asked has returned. */
+  readonly acx?: Context | null;
   /** Runs `effect` for the window (interrupted when it closes); a failure is shown as its note. */
   run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void;
 }

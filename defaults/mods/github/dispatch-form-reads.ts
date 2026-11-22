@@ -7,12 +7,13 @@
 
 import { Array as Arr, Clock, Effect, Option, Order } from "effect";
 import { redraw } from "@fireflies/kit";
-import { api, fileAt, ghJson, plain } from "./gh.ts";
+import { api, fileAt, ghJson, ghRun, plain } from "./gh.ts";
 import type { Run } from "./model.ts";
 import { EnvironmentsSchema, NamedListSchema, RunListSchema, WorkflowsSchema, soon } from "./model.ts";
 import { dispatchOf, newRun, workflowFile } from "./dispatch.ts";
 import { noteOf } from "./kit.ts";
 import type { DispatchForm, Dispatched, Ref, Runnable } from "./dispatchForm.ts";
+import type { Outcome } from "./form-fields.ts";
 
 /** How long the new run is looked for (how often: model.ts soon, a backoff). */
 const WAIT_FOR = 120000;
@@ -172,4 +173,20 @@ export const waitForRun = (f: DispatchForm, r: Dispatched) => Effect.gen(functio
 
     f.app.note = noteOf("GitHub took it, but its run hasn't shown up yet: r reads again.", "working", at);
   }
+});
+
+/** gh workflow run, the runs listed before it kept to tell the new one by: how it went. */
+export const sendDispatch = (f: DispatchForm) => Effect.gen(function* () {
+  const w = f.workflow(), ref = f.ref();
+
+  if (w === null) return { ok: false, err: "Pick a workflow." } satisfies Outcome<Dispatched>;
+
+  const runs = yield* runsOf(f, w);
+  const known = Arr.map(runs, (r) => r.id);
+  const since = yield* Clock.currentTimeMillis;
+
+  return yield* Effect.match(ghRun(f.repo, f.args(), 60000), {
+    onFailure: (e): Outcome<Dispatched> => ({ ok: false, err: e.message }),
+    onSuccess: (): Outcome<Dispatched> => ({ ok: true, workflow: w, ref, since, known }),
+  });
 });

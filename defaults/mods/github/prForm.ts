@@ -8,13 +8,14 @@
 // `gh pr create`. The last step shows both commands; nothing runs before it.
 
 import { div } from "gpui-kit";
+import { Effect, String as Str } from "effect";
 import type { Context, Element, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec } from "herdr";
 import type { Theme } from "herdr";
 import type { Repo } from "./gh.ts";
-import { ghRun } from "./gh-await.ts";
-import { readChoices, readLocal, readRemoteBranches, readRemotes, readTemplate, reread } from "./pr-form-reads.ts";
+import * as Gh from "./gh.ts";
+import type { GithubServices } from "./fx.ts";
+import { git, readChoices, readLocal, readRemoteBranches, readRemotes, readTemplate, reread } from "./pr-form-reads.ts";
 import type { Commit, LocalBranch, Numstat, PrFields, PushPlan } from "./pr-create.ts";
 import { fillFrom, startBody, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.ts";
 import { shellLine } from "./dispatch.ts";
@@ -248,21 +249,18 @@ export class PrForm {
     return out;
   }
 
-  async send(): Promise<Outcome<Created>> {
-    const v = this.form.values(), plan = this.plan();
+  /** gh pr create (with git push first when asked): how it went, gh's or git's words when not. */
+  send(): Effect.Effect<Outcome<Created>, never, GithubServices> {
+    const v = this.form.values(), plan = this.plan(), repo = this.repo;
+    const push = plan !== null && flagIn(v, "push") ? Effect.mapError(git(repo, [...plan.args], 180000), (e) => `git push: ${e.message}`) : Effect.void;
 
-    if (plan && flagIn(v, "push")) {
-      const where = this.repo.on ? { cwd: this.repo.root, on: this.repo.on, timeout: 180000 } : { cwd: this.repo.root, timeout: 180000 };
-      const r = await exec("git", [...plan.args], where);
-
-      if (r.code !== 0) return { ok: false, err: `git push: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? "failed"}` };
-    }
-
-    const r = await ghRun(this.repo, prArgs(fieldsOf(v, this.headOwner)), { timeout: 120000 });
-
-    if (!r.ok) return { ok: false, err: r.err };
-
-    return { ok: true, number: createdNumber(r.out), url: r.out.trim() };
+    return push.pipe(
+      Effect.andThen(Effect.mapError(Gh.ghRun(repo, prArgs(fieldsOf(v, this.headOwner)), 120000), (e) => e.message)),
+      Effect.match({
+        onFailure: (err): Outcome<Created> => ({ ok: false, err }),
+        onSuccess: (out): Outcome<Created> => ({ ok: true, number: createdNumber(out), url: Str.trim(out) }),
+      }),
+    );
   }
 
   // ---- beside the form
