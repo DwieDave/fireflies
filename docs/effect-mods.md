@@ -701,6 +701,38 @@ loops end when its context refuses, as its tasks did.
 browser waits for chrome-panes; until then the panes firefly does the
 other four.)
 
+**Wave 1: git, done (2026-11-22).** The whole mod in the Effect pass
+(`effect_sources` names `defaults/mods/git`): its 2,187 findings fixed, its
+guard.ts gone, git and gh through `Exec` (git.ts: a read git refuses is an
+`ExitError` with git's last words), settings.json through `Files`, the
+folder watch a service of its own (`git/watch.ts` `FolderWatch`: the kit
+has no watch), every read, action, timer, watch and the command loop a run
+on the copy's runtime, ordered on two lanes (`git/queue.ts`: actions,
+reads). Its tests run on the kit's test layers (`scripts/git-host.ts`
+`gitServices`, given with `useServices`); herdr stays a stand-in (one, sync)
+for what the view still reads directly: the theme, layout and settings in a
+render, shared state and props, spaces, panes and focus, `run` and the
+overlays. What a read of it showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| A read git refused (a corrupt repo, a ref that isn't one) read as an empty list | git.ts reads | an `ExitError` with git's last words; the window says it on the options bar (main.ts `read`) |
+| Each read, action, timer and watch a `cx.spawn` or `cx.timer`: nothing stopped them when the window closed | main.ts, reads.ts, content.ts, staging.ts, checkouts.ts | runs on the copy's runtime, two lanes (`Lane`: one action at a time, one read at a time); `fx.close()` ends them all |
+| git that couldn't run at all showed "Not a git repository" and nothing more | main.ts, reads.ts | the card says why (`openError`) |
+| The kept window state (`git.state`) and the review marks decoded whole: one entry in another shape dropped the rest | state.ts, review.ts | the kit's `mapOf`, entry by entry |
+| Its own copy of "the folder for a window opened without one" | state.ts | the kit's `hereOf` |
+| Commit dates printed with `Date.toLocaleString` (no `Intl` in the engine) | content.ts | `localStamp` (seconds and zone, as git prints them) |
+| An age read the clock per row | rows.ts | one clock read per render (`nowS`) |
+| A ctrl-p pane's id from `Date.now()` and `Math.random()` | panes.ts | `randomId` on the runtime's Clock and Random |
+| An upstream set after a new worktree that git refused was ignored | checkouts.ts | said as a note |
+| A prune after removing worktrees that failed was ignored | checkouts.ts | listed with the removals that failed |
+| Prompt answers trimmed by hand, three times per prompt | act-*.ts | `answered()` (acting.ts) |
+| An upstream's remote and branch split by hand twice | act-branches.ts | `upstreamParts()` |
+| A folder row's working files picked by casts | acting.ts, rows.ts | `workFiles()` (items.ts), a refinement |
+| `subOfKind` walked `Object.values().flat().reverse()` untyped | main.ts | `Arr.findLast` over `Rec.values`, typed |
+| Branches sorted by boolean arithmetic | items.ts | an `Order` (the checked-out one first, then by name) |
+| Tests waited with wall-clock sleeps, polled the lanes and faked herdr's waits with promises that never end | scripts/git-*.test.ts | git-host.ts: a context whose clock the test moves, `drained(v)` on the lanes, the kit's test layers, `Deferred`s for operations held open |
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings

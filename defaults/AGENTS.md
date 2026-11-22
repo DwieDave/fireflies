@@ -435,6 +435,15 @@ Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
 Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
 graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
+In a layout without nocturne's dither (main, herdr-app's default) it draws
+the plain look (docs/plain-look.md): its panels are cards on the canvas, the
+window a popover with the shared title bar (none in a pane: the pane's header
+names it), tabs as a segmented control, menus and dialogs as popovers. A read
+git refuses (a corrupt repo, a ref that isn't one) says why on the options
+bar, where it used to read as an empty list; an action git refuses opens the
+error popup as before. It reads and acts on the mod's Effect runtime
+(docs/effect-mods.md): closing the window stops every read, action, watch and
+timer it started.
 It opens with the keyboard in Files (a move between window and pane, and a
 pane's restart, bring back what that copy showed). In the Files tree a range
 (`v`) over every file of a folder highlights the folder's row too.
