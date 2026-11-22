@@ -4,6 +4,7 @@
 // github/kit.ts), the diff lines (diff's), and the commit
 // graph drawn as dithered 2 px lines with square elbows.
 
+import { Array as Arr, Match, Option, String as Str } from "effect";
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import type { ClickEvent, Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -16,6 +17,20 @@ import type { DiffRow } from "./patch.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "@fireflies/layout-look";
+
+/** A changed line's tint: added green, removed red; none for the rest. */
+function tintOf(t: Theme, kind: DiffRow["kind"]): Color | null {
+  if (kind === "+") return t.ansi2;
+
+  return kind === "-" ? t.ansi1 : null;
+}
+
+/** A diff line's text color: git's notes dim, context muted, changes bright. */
+function inkOf(t: Theme, kind: DiffRow["kind"]): Color {
+  if (kind === "\\") return t.dim;
+
+  return kind === " " ? t.muted : t.foreground;
+}
 
 export const ART = "mods/nocturne/art";
 
@@ -61,10 +76,10 @@ export const unzoomSize = (size: { readonly width: number; readonly height: numb
 
 /** A layer filling its parent with a 50% checker dither (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
-  if (!frame?.dithered) {
+  if (frame?.dithered !== true) {
     const plain = flat(color, cell);
 
-    if (plain) return plain;
+    if (plain !== null) return plain;
   }
 
   const dpr = frame?.dpr ?? (appWindow().platform === "macos" ? 2 : 1);
@@ -94,7 +109,7 @@ export const letterColor = (t: Theme, ch: string, staged: boolean) => (ch === " 
 /** A color: a theme's by name, or one of its own. */
 export type Ink = keyof Theme | Color;
 
-const isOwn = (c: Ink): c is Color => c.startsWith("#");
+const isOwn = (c: Ink): c is Color => Str.startsWith("#")(c);
 
 /** `c` in theme `t`. */
 export const ink = (t: Theme, c: Ink): Color => (isOwn(c) ? c : t[c]);
@@ -120,11 +135,11 @@ export function edgeRow(_t: Theme, id: string, edge: Color, where: "top" | "bott
   const line = () => div().h(1).bg(edge);
   const label = (el: Element) => h_flex().flex_none().min_w(0).px(4).gap(5).items_center().overflow_hidden().child(el);
   const row = h_flex().id(id).absolute().left(0).right(0).h(13).items_center().text_size(11);
-  const placed = (where === "top" ? row.top(-6) : row.bottom(-6)).child(line().w(left ? 8 : 0).flex_none());
-  const lead = left ? placed.child(label(left).flex_shrink(1)) : placed;
+  const placed = (where === "top" ? row.top(-6) : row.bottom(-6)).child(line().w(left === null ? 0 : 8).flex_none());
+  const lead = left === null ? placed : placed.child(label(left).flex_shrink(1));
   const mid = lead.child(line().flex_1().min_w(8));
 
-  return right ? mid.child(label(right)).child(line().w(8).flex_none()) : mid;
+  return right === null ? mid : mid.child(label(right)).child(line().w(8).flex_none());
 }
 
 /** A panel's extras: `foot` and `right` cut into its bottom and top edges, a press on its title. */
@@ -141,13 +156,13 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
   const { foot = null, right = null, onTitle = null } = options;
   const edge = active ? t.accent : edgeTone(t);
   // A long title ends in an ellipsis inside the frame, before the right chip.
-  const titled = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(title.map((el) => el.min_w(0).truncate()));
-  const head = onTitle ? titled.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); }) : titled;
+  const titled = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(Arr.map(title, (el) => el.min_w(0).truncate()));
+  const head = onTitle !== null ? titled.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); }) : titled;
 
   return div().id(id).relative().flex().flex_col().min_h(0).min_w(0).border_l(1).border_r(1).border_color(edge)
     .child(div().relative().flex_1().min_h(0).pt(7).pb(2).overflow_hidden().child(body))
     .child(edgeRow(t, `${id}-top`, edge, "top", head, right))
-    .child(edgeRow(t, `${id}-bottom`, edge, "bottom", null, foot ? div().text_color(active ? t.accent : t.dim).child(foot) : null));
+    .child(edgeRow(t, `${id}-bottom`, edge, "bottom", null, foot === null ? null : div().text_color(active ? t.accent : t.dim).child(foot)));
 }
 
 /** A selected row's band: dither with an accent edge (dimmer off focus). */
@@ -184,7 +199,7 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, on
   const hint = (id: string) => ([key, what, ctx]: Hint, i: number) => {
     const el = h_flex().id(`git-${id}-${i}`).flex_none().gap(4);
 
-    if (ctx) return el.child(div().text_size(10).text_color(t.muted).child(ctx));
+    if (ctx !== null && ctx !== undefined && Str.isNonEmpty(ctx)) return el.child(div().text_size(10).text_color(t.muted).child(ctx));
 
     return el
       .hover((s) => s.bg(`${edgeTone(t)}66`))
@@ -196,14 +211,14 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, on
 
   const bar = h_flex().id("git-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
-    .children(list.map(hint("hint")))
+    .children(Arr.map(list, hint("hint")))
     .child(div().flex_1())
-    .children(ends.map(hint("end")));
+    .children(Arr.map(ends, hint("end")));
 
-  const noted = right ? bar.child(right) : bar;
+  const noted = right === null ? bar : bar.child(right);
 
   // ? keys last (keyhelp.ts), as every Nocturne bar.
-  return help ? noted.child(keysHint(t, "git-help-0", false, (cx) => onPress?.(help[0], cx), help[0])) : noted;
+  return help === null ? noted : noted.child(keysHint(t, "git-help-0", false, (cx) => onPress?.(help[0], cx), help[0]));
 }
 
 /** The note's moon and size. */
@@ -222,7 +237,7 @@ export function empty(t: Theme, title: string, hint: string | null = null, optio
 
   const titled = lit.child(div().text_center().text_color(small ? t.dim : t.foreground).child(title));
 
-  return hint ? titled.child(div().text_center().max_w(420).text_color(t.muted).child(hint)) : titled;
+  return hint === null ? titled : titled.child(div().text_center().max_w(420).text_color(t.muted).child(hint));
 }
 
 /** A graph cell's size: `lane` px per lane, `h` px tall; `head` rings HEAD's node, `big` a larger node. */
@@ -246,8 +261,15 @@ export function graphCell(t: Theme, row: GraphRow, width: number, options: CellO
   const seg = (color: Color, x: number, y: number, w: number, hh: number) => div().absolute().left(x).top(y).w(Math.max(2, w)).h(Math.max(2, hh)).bg(`${color}99`).child(dither(color, 1));
   const kids: Element[] = [];
 
+  // Where a vertical segment starts: the top, the middle or the bottom.
+  const yOf = (from: number): number => {
+    if (from === 0) return 0;
+
+    return from === 0.5 ? mid : h;
+  };
+
   for (const v of s.v) {
-    const y0 = v.from === 0 ? 0 : v.from === 0.5 ? mid : h;
+    const y0 = yOf(v.from);
     const y1 = v.to === 0.5 ? mid + 2 : h;
 
     kids.push(seg(laneColor(t, colors, v.color), cx(v.lane), y0, 2, y1 - y0));
@@ -281,7 +303,7 @@ export function graphPass(t: Theme, after: readonly (number | null)[], width: nu
   const colors = laneColors(t);
   const cx = (i: number) => i * lane + Math.floor(lane / 2) - 1;
 
-  const kids = after.flatMap((c, i) => {
+  const kids = Arr.flatMap(after, (c, i) => {
     if (c == null) return [];
 
     const color = laneColor(t, colors, c);
@@ -296,7 +318,7 @@ export function graphPass(t: Theme, after: readonly (number | null)[], width: nu
  *  cut at its limit) run on to the bottom of the view, laid out as the log
  *  rows are. Null when nothing is open (a root commit) or not a log row. */
 export function logTail(t: Theme, row: MainRow | null | undefined, h: number) {
-  if (row?.kind !== "log" || !row.g.after.some((c) => c != null)) return null;
+  if (row?.kind !== "log" || !Arr.some(row.g.after, (c) => c !== null && c !== undefined)) return null;
 
   return h_flex().id("log-tail").flex_1().min_h(0).w_full().items_start().pl(6).overflow_hidden()
     .child(graphPass(t, row.g.after, row.w, { lane: 10, h }));
@@ -337,7 +359,7 @@ function highlighted(text: string, path: string): Spans {
   const key = `${path}\0${text}`;
   const known = highlights.get(key);
 
-  if (known) return known;
+  if (known !== undefined) return known;
 
   // An app without herdr.highlight (or a test's stand-in) draws plain text.
   const spans = herdr.highlight?.(text, path) ?? [];
@@ -355,25 +377,30 @@ function highlighted(text: string, path: string): Spans {
  *  highlighted on its own: a line inside a multi-line string or comment can
  *  be colored as code. */
 export function codeSpans(text: string, path: string | null | undefined, t: Theme, base: Color = t.foreground): Span[] | null {
-  if (!path || !text || text.length > 2000) return null;
+  if (path === null || path === undefined || Str.isEmpty(path) || Str.isEmpty(text) || text.length > 2000) return null;
 
   const spans = highlighted(text, path);
 
-  if (!spans.length) return null;
+  if (!Arr.isReadonlyArrayNonEmpty(spans)) return null;
 
-  const color = (name: string) => (name === "variable.builtin" ? t.ansi4 : name === "string.escape" ? t.ansi9 : roleColor(t, name) ?? roleColor(t, name.split(".")[0] ?? "") ?? base);
+  const color = (name: string): Color => Match.value(name).pipe(
+    Match.when("variable.builtin", () => t.ansi4),
+    Match.when("string.escape", () => t.ansi9),
+    Match.orElse(() => roleColor(t, name) ?? roleColor(t, Option.getOrElse(Arr.head(Str.split(name, ".")), () => "")) ?? base),
+  );
+
   const out: Span[] = [];
   let at = 0;
 
   for (const [s, e, name] of spans) {
-    if (s > at) out.push({ text: text.slice(at, s), color: base });
+    if (s > at) out.push({ text: Str.substring(at, s)(text), color: base });
 
-    if (e > s) out.push({ text: text.slice(s, e), color: color(name) });
+    if (e > s) out.push({ text: Str.substring(s, e)(text), color: color(name) });
 
     at = Math.max(at, e);
   }
 
-  if (at < text.length) out.push({ text: text.slice(at), color: base });
+  if (at < text.length) out.push({ text: Str.slice(at)(text), color: base });
 
   return out;
 }
@@ -401,9 +428,9 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
   if (row.kind === "@") {
     const head = h_flex().h(h).w_full().relative().items_center().px(8).gap(10).text_size(11).overflow_hidden()
       .child(dither(edgeTone(t), 2))
-      .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(compact ? row.range.replace(/^@@ | @@$/g, "") : row.range));
+      .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(compact ? Str.replace(/^@@ | @@$/g, "")(row.range) : row.range));
 
-    return row.text ? head.child(div().relative().min_w(0).truncate().px(4).bg(t.background).text_color(t.muted).child(row.text)) : head;
+    return Str.isEmpty(row.text) ? head : head.child(div().relative().min_w(0).truncate().px(4).bg(t.background).text_color(t.muted).child(row.text));
   }
 
   if (row.kind === "file") {
@@ -411,7 +438,7 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
       .child(dither(edgeTone(t), 2))
       .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(row.text));
 
-    return row.sub ? head.child(div().relative().px(4).bg(t.background).text_color(t.muted).child(row.sub)) : head;
+    return row.sub === undefined || Str.isEmpty(row.sub) ? head : head.child(div().relative().px(4).bg(t.background).text_color(t.muted).child(row.sub));
   }
 
   if (row.kind === "log") {
@@ -420,27 +447,27 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
 
     return h_flex().h(h).w_full().items_center().pl(6).pr(10).gap(6).text_size(11.5).overflow_hidden()
       .child(graph)
-      .child(h_flex().flex_1().min_w(0).overflow_hidden().children(row.parts.map(([s, c], i) => div().id(`lg-${i}`).flex_none().text_color(ink(t, c)).child(s))));
+      .child(h_flex().flex_1().min_w(0).overflow_hidden().children(Arr.map(row.parts, ([s, c], i) => div().id(`lg-${i}`).flex_none().text_color(ink(t, c)).child(s))));
   }
 
   if (row.kind === "text") {
     return h_flex().h(h).w_full().items_center().px(10).text_size(11).overflow_hidden()
-      .children(row.parts.map(([s, c], i) => div().id(`tx-${i}`).flex_none().text_color(ink(t, c)).child(s)));
+      .children(Arr.map(row.parts, ([s, c], i) => div().id(`tx-${i}`).flex_none().text_color(ink(t, c)).child(s)));
   }
 
-  const tint = row.kind === "+" ? t.ansi2 : row.kind === "-" ? t.ansi1 : null;
+  const tint = tintOf(t, row.kind);
   const spans = row.kind === "\\" ? null : codeSpans(row.text, path, t, row.kind === " " ? t.muted : t.foreground);
-  const text = div().flex_1().min_w(0).truncate().pr(8).text_color(row.kind === "\\" ? t.dim : row.kind === " " ? t.muted : t.foreground);
+  const text = div().flex_1().min_w(0).truncate().pr(8).text_color(inkOf(t, row.kind));
   const { n, o } = row;
   const line = h_flex().h(h).w_full().relative().items_center().text_size(compact ? 11.5 : 12);
   const font = code === undefined ? line : line.font_family(code);
-  const tinted = tint ? font.bg(`${tint}16`) : font;
+  const tinted = tint === null ? font : font.bg(`${tint}16`);
   const picked = pick ? tinted.bg(`${active ? t.accent : t.muted}26`) : tinted;
 
-  const numbered = picked.child(div().w(3).h_full().flex_none().relative().when(tint !== null, (el) => (tint ? el.child(dither(tint, 1)) : el)))
+  const numbered = picked.child(div().w(3).h_full().flex_none().relative().map((el) => (tint === null ? el : el.child(dither(tint, 1)))))
     .map((el) => (compact ? el.child(num(n ?? o, 34)) : el.child(num(o, 38)).child(num(n, 38))))
     .child(div().w(compact ? 12 : 14).flex_none().text_color(tint ?? t.dim).child(row.kind === "+" || row.kind === "-" ? row.kind : ""))
-    .child(spans ? text.child(h_flex().children(spans.map((s, i) => div().id(`sp-${i}`).flex_none().text_color(s.color).child(s.text)))) : text.child(row.text || " "));
+    .child(spans === null ? text.child(Str.isEmpty(row.text) ? " " : row.text) : text.child(h_flex().children(Arr.map(spans, (s, i) => div().id(`sp-${i}`).flex_none().text_color(s.color).child(s.text)))));
 
   return cursor
     ? numbered.child(div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted))
@@ -469,7 +496,7 @@ export function busyMark(t: Theme, id: string) {
 }
 
 /** A commit hash as shown: its first seven. */
-export const short = (r: string) => (/^[0-9a-f]{40}$/.test(r) ? r.slice(0, 7) : r);
+export const short = (r: string): string => (/^[0-9a-f]{40}$/.test(r) ? Str.slice(0, 7)(r) : r);
 
 /** A main-view row of one text in one ink. */
 export const text = (s: string, color: Ink = "foreground"): MainRow => ({ kind: "text", parts: [[s, color]] });
