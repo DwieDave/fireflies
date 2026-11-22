@@ -3,6 +3,7 @@
 // it, and how the side panels and the main view share the window in each
 // screen mode, narrow, and as a ctrl-p pane.
 
+import { Array as Arr, Match, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -30,14 +31,14 @@ export function mainPanel(v: GitView, t: Theme) {
   const m = v.main;
   const narrow = v.size.width < NARROW;
 
-  if (s) {
+  if (s !== null) {
     const keys = pickedKeys(v);
     const mine = mainList(v, t, "main-diff", s.rows, (r, i) => diffLine(t, r, { code, compact: narrow, pick: r.kind !== "@" && keys.has(`${r.hunk}:${r.line}`), cursor: i === s.cur, active, path: s.file.path }), { follow: s.cur, key: "staging" });
     const title = (on: boolean, label: string) => [div().text_color(on ? t.foreground : t.dim).child(label)];
     const right = div().text_color(t.dim).child(`${s.file.path}${s.hunkMode ? " · hunk" : s.anchor !== null ? " · range" : ""}`);
     const a = panel(t, "main-a", title(true, s.side === "staged" ? "Staged changes" : "Unstaged changes"), active, mine, { right, foot: active ? "tab: other side · a: hunk mode" : null }).flex_grow(1.4).flex_basis(0);
 
-    if (!s.other) return v_flex().size_full().gap(12).pt(7).child(a);
+    if (s.other === null) return v_flex().size_full().gap(12).pt(7).child(a);
 
     const b = panel(t, "main-b", title(false, s.side === "staged" ? "Unstaged changes" : "Staged changes"), false,
       mainList(v, t, "main-other", s.other, (r) => diffLine(t, r, { code, compact: narrow, active: false, path: s.file.path }), { key: "other" }),
@@ -49,20 +50,19 @@ export function mainPanel(v: GitView, t: Theme) {
   const rows = m?.rows ?? [];
   const rowH = m?.rowH ?? ROW;
 
-  const body = !m ? empty(t, v.state === "ready" ? "Reading…" : "", null, { small: true })
-    : !rows.length ? empty(t, "Nothing to show", null, { small: true })
-    : mainList(v, t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: ("path" in r ? r.path : undefined) ?? m.path ?? null, active, h: rowH }), { key: "main", rowH });
+  const body = m === null ? empty(t, v.state === "ready" ? "Reading…" : "", null, { small: true })
+    : (!Arr.isReadonlyArrayNonEmpty(rows) ? empty(t, "Nothing to show", null, { small: true })
+    : mainList(v, t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: ("path" in r ? r.path : undefined) ?? m.path ?? null, active, h: rowH }), { key: "main", rowH }));
 
   // ⧉: what this view shows, as a pane (shift: a new tab), like a pane header's split.
-  const asPane = !v.show && rows.length ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((st) => st.text_color(t.accent).bg(`${edge(t)}66`))
+  const asPane = v.show === null && Arr.isReadonlyArrayNonEmpty(rows) ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((st) => st.text_color(t.accent).bg(`${edge(t)}66`))
     .tooltip("Open as a pane beside (ctrl-p) · shift: in a new tab (ctrl-shift-p)")
     .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); openPane(v, e.modifiers.shift); cx.notify(); })
     .child(svg("mods/workspace-chrome/panel-right.svg").size(11).text_color(t.dim)) : null;
 
   const base = v.diffBase;
-  const extras = base || asPane ? h_flex().gap(8).items_center() : null;
-  const withBase = extras && base ? extras.child(div().text_color(t.ansi3).child(`diff mode: ${short(base)} (W)`)) : extras;
-  const right = withBase && asPane ? withBase.child(asPane) : withBase;
+  const extras = [...(base === null ? [] : [div().text_color(t.ansi3).child(`diff mode: ${short(base)} (W)`)]), ...(asPane === null ? [] : [asPane])];
+  const right = Arr.isReadonlyArrayNonEmpty(extras) ? h_flex().gap(8).items_center().children(extras) : null;
 
   const one = panel(t, "main-a", [div().text_color(active ? t.foreground : t.muted).child(m?.title ?? "")], active, body, {
     right,
@@ -72,9 +72,9 @@ export function mainPanel(v: GitView, t: Theme) {
   const second = m?.second;
   const parts = [one];
 
-  if (second) {
+  if (second !== null && second !== undefined) {
     parts.push(panel(t, "main-b", [div().text_color(t.dim).child(second.title)], false,
-      mainList(v, t, "main-second", second.rows, (r) => diffLine(t, r, { code, compact: narrow, active: false, path: m.path ?? null }), { key: "second" })).flex_grow(0.8).flex_basis(0));
+      mainList(v, t, "main-second", second.rows, (r) => diffLine(t, r, { code, compact: narrow, active: false, path: m?.path ?? null }), { key: "second" })).flex_grow(0.8).flex_basis(0));
   }
 
   return v_flex().size_full().gap(12).pt(7).children(parts);
@@ -86,9 +86,14 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
   // As list(): the rows that fit come from the height, at this list's row
   // height (a diff's and the branch log's differ).
   const px = view.mainPx[key];
-  const vis = px ? rowWindow(rows.length, 0, px, rowH).vis : 30;
+  const vis = px !== undefined && px > 0 ? rowWindow(rows.length, 0, px, rowH).vis : 30;
   const staging = view.staging;
-  let top = key === "staging" ? (staging?.top ?? 0) : key === "main" ? view.mainTop : (view.otherTop[key] ?? 0);
+
+  let top = Match.value(key).pipe(
+    Match.when("staging", () => staging?.top ?? 0),
+    Match.when("main", () => view.mainTop),
+    Match.orElse((k) => view.otherTop[k] ?? 0),
+  );
 
   if (follow !== null) {
     if (follow < top + 1) top = Math.max(0, follow - 2);
@@ -100,7 +105,7 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
 
   const setTop = (v: number) => {
     if (key === "staging") {
-      if (view.staging) view.staging.top = v;
+      if (view.staging !== null) view.staging.top = v;
     } else if (key === "main") view.mainTop = v;
     else view.otherTop[key] = v;
   };
@@ -109,7 +114,7 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
 
   if (key === "main" || key === "staging") view.mainVis = vis;
 
-  if (key === "main" && view.main?.more && rows === view.main.rows && top + vis >= rows.length - 1) readMore(view, "main");
+  if (key === "main" && view.main !== null && Str.isNonEmpty(view.main.more ?? "") && rows === view.main.rows && top + vis >= rows.length - 1) readMore(view, "main");
 
   const last = rows[rows.length - 1];
   const tail = top + vis >= rows.length - 1 ? logTail(t, last, px ?? 600) : null;
@@ -129,7 +134,7 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
 
       const steps = Math.trunc(view.mainWheel);
 
-      if (!steps) return;
+      if (steps === 0) return;
 
       view.mainWheel -= steps;
       setTop(Math.max(0, Math.min(Math.max(0, rows.length - vis), top - steps)));
@@ -140,7 +145,7 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
 
       const s = view.staging;
 
-      if (key === "staging" && s) {
+      if (key === "staging" && s !== null) {
         // A click picks the line under the pointer; shift extends a range.
         const y = unzoom(e.local_position?.y ?? 0);
         const i = top + Math.floor(y / rowH);
@@ -156,19 +161,19 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
         if (e.click_count === 2) act(view, "stage-pick", cx);
       }
 
-      if (view.focus !== "main" && (key === "main" || key === "staging") && rows.length) view.focusMain();
+      if (view.focus !== "main" && (key === "main" || key === "staging") && Arr.isReadonlyArrayNonEmpty(rows)) view.focusMain();
 
       cx.notify();
     })
     .on_mouse_down("right", (_e, cx) => {
       cx.stop_propagation();
 
-      if (view.staging || view.focus === "main") contextMenu(view, view.staging ? "staging" : "main");
+      if (view.staging !== null || view.focus === "main") contextMenu(view, view.staging === null ? "main" : "staging");
 
       cx.notify();
     })
-    .child(v_flex().size_full().children(rows.slice(top, top + vis + 1).map((r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none()))
-      .children(tail ? [tail] : []));
+    .child(v_flex().size_full().children(Arr.map(Arr.take(Arr.drop(rows, top), vis + 1), (r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none()))
+      .children(tail === null ? [] : [tail]));
 
   return rows.length > vis
     ? list.child(div().absolute().right(0).w(2).top(`${Math.round((top / rows.length) * 100)}%`).h(`${Math.max(3, Math.round((vis / rows.length) * 100))}%`).bg(`${t.muted}66`))
@@ -176,9 +181,9 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
 }
 
 export function logPanel(v: GitView, t: Theme) {
-  const shown = v.logs.slice(-40);
+  const shown = Arr.takeRight(v.logs, 40);
 
-  const lines = shown.flatMap((e, i) => {
+  const lines = Arr.flatMap(shown, (e, i) => {
     const title = h_flex().id(`log-t-${i}`).gap(6).text_size(11).child(div().text_color(e.ok === false ? t.ansi1 : t.foreground).child(e.title));
 
     return [
@@ -188,10 +193,10 @@ export function logPanel(v: GitView, t: Theme) {
   });
 
   const vis = Math.max(1, Math.floor((v.logH - 14) / 15));
-  const body = v_flex().size_full().px(10).justify_end().overflow_hidden().children(lines.slice(-vis));
+  const body = v_flex().size_full().px(10).justify_end().overflow_hidden().children(Arr.takeRight(lines, vis));
 
   return panel(t, "panel-log", [div().text_color(t.muted).child("Command log")], false,
-    lines.length ? body : body.child(div().text_size(11).text_color(t.dim).child("What git runs shows here (@ for options).")),
+    Arr.isReadonlyArrayNonEmpty(lines) ? body : body.child(div().text_size(11).text_color(t.dim).child("What git runs shows here (@ for options).")),
     { right: div().text_color(t.dim).child("@") }).size_full();
 }
 
@@ -221,7 +226,7 @@ export function showBody(view: GitView, t: Theme, show: Show) {
 }
 
 export function windowBody(gv: GitView, t: Theme) {
-  if (gv.show) return showBody(gv, t, gv.show);
+  if (gv.show !== null) return showBody(gv, t, gv.show);
 
   const w = gv.size.width;
   const narrow = w < NARROW;
@@ -240,7 +245,7 @@ export function windowBody(gv: GitView, t: Theme) {
   if (gv.mode === "half") {
     const railW = gv.railW ?? Math.round(Math.max(230, Math.min(300, w * 0.22)));
     const midW = gv.midW ?? Math.round(Math.max(360, Math.min(620, w * 0.38)));
-    const rail = PANELS.filter((p) => p !== gv.panel);
+    const rail = Arr.filter(PANELS, (p) => p !== gv.panel);
 
     return h_flex().size_full().px(6).pb(4)
       .child(div().w(railW).flex_none().h_full().child(sideColumn(gv, t, rail, true)))
