@@ -10,21 +10,23 @@
 // lines from where the wheel left it.
 
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
+import { Array as Arr, Option } from "effect";
 import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guard } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
-import { api, ghRun, fileAt, slimmed } from "./gh-await.ts";
+import { awaitRead } from "./gh-await.ts";
+import { pollActions, readLog } from "./actions-reads.ts";
 import type { Expected, RunAction } from "./run-actions.ts";
-import { paced, runAction, settled } from "./run-actions.ts";
+import { paced, runAction } from "./run-actions.ts";
 import type { Job, Needs, NeedsOf, Run, Step } from "./model.ts";
-import { pollEvery, jobColumns, jobParents, needsFromWorkflow, splitLog, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
+import { pollEvery, jobColumns, jobParents, isRun, isJob } from "./model.ts";
 import type { Hint } from "./kit.ts";
 import { splitter, unzoom } from "./kit.ts";
 import type { Parents } from "./graph.ts";
 import type { Pieces } from "./cache.ts";
-import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
+import { newest, LIMITS } from "./cache.ts";
 import type { Waiting } from "./dispatchForm.ts";
 import { DispatchForm } from "./dispatchForm.ts";
 import type { Host, ReadOptions, RunFilter } from "./host.ts";
@@ -78,7 +80,8 @@ interface Tag {
 }
 
 /** A finished job's log by step, or why it didn't come. */
-type JobLog = ReadonlyMap<number, string[]> | { readonly error: string };
+/** A finished job's log by step, or why it didn't come. */
+export type JobLog = ReadonlyMap<number, string[]> | { readonly error: string };
 
 /** A workflow job as the cache keeps it: [key, { name, needs }]. */
 const isNeedsOf = object({ name: nullable(isString), needs: arrayOf(isString) });
@@ -356,108 +359,35 @@ export default class Actions {
     return this.interval() < 10000;
   }
 
-  /** Reads the runs, then the selected run's jobs (and its workflow, at once).
+  /** Reads the runs, then the selected run's jobs (and its workflow, at once): actions-reads.ts.
    *  all: past the timers; fresh: past the ETags. */
-  async poll({ fresh = false }: ReadOptions, cx: Context | null): Promise<void> {
-    const repo = this.app.repo;
-
-    if (!repo) return;
-
-    const branch = this.branchKey();
-    const q = branch ? `&branch=${encodeURIComponent(branch)}` : "";
-    const kept = this.runsCache.get(branch);
-    // The selected run's jobs are read with the list when the cache already knows the run.
-    const early = this.run();
-    const jobs = early ? this.pollRun(fresh, cx, early) : null;
-
-    jobs?.catch(() => {});
-
-    const [{ data, etag }] = await Promise.all([
-      api(repo, `repos/${repo.full}/actions/runs?per_page=40${q}`, slimmed(isRunList, (d) => (d.workflow_runs ?? []).map(slimRun), isRuns), { fresh, prior: kept?.etag ? { etag: kept.etag, data: kept.list } : null }),
-      ...[...this.extra.keys()].map((id) => api(repo, `repos/${repo.full}/actions/runs/${id}`, slimmed(isRun, slimRun, isRun)).then((r) => {
-        if (r.data) this.extra.set(id, r.data);
-      }).catch(() => null)),
-    ]);
-
-    if (this.app.repo !== repo || this.branchKey() !== branch) return;
-
-    this.runsCache.set(branch, { list: data ?? [], etag, at: Date.now() });
-    this.useRuns();
-    this.expected = settled(this.expected, this.list());
-
-    if (this.sel === null || !this.list().some((r) => r.id === this.sel)) this.sel = this.list()[0]?.id ?? null;
-
-    cx?.notify();
-    await jobs;
-
-    const now = this.run();
-
-    if (now && now.id !== early?.id) await this.pollRun(fresh, cx, now);
-    else if (early && now) this.pickJob(null);
+  poll(opts: ReadOptions, cx: Context | null): Promise<void> {
+    return awaitRead(pollActions(this, opts), cx);
   }
 
-  async pollRun(fresh: boolean, cx: Context | null, r: Run | null = this.run()): Promise<void> {
-    const repo = this.app.repo;
-
-    if (!repo || !r) return;
-
-    const key = this.needsKey(r);
-    const tag = this.jobTags.get(r.id), had = this.jobs.get(r.id);
-    const workflow = r.path && !this.needs.has(key) ? fileAt(repo, r.path.replace(/@.*$/, ""), r.head_sha ?? "") : null;
-
-    const [{ data, etag }, yaml] = await Promise.all([
-      api(repo, `repos/${repo.full}/actions/runs/${r.id}/jobs?per_page=100&filter=latest`, slimmed(isJobList, (d) => (d.jobs ?? []).map(slimJob), isJobs), { fresh, prior: tag?.etag && had ? { etag: tag.etag, data: had } : null }),
-      workflow,
-    ]);
-
-    if (this.app.repo !== repo) return;
-
-    this.jobs.set(r.id, data ?? []);
-    this.jobTags.set(r.id, { etag, at: Date.now() });
-
-    if (this.jobs.size > LIMITS.jobs * 2) {
-      const keep = new Set([...this.jobTags].sort((a, b) => b[1].at - a[1].at).slice(0, LIMITS.jobs).map(([id]) => id));
-
-      for (const id of this.jobs.keys()) {
-        if (keep.has(id)) continue;
-
-        this.jobs.delete(id);
-        this.jobTags.delete(id);
-      }
-    }
-
-    if (workflow) {
-      this.needs.set(key, yaml ? needsFromWorkflow(yaml) : new Map());
-      this.needsAt.set(key, Date.now());
-    }
-
-    if (r.id === this.run()?.id) this.pickJob(cx);
-  }
-
-  /** Keeps a job selected in the shown run, and its log coming. */
-  pickJob(cx: Context | null): void {
+  /** Keeps a job selected in the shown run, and (`load`) its log coming. */
+  pickJob(load: boolean): void {
     const jobs = this.jobsOf(this.run());
 
-    if (!jobs) return;
+    if (jobs === null) return;
 
-    if (!jobs.some((j) => j.id === this.jobSel)) this.jobSel = (jobs.find((j) => j.status === "in_progress") ?? jobs.find((j) => j.conclusion === "failure") ?? jobs[0])?.id ?? null;
+    if (!Arr.some(jobs, (j) => j.id === this.jobSel)) {
+      const pick = Arr.findFirst(jobs, (j) => j.status === "in_progress").pipe(Option.orElse(() => Arr.findFirst(jobs, (j) => j.conclusion === "failure")), Option.orElse(() => Arr.head(jobs)));
 
-    if (cx) this.loadLog(cx);
+      this.jobSel = Option.getOrNull(Option.map(pick, (j) => j.id));
+    }
+
+    if (load) this.loadLog();
   }
 
-  /** The selected job's log, once it's finished (kept: a finished log doesn't change). */
-  loadLog(cx: Context): void {
+  /** The selected job's log, once it's finished (kept: a finished log doesn't change): a run on the window. */
+  loadLog(): void {
     const j = this.job(), repo = this.app.repo;
 
-    if (!j || !repo || j.status !== "completed" || this.logs.has(j.id) || this.logBusy.has(j.id)) return;
+    if (j === null || repo === null || j.status !== "completed" || this.logs.has(j.id) || this.logBusy.has(j.id)) return;
 
     this.logBusy.add(j.id);
-    this.app.spawn(cx, async () => {
-      const r = await ghRun(repo, ["run", "view", "--job", String(j.id), "--log"], { timeout: 90000 });
-
-      this.logs.set(j.id, r.ok ? splitLog(r.out, j.steps ?? []) : { error: r.err });
-      this.logBusy.delete(j.id);
-    });
+    this.app.run(readLog(this, repo, j.id));
   }
 
   // ---- moves
@@ -501,7 +431,7 @@ export default class Actions {
     this.app.refresh(cx, true);
   }
 
-  moveJob(dx: number, dy: number, cx: Context): void {
+  moveJob(dx: number, dy: number, _cx: Context): void {
     const cols = this.columns();
 
     if (!cols.length) return;
@@ -534,7 +464,7 @@ export default class Actions {
       this.jobSel = j.id;
       this.stepSel = null;
       this.logAt = 0;
-      this.loadLog(cx);
+      this.loadLog();
     }
 
     this.pan = null;

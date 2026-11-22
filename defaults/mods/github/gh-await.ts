@@ -6,6 +6,8 @@
 
 import { Effect, Option, Schema } from "effect";
 import { appHome } from "herdr";
+import type { Context } from "gpui-kit";
+import { Redraw } from "@fireflies/kit";
 import type { Guard } from "./guard.ts";
 import type { ApiOptions, Fetched, GraphqlOptions, Read, Repo, RepoPlace, Where } from "./gh.ts";
 import * as Gh from "./gh.ts";
@@ -22,6 +24,10 @@ const schemaOf = <T>(guard: Guard<T>) => Schema.declare(guard);
 
 /** Runs a read of GitHub; a failure rejects with its tagged error (its `message` in a person's words). */
 const run = <A, E>(effect: Effect.Effect<A, E, Gh.GhServices | store.StoreServices>): Promise<A> => runtime.runtime.runPromise(effect);
+
+/** Runs a tab's read (an effect that redraws) for window-reads.ts, which still awaits: redrawn through `cx`. */
+export const awaitRead = <E>(effect: Effect.Effect<void, E, Gh.GhServices | Redraw>, cx: Context | null): Promise<void> =>
+  run(Effect.provideService(effect, Redraw, Redraw.of({ now: Effect.sync(() => cx?.notify()) })));
 
 /** An answer kept as it came. */
 export const plain = <T>(guard: Guard<T>): Read<T, T> => Gh.plain(schemaOf(guard));

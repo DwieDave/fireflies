@@ -2,7 +2,10 @@
 // of the window (main.ts): types only, so a tab is typed against what it uses
 // and main.ts implements it. Nothing runs here.
 
+import type { Effect } from "effect";
 import type { Context, MouseButtonEvent } from "gpui-kit";
+import type { RunOptions } from "@fireflies/kit";
+import type { GithubServices } from "./fx.ts";
 import type { Repo } from "./gh.ts";
 import type { Ran } from "./gh-await.ts";
 import type { Axis, Note } from "./kit.ts";
@@ -56,6 +59,8 @@ export interface Host {
   focusSelf(): void;
   /** The time now (ms): the one clock the window's parts read. */
   now(): number;
+  /** Runs `effect` for this copy (interrupted when it closes); a failure is shown as the window's note. */
+  run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void;
   /** Work in the background: `fn` gets the task's own cx, good across its awaits (the one a
    *  handler was given is refused once that handler has returned). */
   spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;

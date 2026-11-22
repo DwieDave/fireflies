@@ -40,6 +40,7 @@
 
 import { View, div } from "gpui-kit";
 import { Schema } from "effect";
+import type { Effect } from "effect";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
@@ -47,9 +48,10 @@ import { v_flex, ScrollHandle } from "gpui-base";
 import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import { readShared, sharedKey, writeShared } from "@fireflies/kit";
+import type { RunOptions } from "@fireflies/kit";
 import type { Ran, Repo } from "./gh-await.ts";
 import { runtime } from "./fx.ts";
-import type { GithubFx } from "./fx.ts";
+import type { GithubFx, GithubServices } from "./fx.ts";
 import { commands, start, switchFork } from "./window-life.ts";
 import { cachePath } from "./store.ts";
 import { readAgo } from "./model.ts";
@@ -444,6 +446,10 @@ export default class GitHub extends View implements Host {
 
   now(): number {
     return Date.now();
+  }
+
+  run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void {
+    this.fx?.run(effect, options);
   }
 
   override async close(): Promise<void> {
