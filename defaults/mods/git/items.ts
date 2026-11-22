@@ -36,6 +36,9 @@ export const isCheckout = (x: Item | null): x is Checkout => x !== null && "prun
 export const isReviewFile = (x: Item | null): x is ReviewFile => x !== null && "hunks" in x;
 export const isTreeRow = (x: Item | null): x is TreeRow<StatusFile> | TreeRow<CommitFile> => x !== null && "depth" in x;
 
+/** The working-tree files among a folder row's (a commit's files are not). */
+export const workFiles = (files: readonly (StatusFile | CommitFile)[]): StatusFile[] => Arr.filter(files, (f): f is StatusFile => "staged" in f);
+
 /** A Files row's working-tree file (not a directory's). */
 export function statusFileOf(x: Item | null): StatusFile | null {
   if (!isTreeRow(x) || x.kind !== "file") return null;

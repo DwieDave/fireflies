@@ -6,11 +6,10 @@ import type { Context } from "gpui-kit";
 import { Array as Arr, Effect, String as Str } from "effect";
 import type { GitServices } from "./fx.ts";
 import type { StatusFile } from "./parse.ts";
-import type { CommitFile } from "./git.ts";
 import type { default as GitView } from "./main.ts";
 import type { ExecOptions, SpawnOptions } from "./state.ts";
 import type { Item } from "./items.ts";
-import { isBranch, isCheckout, isCommit, isRemote, isRemoteBranch, isStash, isTreeRow, hashOf, nameOf, statusFileOf } from "./items.ts";
+import { workFiles, isBranch, isCheckout, isCommit, isRemote, isRemoteBranch, isStash, isTreeRow, hashOf, nameOf, statusFileOf } from "./items.ts";
 
 export const MSG_COMMIT = (flags: string) => `printf '%s' "$NOCTURNE_GIT_MSG" | git commit --cleanup=strip ${flags} -F -`;
 
@@ -53,11 +52,7 @@ export function filesOf(rows: readonly Item[]): StatusFile[] {
   return Arr.flatMap(rows, (r) => {
     if (!isTreeRow(r)) return [];
 
-    if (r.kind === "dir") {
-      const all: readonly (StatusFile | CommitFile)[] = r.files;
-
-      return Arr.filter(all, (f): f is StatusFile => "staged" in f);
-    }
+    if (r.kind === "dir") return workFiles(r.files);
 
     const f = statusFileOf(r);
 
