@@ -97,7 +97,11 @@ runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
 `data/github/cache.json`: it shows that at once when opened (from the
 keys, the palette, + new, another mod's `nocturne.github*` command, or back
 from a pull request's review) and reads GitHub behind it, every time; the
-bar says "updating…", then "updated 2m ago". While open it reads the shown
+bar says "updating…", then "updated 2m ago". Where it was left in each space
+(its tab, each tab's selection and filter, for its folder) is kept in shared
+`github.spaces` under the space's id, written as it changes: opened in that
+space on the same folder (also after a restart), it comes back there; a space
+with nothing kept opens on what the window kept last. While open it reads the shown
 tab again every 3 s while a run, job or check moves and every minute when all
 is still; closed, it reads nothing. A workflow run by hand, a re-run (`R`,
 `A`, `e`) or a cancel (`X`) is read again after 1, 2, 3, 5 and 8 s, then

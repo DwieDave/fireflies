@@ -429,6 +429,7 @@ export default class GitHub extends View implements Host {
     if (this.wantForm) this.openForm(cx);
 
     if (Date.now() - this.beatAt >= BEAT) this.beat();
+    this.save(false);
 
     let redraw = false;
 
@@ -500,11 +501,11 @@ export default class GitHub extends View implements Host {
     });
   }
 
-  save(): void {
+  save(all = true): void {
     const kept = { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() };
 
-    writeShared(setShared, STATE, kept);
-    saveCopy(this, kept);
+    if (all) writeShared(setShared, STATE, kept);
+    saveCopy(this, kept, all); // all false: the tick's, written where it changed (place.ts)
   }
 
   focusSelf(): void {
