@@ -159,6 +159,12 @@ bound to what hc offers. What it adds:
 | the server dies | the SSH channel closes; the app restarts it |
 | more than one phone | each its own channel and watches; writes keep the stale check |
 
+## Terminals: mosh, not this channel
+
+Terminal panes go over mosh (docs/ios-app.md row k: screen state over UDP,
+roaming, predicted echo); this channel carries the mods, the model and
+scrollback (`fireflies read`), and stays on SSH.
+
 ## Verdict
 
 b), as a new `fireflies serve`, holds up: git opens in 1–2 RTT with batching (≈ 0.1–0.3 s on cellular
