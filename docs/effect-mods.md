@@ -356,7 +356,7 @@ mod's tsconfig naming the plugin for its options:
 ```
 
 Its severities in the editor follow the plugin options; the lint is the
-gate. For an installed mod (no node_modules), `herdr-app types` would have
+gate. For an installed mod (no node_modules), `fireflies types` would have
 to write `effect`'s .d.ts and the kit beside gpui-kit.d.ts: mod-types' to
 settle with this contract.
 
@@ -367,13 +367,13 @@ runs in the same engine: the app serves it `effect`, `effect/http` and the
 `@fireflies/*` libraries by name, as it serves the shipped mods. What the
 repository needs around that:
 
-- **Typings and test code for the libraries.** `herdr-app types <dir>` (what
+- **Typings and test code for the libraries.** `fireflies types <dir>` (what
   such a repository already runs after each Fireflies update) also writes
   every `@fireflies/*` library, as that build serves it, into
   `<dir>/node_modules/@fireflies/<name>/` (sources, package.json, .d.ts; src/mods.rs
   `write_library_types`). They are TypeScript, so the same files are the
   types tsc and oxlint read and the code bun tests run. fireflies-k8s runs
-  `herdr-app types types`, so its tsconfig maps them:
+  `fireflies types types`, so its tsconfig maps them:
 
   ```jsonc
   "paths": { "@fireflies/*": ["./types/node_modules/@fireflies/*"] },
@@ -415,8 +415,8 @@ repository needs around that:
   }
   ```
 
-  Not a top-level `await import(…)`: `herdr-app check` hangs on one. Seen:
-  with this entry `herdr-app check` passes on an app from before the
+  Not a top-level `await import(…)`: `fireflies check` hangs on one. Seen:
+  with this entry `fireflies check` passes on an app from before the
   libraries (integrate's build of 2026-11-16 18:15) and on this branch's;
   the sentence itself wasn't seen in a window. The engine allows `import()`
   on purpose (gpui-shell's sandbox, §18.2).

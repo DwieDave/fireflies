@@ -20,15 +20,23 @@ first start and leaves a link at the old name, so scripts, older tools and
 the Herdr iOS app that name the old folder reach the same files. Write new
 paths with the new name.
 
-## Two programs
+## Two programs, one command
 
-- **`herdr-app`**, the window: spaces, tabs, layouts, panels.
-- **herdr-core (`hc`)**, which runs every terminal and agent. They keep
-  running when the window closes or updates. You can use `hc` yourself:
-  start a terminal, read its screen, send it text, wait for an agent
-  (`hc --help`). The Fireflies app is one client of it.
+- **The window**: spaces, tabs, layouts, panels.
+- **herdr-core**, which runs every terminal and agent. They keep
+  running when the window closes or updates. You can use it yourself:
+  start a terminal, read its screen, send it text, wait for an agent.
+  The Fireflies app is one client of it.
 
-`herdr-app` controls this app; `hc` controls herdr-core.
+`fireflies` (or `ff`) drives both. The window's commands (`do`, `status`,
+`commands`, `feedback`, `shot`, `check`, `types`, `--skill`, `--version`)
+answer at the top; every other command goes to herdr-core exactly as `hc`
+would run it (`fireflies run …`, `fireflies send …`, `fireflies ls` lists the
+core's terminals). `fireflies app <command>` is the window's side alone
+(`fireflies app ls` lists its spaces and tabs), `fireflies core <args>` the
+core's (`fireflies core --skill`). `fireflies --help` lists both.
+`herdr-app`, `hc` and `herdr-core` still work as before, kept for older
+scripts and the Herdr iOS app, which runs `hc` over ssh; write `fireflies`.
 
 ## What you can and can't do
 
@@ -60,7 +68,7 @@ commands. They're rewritten on every start to match this version.
 - Edits apply at once. If a file is invalid, the app keeps the last good
   version and writes why to `<name>.error` (`layout.error`, `keys.error`,
   `settings.error`, `programs.error`). Check after every edit.
-- `herdr-app check <mod folder>` loads a mod once and checks its initial
+- `fireflies check <mod folder>` loads a mod once and checks its initial
   description and eager native elements, including virtual lists and motion.
   It does not lay out the mod or run deferred rows, nested renders, or later
   async states. Never call a mod done without a passing check; also try it
@@ -71,7 +79,7 @@ commands. They're rewritten on every start to match this version.
 
 ## Seeing the window
 
-`herdr-app shot [file.png]` saves the current window frame as a PNG
+`fireflies shot [file.png]` saves the current window frame as a PNG
 and prints its absolute path (default: `herdr-shot.png` in your current
 folder). Use it when debugging mod UIs: inspect spacing, colors, terminal
 images, overlays, popups and floats. It captures the app, not the desktop,
@@ -97,7 +105,7 @@ first frame or during GPU recovery it reports an error instead of a PNG.
 Shared state is saved atomically in the background, with the latest change winning.
 If `shared.json` is invalid, Fireflies logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
-`herdr-app check` uses empty shared state in memory and leaves this file untouched.
+`fireflies check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
 runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
 `data/github/cache.json`: it shows that at once when opened (from the
@@ -494,7 +502,7 @@ In the expanded Spaces sidebar, drag a space to reorder it within its machine;
 the highlighted line shows where it will land.
 
 - A **space** is a place to work, on one machine: this one, or another
-  from `hc machine ls` (`spaces()[i].machine`). Fireflies leaves out machines
+  from `fireflies machine ls` (`spaces()[i].machine`). Fireflies leaves out machines
   added with `--temp` (an agent's short-lived sandbox): no spaces, not in
   `machines()`, and mods listing machines skip `temporary`. Names work as in Fireflies:
   a space nobody named is called after where its first terminal is now
@@ -559,7 +567,7 @@ the highlighted line shows where it will land.
 - Every terminal is a core terminal. Fireflies labels the ones it starts with
   `herdr.space=<id>` and `herdr.tab=<id>`. **A terminal with those
   labels shows up there**, even one you start yourself:
-  `hc run --keep --label herdr.space=<id> --label herdr.tab=<id> -- claude`.
+  `fireflies run --keep --label herdr.space=<id> --label herdr.tab=<id> -- claude`.
   Labels use ids local to that machine; remote ids shown by the app have a
   `<machine>/` prefix (strip it when writing labels on that machine). Adoption
   also enables core keep; `terminal.park` removes the pane and disables keep.
@@ -574,7 +582,7 @@ the highlighted line shows where it will land.
   `working`, `blocked`, `idle`, or `done` = finished while the user wasn't
   looking (it becomes `idle` once they look). A space's and a tab's
   status is the most urgent of its agents: blocked > done > working > idle.
-- **Sub-agents** are terminals an agent started with `hc run`: the core
+- **Sub-agents** are terminals an agent started with `fireflies run` (`hc run`): the core
   records the starter as `parent` (see `terminals()`). Parent addresses use
   the app's machine names, or a bare ID for this computer, when they can be
   mapped; otherwise they stay as the core reported them. They belong to their
@@ -622,7 +630,7 @@ the highlighted line shows where it will land.
   restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns; a right-click on a run opens the same actions as a menu at the pointer, `m` under the cursor's run), and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
-  that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
+  that way shows there too: `fireflies run --bg --no-parent --cwd ~/app --label
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Processes and ports** (Nocturne's manager, the `procs` mod): the
   tab strip's tree mark beside ▶, with `:n` in teal when processes in this
@@ -1473,8 +1481,8 @@ look. The theme picker overrides any layout. To change a shipped layout's
 look beyond that, or its structure/code, clone it and edit the clone:
 
 ```sh
-herdr-app do layout.clone '{"name":"main","as":"my-layout"}'
-herdr-app do mod.clone '{"name":"files","as":"my-files"}'
+fireflies do layout.clone '{"name":"main","as":"my-layout"}'
+fireflies do mod.clone '{"name":"files","as":"my-files"}'
 ```
 
 The default clone name is `<name>-copy`; an existing name is refused.
@@ -1654,7 +1662,7 @@ layout's look and a block can differ:
   "terminal_padding": [10, 6], "terminal_opacity": 1, ... }
 ```
 
-- `theme`: `moonfly` (Nocturne's), `graphite` (herdr-app's default look),
+- `theme`: `moonfly` (Nocturne's), `graphite` (Herdr's default look),
   `paper` (light), or the name of a file in `themes/`; `ink`, `moss` and
   `atom-one-dark` still load when named but the pickers (Settings, the
   palette, the menu) no longer offer them; or one for each appearance:
@@ -1690,7 +1698,7 @@ layout's look and a block can differ:
 - The look beyond colors follows the layout too (this fork): where the
   layout's `scrim` is dithered (`"scrim": {"dither": true}`, as nocturne's)
   the mods draw Nocturne's 1-bit checker fills; anywhere else (`main`,
-  herdr-app's default look, or your own layout) the same fills are flat.
+  Herdr's default look, or your own layout) the same fills are flat.
   `"corners": "square"` squares every corner. Writing a mod: import
   `@fireflies/layout-look` (`flat(color, cell)` first in a dither
   function, `dithered()`, `radius(n)`). The windows open in any layout with
@@ -1923,7 +1931,7 @@ pane at ~ (`nocturne.dock-files`), each pinned; the palette has the same rows. T
 toast on show Nocturne's update note ("Updated to …", bottom right), which
 `nocturne.update-close` closes too. The note keeps a press on it to itself (a
 terminal under it doesn't start a selection) and its × closes it on the press. Scripts:
-`herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
+`fireflies do terminal.pin '{"terminal":"t7","pinned":true}'`.
 While the pointer is over the sky (open or folded) it carries a firefly's
 light: a small dithered diamond in the theme's ansi11 around a pixel + that
 trails it and lights the stars, haze and grass near it. Every 2.8 s it
@@ -1987,7 +1995,7 @@ runner's filter) cmd-k ? does it instead, shown as the bar's last entry.
 `<mod>.keys` shows or hides a pane's list by command (the palette's "… keys":
 file-tree, -markdown, -preview, -browser, -agents, -usage, -pip,
 -github, -scripts, and the editor's `editor.keys`). To show someone
-a key: `herdr-app do app.help`, then `herdr-app do nocturne.keys-filter.focus-sidebar`
+a key: `fireflies do app.help`, then `fireflies do nocturne.keys-filter.focus-sidebar`
 (the filter, `-` for spaces) or `nocturne.keys-open.sidebar` (unfolds that block:
 sidebar, tabstrip, header, parked, toasts, menus, panes).
 
@@ -2101,7 +2109,7 @@ folder on GitHub):
    recipe instead.
 4. A mod's `keys.json`: merge it into the person's. Add its sections and
    keys, and ask before replacing a key they already use.
-5. `herdr-app check` each mod; for a layout, then `layout.switch {name}`.
+5. `fireflies check` each mod; for a layout, then `layout.switch {name}`.
    The person's own layout stays as it was; `ctrl-shift-l` switches back,
    and deleting the files removes it.
 
@@ -2187,16 +2195,16 @@ shortcuts must then be added by hand.
 ## Commands
 
 The one way to change anything; keys, mods (`run(name, args)`), menus and
-you use the same list. `herdr-app commands` prints every one with its arguments
+you use the same list. `fireflies commands` prints every one with its arguments
 (which are required) and what it does. Unknown argument names are errors and list
 valid names; they never fall back to the current target. For example, closing a
-space uses `herdr-app do space.close --id <id> --confirmed true`, not `--space`.
+space uses `fireflies do space.close --id <id> --confirmed true`, not `--space`.
 Target IDs (`id`, `pane`, `space`, `terminal`) must be strings. Other non-null
 types are rejected before a current-target default applies; null means omitted.
 The main ones:
 
 - Spaces: `space.new {name?, folder?, tab?, argv?, task?, machine?, focus?}`
-  (machine: another machine from `hc machine ls`; omitted: the focused space's
+  (machine: another machine from `fireflies machine ls`; omitted: the focused space's
   machine for keys and clicks, this computer for scripts; `""`: this computer.
   The space lives there, its tabs and splits stay there, and `spaces()` gives
   each space's `machine`, null here. Without folder, its terminals start in
@@ -2569,7 +2577,7 @@ The main ones:
   Settings > Machines and the sidebar opens that card; it clears automatically
   after the administrator enables lingering. Older cores show no warning.
   does the same. A machine that needs a login shows
-  `hc machine login <name>` with Copy in Settings > Machines, its sidebar group,
+  `fireflies machine login <name>` with Copy in Settings > Machines, its sidebar group,
   the welcome screen and the failed New space toast. If a remote machine was rebuilt
   or replaced and a different core answers there, its sidebar offers Connect:
   explicitly forget the old identity and pair again with the same name and target.
@@ -2584,14 +2592,14 @@ command says what's missing.
 From a shell:
 
 ```sh
-herdr-app do tab.new --name "fix login" --argv '["claude"]' --task "look at the login bug"
-herdr-app do pane.split:right
-herdr-app ls          # spaces, their tabs and terminals (sub-agents under their parent)
-herdr-app status      # what's on screen: layout, focus, overlays, zoom, errors from files and mods
-herdr-app commands    # every command and its arguments
+fireflies do tab.new --name "fix login" --argv '["claude"]' --task "look at the login bug"
+fireflies do pane.split:right
+fireflies app ls      # spaces, their tabs and terminals (sub-agents under their parent)
+fireflies status      # what's on screen: layout, focus, overlays, zoom, errors from files and mods
+fireflies commands    # every command and its arguments
 ```
 
-`herdr-app do` prints what the command made (`{ "space", "tab",
+`fireflies do` prints what the command made (`{ "space", "tab",
 "terminal" }`, `{ "pane", "terminal" }`) or `{ "error": "..." }` and exits 1.
 
 ## The person: `settings.json`
@@ -2676,7 +2684,7 @@ list or a machine's rename first.
   macOS releases require Apple Silicon; Intel Macs must build from source.
   Keep signed macOS bundles unchanged: don't edit their Info.plist or
   re-sign them. On launch, an installed macOS bundle creates or repairs its
-  own `~/.local/bin/herdr-app` symlink, leaving personal files and other
+  own `~/.local/bin/fireflies`, `ff` and `herdr-app` symlinks, leaving personal files and other
   apps' links alone. Disk-image and translocated launches don't create it.
   Finder launches load the login shell's PATH, with the usual install
   folders as a fallback.
@@ -2880,7 +2888,7 @@ has 124 programs (agents, editors, runtimes, tools, databases, infra);
   (not files the app writes: `jsconfig.json`, `tsconfig.json`, `.d.ts`, hidden ones,
   `node_modules`). The old build's tasks and timers stop: a loop ends at its
   next `cx` use. A broken save keeps the old version running and shows in
-  `herdr-app status`; its top-level code has already run, so keep side effects
+  `fireflies status`; its top-level code has already run, so keep side effects
   on `globalThis` out of the module's top level.
 - A copy starts the first time it shows, then stays alive while its block is in
   the layout, shown or not (a hidden column, the other child of a stack, a pane
@@ -2932,12 +2940,12 @@ a view and shares `localStorage` with views of the same mod with null props.
 Return `"handled"` when done or `"pass"` to try the next matching mod.
 If all pass, a local terminal uses the usual opener target. A matched file
 from a remote terminal has no opener target. A load or handler error stops
-the click, shows a toast and appears in `herdr-app status`.
+the click, shows a toast and appears in `fireflies status`.
 
 ### Check before you finish
 
 ```sh
-herdr-app check ~/.config/fireflies/app/mods/<name>
+fireflies check ~/.config/fireflies/app/mods/<name>
 ```
 
 Loads and renders the mod's view if it has one. It checks link rules and
@@ -3019,7 +3027,7 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   `.js` file imports a `.ts` one the same way. Import types with
   `import type` (or `import { type X }`): a plain import of a type stays in
   the code and fails at load.
-- Nothing checks types at run time. Check them: `herdr-app types <mod folder>`
+- Nothing checks types at run time. Check them: `fireflies types <mod folder>`
   writes `gpui-kit.d.ts` there (every module, `herdr` included) and the app
   writes a strict `tsconfig.json` into a `main.ts` mod's folder (never over
   yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod folder
@@ -3027,7 +3035,7 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   `tsconfig.json` next to this file, rewritten on every start, covers those
   mods against `gpui-kit.d.ts` and `herdr.d.ts` here, so an editor's
   language server finds their modules too (yours in its place is kept). A
-  mod in a repository of its own does the same: run `herdr-app types .` in
+  mod in a repository of its own does the same: run `fireflies types .` in
   it after each Fireflies update and keep both files out of git.
 - `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
   parsed from `exec` or a file are `unknown`: another mod or an older version
@@ -3119,7 +3127,7 @@ the source); a mod of yours may use it or not.
   `@fireflies/editor-route` (`openInEditor`: a file to the editor as a tab),
   `@fireflies/envrc` (a folder's direnv environment), `@fireflies/scratch`
   (the scratchpad's note), `@fireflies/toolground`, `@fireflies/usage-limits`.
-- A mod in a repository of its own: `herdr-app types <dir>` also writes the
+- A mod in a repository of its own: `fireflies types <dir>` also writes the
   `@fireflies/*` libraries into `<dir>/node_modules/@fireflies/` (types and
   test code); install `effect` from npm at the version the kit's
   package.json names as its peer. Keep the entry (`main.ts`) free of these
@@ -3334,18 +3342,19 @@ Other built-ins: `localStorage` (per mod and props, shared by its copies with th
 opened again with the same props, in any key order, after a restart too, finds what it kept), `console.log`, `fetch`,
 `import * as fs from "fs/promises"` (read in home, write under `~/.config/fireflies/app`).
 
-## herdr-core (`hc`)
+## herdr-core (`fireflies`, also `hc`)
 
-`herdr-app --skill` prints the manual for driving this window;
-`hc --skill` prints the manual for running and coordinating programs and agents,
+`fireflies --skill` prints the manual for driving this window;
+`fireflies core --skill` (`hc --skill`) prints the manual for running and coordinating programs and agents,
 including a small herdr-core skill you can install with the user's permission.
-`herdr-app commands` lists app commands and arguments without needing an open window.
+`fireflies commands` lists app commands and arguments without needing an open window.
 
-- `hc ls --json`, `hc read t3 --lines 50`, `hc run --json --cwd <dir> --label k=v -- <cmd>`,
-  `hc label t3 k=v`, `hc send t3 "text"`, `hc wait t3`. `hc --help` for all.
-- Other machines: `hc machine ls`; `hc run --on <machine> ...` starts a
-  terminal there (`vps/t7`), `hc exec --on <machine> git status` runs one
-  command there and prints exactly its output.
+- `fireflies ls --json`, `fireflies read t3 --lines 50`, `fireflies run --json --cwd <dir> --label k=v -- <cmd>`,
+  `fireflies label t3 k=v`, `fireflies send t3 "text"`, `fireflies wait t3`. `fireflies --help` for all.
+- Other machines: `fireflies machine ls`; `fireflies run --on <machine> ...` starts a
+  terminal there (`vps/t7`), `fireflies exec --on <machine> git status` runs one
+  command there and prints exactly its output. `fireflies` is this machine's
+  command: on the other machine the core is `hc`.
 
 ## Keep in mind
 

@@ -419,7 +419,7 @@ those files or the generated guide. The app rewrites them on start.
 After every mod change:
 
 ```sh
-fireflies check ~/.config/herdr-app/mods/<name>
+fireflies check ~/.config/fireflies/app/mods/<name>
 fireflies status
 fireflies shot /tmp/mod.png   # then look at the picture
 ```

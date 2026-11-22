@@ -10,11 +10,20 @@ describe("CLI examples", () => {
   test("checks examples under either name, fireflies or herdr-app", () => {
     const fireflies: Reference = { ...ref, help: ref.help.replaceAll("herdr-app", "fireflies") };
     for (const r of [ref, fireflies]) {
-      expect(checkExample("fireflies ls && herdr-app status", r)).toEqual([]);
+      expect(checkExample("fireflies app ls && herdr-app status", r)).toEqual([]);
       expect(checkExample("fireflies do pane.split --direction right", r)).toEqual([]);
-      expect(checkExample("fireflies wat", r)).toEqual(["unknown command or flag: wat"]);
+      expect(checkExample("ff do pane.split --direction right", r)).toEqual([]);
+      expect(checkExample("fireflies app wat", r)).toEqual(["unknown command or flag: wat"]);
+      expect(checkExample("fireflies app ls --wat", r)).toHaveLength(1);
       expect(checkExample("/usr/local/bin/fireflies do pane.wat", r)).toHaveLength(1);
     }
+  });
+
+  test("fireflies hands what the window doesn't have to herdr-core, unchecked; herdr-app doesn't", () => {
+    for (const source of ["fireflies ls --json", "fireflies run --bg --name web bun dev", `ff send t3 "text"`, "fireflies core --skill", "fireflies wat --x"]) {
+      expect(checkExample(source, ref)).toEqual([]);
+    }
+    expect(checkExample("herdr-app run --bg", ref)).toEqual(["unknown command or flag: run"]);
   });
 
   test("validates commands and named arguments without executing examples", () => {
