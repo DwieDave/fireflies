@@ -9,6 +9,7 @@
 // isn't drawn (the main view has the keys, a narrow window showing the main
 // view, a row scrolled out of sight): the menu stands in the middle.
 
+import { Array as Arr, Option } from "effect";
 import type { Rect } from "@fireflies/menu-place";
 import type { ListContext } from "./keys.ts";
 import type { Panel } from "./state.ts";
@@ -37,7 +38,7 @@ const LIST_TOP = 7;
 function column(v: GitView, p: Panel): { readonly x: number; readonly above: readonly Panel[] } | null {
   const w = v.size.width;
 
-  if (v.show) return p === "files" && (w >= NARROW || v.focus !== "main") ? { x: SIDE_PAD, above: [] } : null;
+  if (v.show !== null) return p === "files" && (w >= NARROW || v.focus !== "main") ? { x: SIDE_PAD, above: [] } : null;
 
   if (w < NARROW) return v.focus === "main" ? null : { x: SIDE_PAD, above: PANELS.slice(0, PANELS.indexOf(p)) };
 
@@ -46,7 +47,7 @@ function column(v: GitView, p: Panel): { readonly x: number; readonly above: rea
   if (v.mode === "half") {
     if (v.panel === p) return { x: SIDE_PAD + (v.railW ?? Math.round(Math.max(230, Math.min(300, w * 0.22)))) + SPLITTER, above: [] };
 
-    const rail = PANELS.filter((q) => q !== v.panel);
+    const rail = Arr.filter(PANELS, (q) => q !== v.panel);
 
     return { x: SIDE_PAD, above: rail.slice(0, rail.indexOf(p)) };
   }
@@ -56,15 +57,15 @@ function column(v: GitView, p: Panel): { readonly x: number; readonly above: rea
 
 /** The selected row of list `ctx` (the row a key acts on), while it's drawn. */
 export function rowAnchor(v: GitView, ctx: ListContext): Rect | null {
-  const p = PANELS.find((q) => v.ctxOf(q) === ctx);
+  const p = Option.getOrUndefined(Arr.findFirst(PANELS, (q) => v.ctxOf(q) === ctx));
 
-  if (!p || v.focus !== "side") return null;
+  if (p === undefined || v.focus !== "side") return null;
 
   const col = column(v, p);
   const box = v.panelPx[p];
   const rowH = v.rowPx[ctx];
 
-  if (!col || !box || !rowH) return null;
+  if (col === null || box === undefined || rowH === undefined || rowH === 0) return null;
 
   let y = BODY_TOP + COLUMN_TOP;
 

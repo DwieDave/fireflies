@@ -3,6 +3,7 @@
 // commit, the mouse on a row (press, double-click, right-click, wheel), and the
 // splitters between columns.
 
+import { Array as Arr, Match, Option, String as Str } from "effect";
 import { div } from "gpui-kit";
 import type { Context, MouseButtonEvent, ScrollWheelEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -21,6 +22,9 @@ import { contextMenu } from "./bars.ts";
 import { loadMain, readMore } from "./content.ts";
 import { edge } from "@fireflies/tones";
 
+/** Whether a list is filtered (a filter typed for it). */
+const filtered = (v: GitView, ctx: ListContext): boolean => Str.isNonEmpty(v.filters[ctx] ?? "");
+
 /** A list body: only the rows in view are drawn (lazygit scrolls by row). */
 export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, draw: DrawRow, active: boolean) {
   const rows = v.items(ctx);
@@ -29,7 +33,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   // without a resize (Commits going wide), so a count kept from the last
   // resize would leave the bottom of the list empty.
   const px = v.listPx[ctx];
-  const vis = px ? rowWindow(n, 0, px, rowH).vis : Math.max(1, v.vis[ctx] ?? 12);
+  const vis = px !== undefined && px > 0 ? rowWindow(n, 0, px, rowH).vis : Math.max(1, v.vis[ctx] ?? 12);
 
   v.vis[ctx] = vis;
   v.rowPx[ctx] = rowH;
@@ -37,7 +41,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   let top = v.top[ctx] ?? 0;
   const sel = Math.min(v.sel[ctx] ?? 0, Math.max(0, n - 1));
 
-  if (v.follow[ctx]) {
+  if (v.follow[ctx] === true) {
     if (sel < top) top = sel;
 
     if (sel >= top + vis) top = sel - vis + 1;
@@ -49,11 +53,11 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   v.top[ctx] = top;
 
   // The end of a history cut at its limit is in view: read further.
-  if (n && top + vis >= n - 1 && v.cut(ctx) && (ctx === "commits" || ctx === "subCommits")) readMore(v, ctx);
+  if (n > 0 && top + vis >= n - 1 && v.cut(ctx) && (ctx === "commits" || ctx === "subCommits")) readMore(v, ctx);
 
   const range = v.range?.ctx === ctx ? [Math.min(v.range.anchor, sel), Math.max(v.range.anchor, sel)] as const : null;
 
-  const shown = rows.slice(top, top + vis + 1).map((r, k) => {
+  const shown = Arr.map(Arr.take(Arr.drop(rows, top), vis + 1), (r, k) => {
     const i = top + k, isSel = i === sel, inRange = range !== null && rangeHolds(rows, i, range);
 
     const row = div().id(`${ctx}-row-${i}`).relative().h(rowH).flex_none().w_full()
@@ -80,19 +84,19 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
       }
     })
     .on_scroll_wheel((e, cx) => wheelList(v, ctx, e, rowH, n, cx))
-    .child(v_flex().size_full().children(shown).children(tail ? [tail] : []));
+    .child(v_flex().size_full().children(shown).children(tail === null ? [] : [tail]));
 
   const scrolled = n > vis
     ? body.child(div().absolute().right(0).w(2).top(`${Math.round((top / n) * 100)}%`).h(`${Math.max(4, Math.round((vis / n) * 100))}%`).bg(active ? `${t.accent}aa` : `${t.muted}66`))
     : body;
 
-  return n ? scrolled : scrolled.child(div().absolute().inset_0().child(empty(t, emptyText(v, ctx), null, { small: true })));
+  return n > 0 ? scrolled : scrolled.child(div().absolute().inset_0().child(empty(t, emptyText(v, ctx), null, { small: true })));
 }
 
 /** Whether a list holds a history cut at its limit (it goes further back).
  *  Not while filtered: the end of a filtered list isn't the history's. */
 export function historyCut(v: GitView, ctx: ListContext) {
-  if (v.filters[ctx]) return false;
+  if (filtered(v, ctx)) return false;
 
   if (ctx === "commits") return v.data.commits.length >= v.commitLimit;
 
@@ -113,7 +117,7 @@ export function listTail(v: GitView, t: Theme, ctx: ListContext, last: number, r
 
   const g = graphFor(v, ctx), row = g?.rows[last];
 
-  if (!g || !row || !row.after.some((c) => c != null)) return null;
+  if (g === null || row === undefined || !Arr.some(row.after, (c) => c !== null && c !== undefined)) return null;
 
   const wide = rowH === WIDE_ROW;
   const h = Math.max(rowH, v.listPx[ctx] ?? 600);
@@ -124,11 +128,15 @@ export function listTail(v: GitView, t: Theme, ctx: ListContext, last: number, r
 }
 
 export function emptyText(v: GitView, ctx: ListContext) {
-  if (v.filters[ctx]) return `Nothing matches "${v.filters[ctx] ?? ""}"`;
+  if (filtered(v, ctx)) return `Nothing matches "${v.filters[ctx] ?? ""}"`;
 
   switch (ctx) {
     case "files": return "Nothing changed: the work tree is clean";
-    case "review": return v.review.state === "loading" ? "Reading changes…" : v.review.state === "error" ? v.review.error : `Nothing changed (${v.review.scopeName()})`;
+    case "review": return Match.value(v.review.state).pipe(
+      Match.when("loading", () => "Reading changes…"),
+      Match.when("error", () => v.review.error),
+      Match.orElse(() => `Nothing changed (${v.review.scopeName()})`),
+    );
     case "branches": return "No branches";
     case "remotes": return "No remotes: n adds one";
     case "tags": return "No tags";
@@ -151,7 +159,7 @@ export function wheelList(v: GitView, ctx: ListContext, e: ScrollWheelEvent, row
 
   const steps = Math.trunc(v.wheelAcc);
 
-  if (!steps) return;
+  if (steps === 0) return;
 
   v.wheelAcc -= steps;
 
@@ -162,7 +170,7 @@ export function wheelList(v: GitView, ctx: ListContext, e: ScrollWheelEvent, row
 }
 
 export function rowPress(v: GitView, ctx: ListContext, i: number, e: MouseButtonEvent, cx: Context) {
-  const p = PANELS.find((x) => v.ctxOf(x) === ctx) ?? v.panel;
+  const p = Option.getOrElse(Arr.findFirst(PANELS, (x) => v.ctxOf(x) === ctx), () => v.panel);
   const was = v.panel === p && v.focus === "side" && (v.sel[ctx] ?? 0) === i;
 
   v.handle?.focus();
@@ -174,7 +182,7 @@ export function rowPress(v: GitView, ctx: ListContext, i: number, e: MouseButton
   }
 
   if (e.modifiers.shift) {
-    if (!v.range) v.range = { ctx, anchor: v.sel[ctx] ?? 0 };
+    if (v.range === null) v.range = { ctx, anchor: v.sel[ctx] ?? 0 };
   } else if (!was) v.range = null;
 
   v.sel[ctx] = i;
@@ -184,14 +192,14 @@ export function rowPress(v: GitView, ctx: ListContext, i: number, e: MouseButton
   if (e.click_count === 2) {
     const b = lookup(ctx, "enter");
 
-    if (b) act(v, b.action, cx);
+    if (b !== null) act(v, b.action, cx);
   }
 
   cx.notify();
 }
 
 export function rowMenu(v: GitView, ctx: ListContext, i: number, cx: Context) {
-  const p = PANELS.find((x) => v.ctxOf(x) === ctx) ?? v.panel;
+  const p = Option.getOrElse(Arr.findFirst(PANELS, (x) => v.ctxOf(x) === ctx), () => v.panel);
 
   v.panel = p;
   v.focus = "side";

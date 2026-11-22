@@ -2,6 +2,7 @@
 // (filtered), which record a row is (each has a field none of the others
 // has), what the filter matches it by, and its identity for busy marks.
 
+import { Array as Arr, Order, String as Str } from "effect";
 import type { CommitFile } from "./git.ts";
 import type { Branch, Commit, ReflogEntry, Remote, RemoteBranch, StashEntry, StatusFile, Tag, TreeRow } from "./parse.ts";
 import type { ListContext } from "./keys.ts";
@@ -75,13 +76,13 @@ export function words(x: Item): (string | null)[] {
 
 /** A list row's identity for busy marks: the same thing in any list (a
  *  branch, a commit, a file), so a row keeps its mark through a reload. */
-export function rowKey(ctx: ListContext, x: Item | null) {
-  if (!x) return null;
+export function rowKey(ctx: ListContext, x: Item | null): string | null {
+  if (x === null) return null;
 
   if (ctx === "commits" || ctx === "subCommits" || ctx === "reflog") {
     const h = hashOf(x);
 
-    return h ? `commit:${h}` : null;
+    return h === null || Str.isEmpty(h) ? null : `commit:${h}`;
   }
 
   if (ctx === "branches") return `branch:${nameOf(x) ?? ""}`;
@@ -107,7 +108,7 @@ export function rowKey(ctx: ListContext, x: Item | null) {
 const trees = new WeakMap<readonly object[], { readonly key: string; readonly rows: readonly Item[] }>();
 
 function treeOf<F extends { readonly path: string }>(v: GitView, files: readonly F[], build: () => readonly Item[]): readonly Item[] {
-  const key = `${v.tree}|${v.statusFilter ?? ""}|${[...v.collapsed].join("\0")}`;
+  const key = `${v.tree}|${v.statusFilter ?? ""}|${Arr.join(Arr.fromIterable(v.collapsed), "\0")}`;
   const known = trees.get(files);
 
   if (known?.key === key) return known.rows;
@@ -119,6 +120,17 @@ function treeOf<F extends { readonly path: string }>(v: GitView, files: readonly
   return rows;
 }
 
+/** Branches by name, the checked-out one first. */
+interface Named {
+  readonly head: boolean;
+  readonly name: string;
+}
+
+const byHeadThenName: Order.Order<Named> = Order.combine(
+  Order.mapInput(Order.Boolean, (b: Named) => !b.head),
+  Order.mapInput((a: string, b: string) => Str.localeCompare(b)(a), (b: Named) => b.name),
+);
+
 /** The rows a list context shows (filtered). */
 export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
   const d = v.data;
@@ -127,14 +139,14 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
     switch (ctx) {
       case "status": return [{ kind: "status" }];
       case "files": return treeOf(v, d.status?.files ?? NO_FILES, () => {
-        const files = (d.status?.files ?? []).filter((f) => !v.statusFilter || (v.statusFilter === "staged" ? f.staged : f.unstaged));
+        const files = Arr.filter(d.status?.files ?? [], (f) => v.statusFilter === null || f[v.statusFilter]);
 
-        return v.tree ? fileTree(files, v.collapsed) : files.map((f) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
+        return v.tree ? fileTree(files, v.collapsed) : Arr.map(files, (f) => ({ kind: "file", path: f.path, name: f.path, depth: 0, file: f }));
       });
 
       case "review": return v.review.shown();
       case "worktrees": return d.worktrees;
-      case "branches": return v.branchSort === "name" ? [...d.branches].sort((a, b) => (Number(b.head) - Number(a.head)) || a.name.localeCompare(b.name)) : d.branches;
+      case "branches": return v.branchSort === "name" ? Arr.sort(d.branches, byHeadThenName) : d.branches;
       case "remotes": return d.remotes;
       case "tags": return d.tags;
       case "commits": return d.commits;
@@ -156,11 +168,11 @@ export function listItems(v: GitView, ctx: ListContext): readonly Item[] {
     }
   })();
 
-  const q = (v.filters[ctx] ?? "").toLowerCase();
+  const q = Str.toLowerCase(v.filters[ctx] ?? "");
 
-  if (!q) return list;
+  if (Str.isEmpty(q)) return list;
 
-  return list.filter((x) => words(x).some((s) => s && s.toLowerCase().includes(q)));
+  return Arr.filter(list, (x) => Arr.some(words(x), (s) => s !== null && Str.includes(q)(Str.toLowerCase(s))));
 }
 
 /** Whether a range selection [a, b] highlights row `i`: it holds the row,
