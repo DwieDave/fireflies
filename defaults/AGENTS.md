@@ -150,7 +150,8 @@ field names like `priority:P1`, `sprint:@current`, `estimate:>2`, words).
 `h j k l` move, `m` or space carries a card (`hjkl`, `enter` drops, `esc` puts
 it back), `e` edits fields, `a` adds a draft, `i` makes a draft an issue,
 `x` archives, `enter` docks the card's detail, `o` opens it on GitHub, `-`
-folds a column, `z` a swimlane, `w` sets a column's limit. Edits show at once
+folds a column, `z` a swimlane, `w` sets a column's limit; a right-click on a
+card selects it and opens those actions as a menu at the pointer. Edits show at once
 and roll back if GitHub refuses them. GitHub's API keeps no column limits or
 hidden columns, so limits and folds are Fireflies', per project, in shared state
 `github.boards`. Reading needs gh's `read:project` scope and editing

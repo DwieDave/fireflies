@@ -60,7 +60,7 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 function makeApp() {
   return {
     repo: { owner: "DwieDave", name: "fireflies", full: "DwieDave/fireflies", host: "github.com", root: "/src", on: null, parent: "herdrdev/herdr-app" },
-    note: null as any, next: Infinity, asked: null as any, opened: null as any,
+    note: null as any, next: Infinity, asked: null as any, opened: null as any, picker: null as any, pressAt: (e: any) => e.position,
     // A run on the window: on the mod's runtime, its end awaited by settle() (a failure is the run's to show, as the window does).
     run(effect: any) { work.push(runOn(Effect.ignore(effect), null)); },
     now: () => Date.now(),
@@ -358,4 +358,22 @@ test("what's cached comes back on the next opening, edits on their way don't", a
   expect(again.board().items.length).toBe(15);
   expect(again.list.projects.length).toBe(4);
   expect(() => drawn(again)).not.toThrow();
+});
+
+test("a right-click on a card selects it and opens its actions at the press; a row does what its key does", async () => {
+  const { tab, app } = await open();
+  const { cardMenu } = await import("../defaults/mods/github/card-menu.ts");
+  const lay = tab.lay();
+  const item = lay.columns.flatMap((c: any) => c.items)[0];
+  cardMenu(tab, lay, 0, item.id, { position: { x: 40, y: 60 } }, cx);
+  expect(tab.sel).toBe(item.id);
+  expect(app.picker.near).toEqual({ x: 40, y: 60 });
+  const subs = app.picker.rows.map((r: any) => r.sub);
+  expect(subs).toEqual(item.content.kind === "draft" ? ["enter", "e", "m", "i", "o", "x"] : ["enter", "e", "m", "o", "x"]);
+  app.picker.rows.find((r: any) => r.sub === "x").go(cx);
+  expect(app.asked.text).toContain("Archive");
+  // A right-click on a lane's title or a pad opens nothing.
+  app.picker = null;
+  cardMenu(tab, lay, 0, "pad-x", { position: { x: 1, y: 1 } }, cx);
+  expect(app.picker).toBeNull();
 });
