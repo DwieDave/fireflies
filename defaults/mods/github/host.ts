@@ -53,6 +53,8 @@ export interface Host {
   /** When to read GitHub again (ms since the epoch). */
   next: number;
   focusSelf(): void;
+  /** The time now (ms): the one clock the window's parts read. */
+  now(): number;
   /** Work in the background: `fn` gets the task's own cx, good across its awaits (the one a
    *  handler was given is refused once that handler has returned). */
   spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;

@@ -47,15 +47,12 @@ import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import type { Ran, Repo } from "./gh.ts";
-import { repoOf, viewRepo } from "./gh.ts";
+import { type Ran, type Repo, repoOf, viewRepo } from "./gh.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
-import type { Doc, Entry } from "./cache.ts";
-import { lookup, repoKey } from "./cache.ts";
+import { type Doc, type Entry, lookup, repoKey } from "./cache.ts";
 import * as store from "./store.ts";
-import type { Axis, Hint, Note } from "./kit.ts";
-import { hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
+import { type Axis, type Hint, type Note, hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Host, Picker, ReadOptions, ResizeOptions, RunFilter } from "./host.ts";
 import Prs from "./prs.ts";
@@ -510,6 +507,10 @@ export default class GitHub extends View implements Host {
 
   focusSelf(): void {
     this.handle?.focus();
+  }
+
+  now(): number {
+    return Date.now();
   }
 
   override async close(): Promise<void> {

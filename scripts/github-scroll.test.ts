@@ -50,7 +50,7 @@ const { default: Actions, graphHeight } = await import("../defaults/mods/github/
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: GitHub } = await import("../defaults/mods/github/main.ts");
 
-const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {} });
+const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {}, now: () => 0 });
 const last = (h: Handle) => h.calls[h.calls.length - 1]?.[0];
 
 beforeEach(() => { zoomNow = 1; });
