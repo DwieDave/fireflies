@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fireflies iOS: flow map</title>
+<link rel="stylesheet" href="phone.css">
+<style>
+  .map { max-width: 1240px; margin: 0 auto; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: "Departure Mono", monospace; font-size: 13px; fill: var(--fg); }
+  svg .s { font-size: 11px; fill: var(--muted); }
+  svg .node rect { fill: var(--bg); stroke: var(--edge); }
+  svg .node.home rect { stroke: var(--accent); }
+  svg .node.term rect { stroke: var(--working); }
+  svg .node.ext rect { stroke: var(--purple); stroke-dasharray: 3 3; }
+  svg path { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+  svg path.cmd { stroke: var(--purple); stroke-dasharray: 4 3; }
+  svg path.back { stroke: var(--dim); stroke-dasharray: 2 3; }
+  .legend { display: flex; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin: 16px auto 0; max-width: 1240px; }
+  .legend i { display: inline-block; width: 28px; height: 0; border-top: 1px solid var(--muted); vertical-align: middle; margin-right: 8px; }
+</style>
+</head>
+<body>
+<header class="page-head" style="max-width:1240px">
+  <h1>Concept A · flow map</h1>
+  <p>Which screen leads where. Home is the sky; everything else is a sheet stacked over it and closes with a swipe down (dotted lines back). Mods lead into each other by command, as on the desktop (purple).</p>
+</header>
+<div class="map">
+<svg viewBox="0 0 1240 640" role="img" aria-label="Flow map of concept A">
+  <defs><marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L8 4 L0 8" style="fill:var(--muted);stroke:none"/></marker>
+  <marker id="p" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L8 4 L0 8" style="fill:var(--purple);stroke:none"/></marker></defs>
+
+  <!-- entry points -->
+  <g class="node"><rect x="20" y="40" width="190" height="56"/><text x="34" y="64">lock-screen alert</text><text class="s" x="34" y="84">tap · long press: reply</text></g>
+  <g class="node"><rect x="20" y="300" width="190" height="56"/><text x="34" y="324">first run</text><text class="s" x="34" y="344">empty sky · add a machine</text></g>
+
+  <!-- home -->
+  <g class="node home"><rect x="290" y="200" width="210" height="96"/><text x="306" y="226">home · the sky</text><text class="s" x="306" y="248">fireflies by need</text><text class="s" x="306" y="266">machine chips filter</text><text class="s" x="306" y="284">bell · shield · grabber</text></g>
+
+  <!-- sheets from home -->
+  <g class="node"><rect x="580" y="40" width="190" height="56"/><text x="594" y="64">alerts</text><text class="s" x="594" y="84">asks · done · ci</text></g>
+  <g class="node"><rect x="580" y="140" width="190" height="56"/><text x="594" y="164">hosts · tunnel</text><text class="s" x="594" y="184">roads · on demand</text></g>
+  <g class="node"><rect x="580" y="300" width="190" height="56"/><text x="594" y="324">spaces</text><text class="s" x="594" y="344">grabber, pulled up</text></g>
+  <g class="node"><rect x="580" y="420" width="190" height="56"/><text x="594" y="444">pane map</text><text class="s" x="594" y="464">a space's tabs, to scale</text></g>
+
+  <!-- panes -->
+  <g class="node term"><rect x="860" y="200" width="190" height="56"/><text x="874" y="224">terminal pane</text><text class="s" x="874" y="244">row · pad · tray</text></g>
+  <g class="node"><rect x="860" y="300" width="190" height="56"/><text x="874" y="324">web pane</text><text class="s" x="874" y="344">tunnel · own cookies</text></g>
+  <g class="node"><rect x="860" y="420" width="190" height="56"/><text x="874" y="444">mod sheet</text><text class="s" x="874" y="464">git · github · files …</text></g>
+  <g class="node"><rect x="860" y="540" width="170" height="56"/><text x="874" y="564">databases</text><text class="s" x="874" y="584">rows as cards</text></g>
+  <g class="node ext"><rect x="1080" y="420" width="140" height="56"/><text x="1094" y="444">k8s</text><text class="s" x="1094" y="464">optional mod</text></g>
+
+  <!-- arrows -->
+  <path d="M210 68 C 520 68 700 110 860 222" marker-end="url(#a)"/>
+  <path d="M210 328 C 240 328 250 260 290 252" marker-end="url(#a)"/>
+  <path d="M500 220 C 540 220 540 68 580 68" marker-end="url(#a)"/>
+  <path d="M500 236 C 540 236 540 168 580 168" marker-end="url(#a)"/>
+  <path d="M500 270 C 540 270 540 328 580 328" marker-end="url(#a)"/>
+  <path d="M500 228 C 640 228 760 228 860 228" marker-end="url(#a)"/>
+  <path d="M675 356 L 675 420" marker-end="url(#a)"/>
+  <path d="M770 440 C 820 440 820 236 860 236" marker-end="url(#a)"/>
+  <path d="M770 448 C 820 448 820 328 860 328" marker-end="url(#a)"/>
+  <path d="M770 456 L 860 448" marker-end="url(#a)"/>
+  <path d="M770 68 C 820 68 820 210 860 214" marker-end="url(#a)"/>
+  <path class="cmd" d="M1150 476 C 1150 560 1080 568 1030 568" marker-end="url(#p)"/>
+  <path class="cmd" d="M1150 420 C 1150 330 1100 330 1050 328" marker-end="url(#p)"/>
+  <path class="cmd" d="M1180 420 C 1180 230 1100 230 1050 230" marker-end="url(#p)"/>
+  <path class="cmd" d="M1050 448 L 1080 448" marker-end="url(#p)"/>
+  <path class="back" d="M580 184 C 400 184 330 330 210 340" marker-end="url(#a)"/>
+
+  <text class="s" x="296" y="370">offline banner · "why" → hosts</text>
+  <text class="s" x="1090" y="512">pod → shell · forward → db / web</text>
+  <text class="s" x="40" y="560">every sheet: swipe down = back one level</text>
+  <text class="s" x="40" y="580">a terminal: ⌄ on the bar, or the edge swipe</text>
+  <text class="s" x="40" y="400">hosts + → add a machine (dotted)</text>
+</svg>
+</div>
+<div class="legend"><span><i></i>tap, opens a sheet</span><span><i style="border-color:var(--purple);border-top-style:dashed"></i>a mod's command, hands work to another mod</span><span><i style="border-color:var(--dim);border-top-style:dotted"></i>back to an earlier step</span><span><span style="color:var(--working)">▭</span> keyboard screen</span></div>
+<script src="assets.js"></script>
+<script src="phone.js"></script>
+</body>
+</html>
