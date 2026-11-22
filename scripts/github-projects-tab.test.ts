@@ -63,6 +63,7 @@ function makeApp() {
     note: null as any, next: Infinity, asked: null as any, opened: null as any,
     // A run on the window: on the mod's runtime, its end awaited by settle() (a failure is the run's to show, as the window does).
     run(effect: any) { work.push(awaitRead(Effect.ignore(effect), null)); },
+    now: () => Date.now(),
     focusSelf() {}, refresh() {}, spawn(c: any, fn: Function) { c.spawn(async (c2: any) => { try { await fn(c2); } catch {} }); },
     ask(text: string, go: Function) { this.asked = { text, go }; }, openUrl(url: string) { this.opened = url; },
   };
