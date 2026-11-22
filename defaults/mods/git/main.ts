@@ -50,12 +50,10 @@ import type { InputState } from "gpui-base";
 import { v_flex } from "gpui-base";
 import { theme, shared, setShared, home } from "herdr";
 import type { Theme } from "herdr";
-import { Array as Arr, Clock, Effect, Option, Record as Rec, String as Str } from "effect";
-import { Commands, readShared, writeShared } from "@fireflies/kit";
+import { Array as Arr, Clock, Effect, String as Str } from "effect";
+import { readShared, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
-import { dithered, frameBox, titleShown } from "@fireflies/look";
-import { readSharedMap, writeSharedMap } from "./shared-map.ts";
-import type { Git, LogEntry } from "./git.ts";
+import type { Git, GitError, LogEntry } from "./git.ts";
 import { LOG_LIMIT } from "./git.ts";
 import type { Graph } from "./graph.ts";
 import type { Commit } from "./parse.ts";
@@ -84,7 +82,8 @@ import { goBack, quit, showNow } from "./panes.ts";
 import { loadMain } from "./content.ts";
 import { focusMain, giveWay, moveTo, scrollMain, setPanel, setTab } from "./navigate.ts";
 import { loadAll, reload, reloadReview, start } from "./reads.ts";
-import { actsOnCommands, inPane, nowMs, saveCopy, takeCopy, toPane, toWindow } from "./place.ts";
+import { nowMs, saveCopy, takeCopy } from "./place.ts";
+import { listen } from "./commands.ts";
 
 /** How long a note stays on the options bar. */
 const NOTE_FOR = "6 seconds";
@@ -197,10 +196,11 @@ export default class GitView extends View {
     this.takeProps(p);
     takeCopy(this);
 
-    const handle = cx.focus_handle();
-
-    this.handle = handle;
+    this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
+
+    const handle = this.handle;
+
     handle.focus();
 
     const fx = runtime.attach(cx, (message) => this.error(message));
@@ -217,7 +217,7 @@ export default class GitView extends View {
     }
 
     this.beat();
-    fx.run(this.listen(handle));
+    fx.run(listen(this, handle));
     start(this);
     fx.run(Effect.forever(Effect.sleep(this.on === null ? "30 seconds" : "15 seconds").pipe(Effect.andThen(Effect.sync(() => reload(this))))), { redraw: false });
   }
@@ -236,7 +236,7 @@ export default class GitView extends View {
     this.on = h.on;
     this.backTo = groups.back ?? null; // { mod, props }: the GitHub window to put back
 
-    const kept = this.folder === null ? {} : readSharedMap(shared, STATE).get(this.folder) ?? {};
+    const kept = this.folder === null ? {} : readShared(shared, STATE, new Map()).get(this.folder) ?? {};
 
     // Opening starts in the Files panel's files tab, whatever panel the folder's
     // window had last (Developer: "Opening it should favor the files section");
@@ -281,35 +281,6 @@ export default class GitView extends View {
     }
   }
 
-  /** The commands sent to the window (keys.json's git.<action>, the toggle's focus), one after another for as long as it's open. */
-  listen(handle: FocusHandle): Effect.Effect<never, never, GitServices> {
-    return Effect.forever(Effect.flatMap(Commands.use((c) => c.next), (c) => Effect.sync(() => this.command(Str.replace(/^git\./, "")(c), handle))));
-  }
-
-  /** One command: what it does in this copy. */
-  command(c: string, handle: FocusHandle): void {
-    const cx = this.acx;
-
-    if (c === "focus") handle.focus();
-    else if (c === "refresh") reload(this, true);
-    else if (c === "review") {
-      this.setPanel("files");
-      this.setTab("review");
-    }
-    // keys.json can bind any key table action: git.<action>
-    // (panel-commits for panel:commits).
-    // One copy acts: the window while one is open, else the pane with the keyboard (place.ts).
-    else if (!actsOnCommands(this) || cx === null) { /* another copy's */ }
-    else if (c === "to-pane") toPane(this);
-    else if (c === "to-window") toWindow(this);
-    else if (this.popups.open) {
-      if (c === "back") this.popups.close();
-      else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.ok(cx);
-    } else if (this.state === "ready") act(this, Str.replace(/^panel-/, "panel:")(c), cx);
-
-    cx?.notify();
-  }
-
   // ---- life
 
   beat(): void {
@@ -335,10 +306,10 @@ export default class GitView extends View {
   saveState(): void {
     if (this.folder === null || this.show !== null) return;
 
-    const all = new Map(readSharedMap(shared, STATE));
+    const all = new Map(readShared(shared, STATE, new Map()));
 
     all.set(this.folder, { panel: this.panel, tabOf: this.tabOf, mode: this.mode, tree: this.tree, showLog: this.showLog, sideW: this.sideW, railW: this.railW, midW: this.midW, logH: this.logH });
-    writeSharedMap(setShared, STATE, all);
+    writeShared(setShared, STATE, all);
     saveCopy(this);
   }
 
@@ -354,9 +325,11 @@ export default class GitView extends View {
     this.run$(this.acts.serial(job).pipe(Effect.ensuring(Effect.sync(done))));
   }
 
-  /** Queues a read on the reads lane (`key`: a newer read under it replaces one not done yet). */
-  read<E>(job: Effect.Effect<void, E, GitServices>, options: RunOptions = {}): void {
-    this.run$(this.reads.serial(job), options);
+  /** Queues a read on the reads lane (`key`: a newer read under it replaces one not done yet).
+   *  A read git refuses (or can't run) says why on the options bar: the next
+   *  change or tick reads again, so it isn't a popup to dismiss each time. */
+  read<E extends { readonly message: string }>(job: Effect.Effect<void, E, GitServices>, options: RunOptions = {}): void {
+    this.run$(this.reads.serial(job).pipe(Effect.catch((e) => Effect.sync(() => this.note(e.message, "failed")))), options);
   }
 
   /** Runs `effect` for this copy (nothing once it's closed, or before it's attached). */
@@ -398,7 +371,7 @@ export default class GitView extends View {
   }
 
   /** Reads everything again (an action's last step). */
-  reloadNow(): Effect.Effect<void, never, GitServices> {
+  reloadNow(): Effect.Effect<void, GitError, GitServices> {
     return loadAll(this);
   }
 
@@ -706,6 +679,8 @@ export default class GitView extends View {
   /** The window's tree, inside drawing() (draw.ts): what its rows share is read once. */
   private drawWindow() {
     const t = theme();
+
+    this.nowS = runtime.now(Clock.currentTimeMillis) / 1000;
 
     const body = this.state === "loading" ? empty(t, "Reading the repo…", this.folder ?? "", { moon: 3 })
       : this.state === "norepo" ? empty(t, "Not a git repository", `${this.folder ?? "This space has no folder"}: the git window shows the repo of the shown space's folder.`, { moon: 0 })

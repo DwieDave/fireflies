@@ -2,6 +2,7 @@
 // removing the picked ones after one confirm, picking the merged ones, and what
 // a window opened for a worktree asked for (worktrees.ts does the git).
 
+import { Effect } from "effect";
 import { spaces, run, closeOverlay } from "herdr";
 import type { Check, Line } from "./popups.ts";
 import * as WT from "./worktrees.ts";
@@ -77,29 +78,32 @@ export function newWorktree(v: GitView, options: NewWorktree = {}) {
 
     if (!name) return;
 
-    v.spawn(async () => {
+    v.spawn(Effect.gen(function* () {
       v.busyText = `Checking out ${name}…`;
 
-      const made = await WT.create(g, name, { base });
-
-      v.busyText = null;
+      const made = yield* WT.create(g, name, { base }).pipe(Effect.ensuring(Effect.sync(() => { v.busyText = null; })));
 
       if ("error" in made) {
         v.error(made.error);
-        await loadAll(v);
+        yield* loadAll(v);
 
         return;
       }
 
-      if (track && made.created && base) await g.run("Set upstream", ["-C", made.path, "branch", "--set-upstream-to", base]);
+      if (track && made.created && base !== null) {
+        const up = yield* g.run("Set upstream", ["-C", made.path, "branch", "--set-upstream-to", base]);
 
-      await loadAll(v);
+        // The worktree is made either way; an upstream git refused is said, not hidden.
+        if (!up.ok) v.note(`No upstream: ${up.err}`, "failed");
+      }
+
+      yield* loadAll(v);
 
       const w = v.data.worktrees.find((x) => x.path === made.path) ?? { path: made.path, branch: name };
 
       v.note(`${name} checked out in ${v.tilde(made.path)}`);
       goToWorktree(v, w, { tab, argv });
-    });
+    }));
   };
 
   if (now) return go(value);
@@ -152,9 +156,9 @@ export function removeWorktrees(v: GitView, list: readonly Checkout[] | null = n
   if (!first) return;
 
   v.note(`Checking ${picked.length === 1 ? WT.label(first) : `${picked.length} worktrees`}…`);
-  v.reads.push(async () => {
+  v.read(Effect.gen(function* () {
     const none: Loss = { dirty: 0, subs: 0, unpushed: [] };
-    const info = await Promise.all(picked.map((w) => (w.prunable ? none : WT.inspect(w, v.on))));
+    const info = yield* Effect.forEach(picked, (w) => (w.prunable ? Effect.succeed(none) : WT.inspect(w, v.on)), { concurrency: "unbounded" });
     const occ = v.occupancy();
     const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
     const dirty = info.filter((x) => x.dirty), subs = info.filter((x) => x.subs), lost = info.flatMap((x) => x.unpushed);
@@ -182,7 +186,7 @@ export function removeWorktrees(v: GitView, list: readonly Checkout[] | null = n
         const branch = answers.find((c) => c.key === "b")?.on ?? false;
         const clearSubs = answers.find((c) => c.key === "s")?.on ?? true;
 
-        v.spawn(async () => {
+        v.spawn(Effect.gen(function* () {
           const g = v.git;
 
           if (!g) return;
@@ -195,14 +199,18 @@ export function removeWorktrees(v: GitView, list: readonly Checkout[] | null = n
 
             const say = (text: string) => { v.busyText = `${picked.length > 1 ? `${k + 1} of ${picked.length}, ` : ""}${WT.label(w)}: ${text}`; };
 
-            const error = await WT.removeOne(g, w, { ...info[k], clearSubs, branch, spaces: occ.get(w.path)?.spaces ?? [] },
+            const error = yield* WT.removeOne(g, w, { ...(info[k] ?? none), clearSubs, branch, spaces: occ.get(w.path)?.spaces ?? [] },
               { closeSpace: (s) => run("space.close", { id: s.id, confirmed: true }), step: say });
 
             if (error) failed.push(`${WT.label(w)}: ${error}`);
             else v.wtPicked.delete(w.path);
           }
 
-          if (picked.some((w) => w.prunable)) await g.run("Prune worktrees", ["worktree", "prune"]);
+          if (picked.some((w) => w.prunable)) {
+            const pruned = yield* g.run("Prune worktrees", ["worktree", "prune"]);
+
+            if (!pruned.ok) failed.push(`git worktree prune: ${pruned.err}`);
+          }
 
           v.busyText = null;
 
@@ -220,11 +228,11 @@ export function removeWorktrees(v: GitView, list: readonly Checkout[] | null = n
             }
           }
 
-          await loadAll(v);
-        });
+          yield* loadAll(v);
+        }).pipe(Effect.ensuring(Effect.sync(() => { v.busyText = null; }))));
       },
     });
-  });
+  }));
 }
 
 /** M: picks the worktrees whose branch is merged into the main checkout's. */
@@ -234,10 +242,10 @@ export function pickMergedWorktrees(v: GitView) {
 
   if (!base || !g) return v.error("The main checkout has no branch to compare with.");
 
-  v.reads.push(async () => {
-    const merged = await WT.merged(g, base);
+  v.read(Effect.gen(function* () {
+    const merged = yield* WT.merged(g, base);
 
     v.wtPicked = new Set(v.data.worktrees.flatMap((w) => (!w.main && w.branch && w.branch !== base && merged.has(w.branch) ? [w.path] : [])));
     v.note(v.wtPicked.size ? `${v.wtPicked.size} merged into ${base} picked: d removes them, esc lets go` : `Nothing merged into ${base}`);
-  });
+  }));
 }

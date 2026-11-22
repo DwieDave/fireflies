@@ -69,16 +69,16 @@ export function drawRow(v: GitView, t: Theme, ctx: ListContext, wide: boolean): 
     case "worktrees": return worktreeRow(v, t);
 
     case "branches": return (b, _i, sel) => (isBranch(b) ? rowLine(v, [
-      T(age(b.date), t.dim, { w: 26 }),
+      T(age(b.date, v.nowS), t.dim, { w: 26 }),
       T(b.head ? `* ${b.name}` : b.name, b.head ? t.ansi6 : sel ? t.foreground : t.muted),
       b.ahead ? T(`↑${b.ahead}`, t.ansi4) : null, b.behind ? T(`↓${b.behind}`, t.ansi5) : null,
       b.gone ? T("(upstream gone)", t.dim) : b.upstream && !b.ahead && !b.behind ? T("✓", t.ansi2) : null,
       wide ? T(b.subject, t.dim, { grow: true }) : null,
     ]) : none());
     case "remotes": return (r, _i, sel) => (isRemote(r) ? rowLine(v, [T(r.name, sel ? t.foreground : t.muted), T(r.url, t.dim, { grow: true })]) : none());
-    case "remoteBranches": return (r, _i, sel) => (isRemoteBranch(r) ? rowLine(v, [T(age(r.date), t.dim, { w: 26 }), T(r.name, sel ? t.foreground : t.muted), wide ? T(r.subject, t.dim, { grow: true }) : null]) : none());
+    case "remoteBranches": return (r, _i, sel) => (isRemoteBranch(r) ? rowLine(v, [T(age(r.date, v.nowS), t.dim, { w: 26 }), T(r.name, sel ? t.foreground : t.muted), wide ? T(r.subject, t.dim, { grow: true }) : null]) : none());
     case "tags": return (g, _i, sel) => (isTag(g) ? rowLine(v, [T("◆", t.ansi3), T(g.name, sel ? t.foreground : t.muted), T(g.subject, t.dim, { grow: true })]) : none());
-    case "reflog": return (r, _i, sel) => (isReflog(r) ? rowLine(v, [T(r.short, t.ansi5, { w: 56 }), T(age(r.date), t.dim, { w: 26 }), T(r.subject, sel ? t.foreground : t.muted, { grow: true })]) : none());
+    case "reflog": return (r, _i, sel) => (isReflog(r) ? rowLine(v, [T(r.short, t.ansi5, { w: 56 }), T(age(r.date, v.nowS), t.dim, { w: 26 }), T(r.subject, sel ? t.foreground : t.muted, { grow: true })]) : none());
     case "stash": return (s, _i, sel) => (isStash(s) ? rowLine(v, [T(String(s.index), t.dim, { w: 14 }), T(s.subject, sel ? t.foreground : t.muted, { grow: true })]) : none());
     case "commits": case "subCommits": return wide ? wideCommit(v, t, ctx) : commitRow(v, t, ctx);
   }
@@ -196,7 +196,7 @@ export function wideCommit(v: GitView, t: Theme, ctx: ListContext): DrawRow {
         .child(h_flex().gap(8).text_size(10).text_color(t.dim)
           .child(div().flex_none().text_color(ahead ? t.ansi1 : hashColor(v, t, c)).child(`${c.short}${ahead ? " ↑" : ""}`))
           .child(div().flex_none().text_color(authorColor(v, t, c.author)).child(c.author))
-          .child(div().flex_none().child(age(c.date)))));
+          .child(div().flex_none().child(age(c.date, v.nowS)))));
 
     return i === firstOnMain && firstOnMain > 0
       ? line.child(h_flex().absolute().left(g ? shownWidth(v, ctx, g) * WIDE_LANE + 8 : 8).right(8).top(0).h(1).child(dither(t.muted, 1)))
@@ -260,7 +260,7 @@ function worktreeRow(v: GitView, t: Theme): DrawRow {
         w.prunable ? T("folder gone", t.ansi1) : w.locked ? T("locked", t.ansi3) : null,
         T(v.tilde(w.path), t.dim, { grow: true }),
         busy ? T(busy[0], busy[1]) : o.spaces.length ? T("open", t.accent) : null,
-        w.at ? T(age(w.at), t.dim) : null,
+        w.at ? T(age(w.at, v.nowS), t.dim) : null,
       ]);
     };
 }

@@ -4,11 +4,10 @@
 // view, drill-ins and splitters hold. main.ts's GitView holds these fields.
 
 import type { Element } from "gpui-kit";
-import { Array as Arr, Option, Schema, String as Str } from "effect";
+import { Option, Schema } from "effect";
 import type { Props } from "gpui-shell";
 import { spaces, panes, focused, props } from "herdr";
-import { sharedKey } from "@fireflies/kit";
-import { sharedMapKey } from "./shared-map.ts";
+import { hereOf, mapOf, sharedKey } from "@fireflies/kit";
 import type { CommitFile, Env } from "./git.ts";
 import { ScopeSchema } from "./git.ts";
 import type { Graph } from "./graph.ts";
@@ -91,7 +90,7 @@ export const KeptSchema = Schema.Struct({
 
 export type Kept = typeof KeptSchema.Type;
 
-export const STATE = sharedMapKey("git.state", KeptSchema);
+export const STATE = sharedKey("git.state", mapOf(KeptSchema));
 
 export const ROW = 18, WIDE_ROW = 32, LOG_ROW = 16, NARROW = 640;
 
@@ -107,32 +106,17 @@ export const CONTEXT_NAMES = {
   menu: "menu", confirm: "confirm", prompt: "prompt", commit: "commit", filter: "filter", keys: "keys", global: "global", list: "list",
 } as const satisfies { readonly [C in ViewContext]: string };
 
-/** A folder, or none when it's empty. */
-const some = (s: string | null | undefined): Option.Option<string> => (s === null || s === undefined || Str.isEmpty(s) ? Option.none() : Option.some(s));
-
 /** A folder and the machine it's on (null: this computer). */
 export interface Here {
   readonly folder: string | null;
   readonly on: string | null;
 }
 
-/** The shown space's folder and machine: the space's own folder when it's
- *  attached to one, else the focused terminal's, else a terminal's in the
- *  shown tab, else where the space was made. */
+/** The folder for a window opened without one: the kit's one rule (hereOf). */
 export function here(): Here {
-  const space = Arr.findFirst(spaces(), (s) => s.active);
-  const tab = Option.getOrNull(Option.flatMap(space, (s) => Option.map(Arr.findFirst(s.tabs, (c) => c.active), (c) => c.id)));
-  const all = panes();
-  const pane = Arr.findFirst(all, (p) => p.focused && p.tab === tab).pipe(Option.orElse(() => Arr.findFirst(all, (p) => p.tab === tab && some(p.cwd).pipe(Option.isSome))));
-  const attached = Option.flatMap(Option.filter(space, (s) => s.attached), (s) => some(s.folder));
+  const h = hereOf({ spaces: spaces(), panes: panes(), focused: focused() });
 
-  const folder = attached.pipe(
-    Option.orElse(() => Option.flatMap(pane, (p) => some(p.cwd))),
-    Option.orElse(() => Option.flatMap(Option.fromNullishOr(focused()), (f) => some(f.cwd))),
-    Option.orElse(() => Option.flatMap(space, (s) => some(s.folder))),
-  );
-
-  return { folder: Option.getOrNull(folder), on: Option.getOrNull(Option.flatMap(space, (s) => Option.fromNullishOr(s.machine))) };
+  return { folder: Option.getOrNull(h.folder), on: h.on };
 }
 
 // ---- what the window is opened with
@@ -191,10 +175,10 @@ export interface Groups {
   worktrees?: Intent;
 }
 
-const asFields = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown));
-const decodeShow = Schema.decodeUnknownOption(ShowSchema);
-const decodeBack = Schema.decodeUnknownOption(BackSchema);
-const decodeIntent = Schema.decodeUnknownOption(IntentSchema);
+// Each group read from the props on its own: one in another shape is left out alone.
+const decodeShow = Schema.decodeUnknownOption(Schema.Struct({ show: ShowSchema }));
+const decodeBack = Schema.decodeUnknownOption(Schema.Struct({ back: BackSchema }));
+const decodeIntent = Schema.decodeUnknownOption(Schema.Struct({ worktrees: IntentSchema }));
 
 /** The window's props as read: the plain fields and the groups. */
 export interface Opened {
@@ -207,12 +191,11 @@ export interface Opened {
  *  read on its own. The app's props win over `init`'s (a restart). */
 export function openedWith(p: Props | undefined): Opened {
   const given = props() ?? p ?? null;
-  const fields = Option.getOrElse(asFields(given), () => ({}));
   const groups: Groups = {};
 
-  Option.map(decodeShow(fields["show"]), (show) => { groups.show = show; });
-  Option.map(decodeBack(fields["back"]), (back) => { groups.back = back; });
-  Option.map(decodeIntent(fields["worktrees"]), (worktrees) => { groups.worktrees = worktrees; });
+  Option.map(decodeShow(given), ({ show }) => { groups.show = show; });
+  Option.map(decodeBack(given), ({ back }) => { groups.back = back; });
+  Option.map(decodeIntent(given), ({ worktrees }) => { groups.worktrees = worktrees; });
 
   return { plain: Option.getOrElse(Schema.decodeUnknownOption(GitPropsSchema)(given), () => NO_PROPS), groups };
 }
@@ -329,7 +312,6 @@ export interface Copied {
 export interface Note {
   readonly text: string;
   readonly tone: "done" | "failed";
-  readonly at: number;
 }
 
 /** A history read further when its end comes into view. */

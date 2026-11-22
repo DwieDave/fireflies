@@ -8,9 +8,8 @@
 
 import { Array as Arr, Effect, Option, Schema } from "effect";
 import { shared, setShared } from "herdr";
-import { readShared, sharedKey, writeShared } from "@fireflies/kit";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Exec } from "@fireflies/kit";
-import { readSharedMap, sharedMapKey, writeSharedMap } from "./shared-map.ts";
 import type { Kind } from "./kinds.ts";
 import { kind, KINDS } from "./kinds.ts";
 import type { Git, Scope } from "./git.ts";
@@ -22,7 +21,7 @@ export const MARKS = "diff.reviewed";
 export const HIDE = "diff.hide";
 
 /** The reviewed marks, by repo root: each a file's diffKey. */
-const MARKS_KEY = sharedMapKey(MARKS, Schema.Array(Schema.String));
+const MARKS_KEY = sharedKey(MARKS, mapOf(Schema.Array(Schema.String)));
 
 /** The kinds hidden in review. */
 const HideSchema = Schema.Struct({ tests: Schema.optionalKey(Schema.Boolean), config: Schema.optionalKey(Schema.Boolean), assets: Schema.optionalKey(Schema.Boolean), docs: Schema.optionalKey(Schema.Boolean) });
@@ -128,7 +127,7 @@ export class Review {
   marks(): Set<string> {
     const root = this.v.git?.root;
 
-    return new Set(root === undefined ? [] : readSharedMap(shared, MARKS_KEY).get(root) ?? []);
+    return new Set(root === undefined ? [] : readShared(shared, MARKS_KEY, new Map()).get(root) ?? []);
   }
 
   toggle(f: ReviewFile): void {
@@ -143,7 +142,7 @@ export class Review {
 
     const live = new Set(Arr.map(this.files, (x) => x.key));
 
-    writeSharedMap(setShared, MARKS_KEY, new Map([...readSharedMap(shared, MARKS_KEY), [root, Arr.filter(Arr.fromIterable(m), (k) => live.has(k))]]));
+    writeShared(setShared, MARKS_KEY, new Map([...readShared(shared, MARKS_KEY, new Map()), [root, Arr.filter(Arr.fromIterable(m), (k) => live.has(k))]]));
   }
 
   /** space: mark the file reviewed (or not), then the next unreviewed one. */

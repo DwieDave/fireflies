@@ -2,6 +2,7 @@
 // modes, the menus of the whole repo (log, merge / rebase, diff mode, undo),
 // push and pull, paging and ranges.
 
+import { Effect } from "effect";
 import { nextUndo, nextRedo, UNDO, REDO } from "./history.ts";
 import { shq } from "./git.ts";
 import type { Action } from "./keys.ts";
@@ -61,13 +62,13 @@ export const WINDOW_ACTIONS = {
       if (!cmd.trim() || !g) return;
 
       v.shellHistory = [cmd, ...v.shellHistory.filter((c) => c !== cmd)].slice(0, 30);
-      spawn(v, async () => {
-        const r = await g.run("Shell command", [], { shell: cmd, shown: cmd, timeout: 600000 });
+      spawn(v, Effect.gen(function* () {
+        const r = yield* g.run("Shell command", [], { shell: cmd, shown: cmd, timeout: 600000 });
 
         if (r.out.trim() || r.err) v.showOutput(cmd, (r.out + (r.ok ? "" : `\n${r.err}`)).trim(), r.ok);
 
-        await v.reloadNow();
-      }, { row: null });
+        yield* v.reloadNow();
+      }), { row: null });
     },
   }),
   "recent-repos": (v) => v.menu({
@@ -199,8 +200,8 @@ export function undoRedo(v: GitView, what: "undo" | "redo") {
 
   if (!g) return;
 
-  spawn(v, async () => {
-    const reflog = await g.reflog(100);
+  spawn(v, Effect.gen(function* () {
+    const reflog = yield* g.reflog(100);
     const step = what === "undo" ? nextUndo(reflog) : nextRedo(reflog);
 
     if (!step) return v.error(what === "undo" ? "Nothing to undo." : "Nothing to redo.");
@@ -216,5 +217,5 @@ export function undoRedo(v: GitView, what: "undo" | "redo") {
         shown: `git ${step.args.join(" ")}`,
       }),
     });
-  }, { row: null }); // the whole repo moves, not one row
+  }), { row: null }); // the whole repo moves, not one row
 }

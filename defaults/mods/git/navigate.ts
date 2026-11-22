@@ -2,6 +2,7 @@
 // folded folders, drill-ins, the filter, the screen mode, the diff's context,
 // and esc (the innermost thing gives way first).
 
+import { Effect } from "effect";
 import { InputState } from "gpui-base";
 import { fileTree } from "./parse.ts";
 import type { Panel, Sub, Tab, NewSub } from "./state.ts";
@@ -31,10 +32,10 @@ export function ensureLoaded(v: GitView) {
   const g = v.git;
 
   if (ctx === "reflog" && !v.data.reflog.length && g) {
-    v.reads.push(async () => {
-      v.data.reflog = await g.reflog();
+    v.read(Effect.gen(function* () {
+      v.data.reflog = yield* g.reflog();
       loadMain(v);
-    });
+    }));
   }
 
   if (ctx === "review" && v.review.state === "idle") v.reloadReview();
@@ -137,10 +138,10 @@ export function enterSub(v: GitView, n: NewSub) {
   v.subs[p] = [...v.subs[p], s];
   v.sel[s.kind] = 0;
   v.top[s.kind] = 0;
-  v.reads.push(async () => {
-    await loadSub(v, s);
+  v.read(Effect.gen(function* () {
+    yield* loadSub(v, s);
     loadMain(v);
-  });
+  }));
 }
 
 export function openFilter(v: GitView) {
@@ -264,7 +265,7 @@ export function setContext(v: GitView, d: number) {
   v.context = Math.max(0, Math.min(30, v.context + d));
   v.note(`Diff context: ${v.context} lines`);
 
-  if (v.staging) v.reads.push(async () => { await loadStaging(v); });
+  if (v.staging) v.read(loadStaging(v));
 
   loadMain(v);
 }

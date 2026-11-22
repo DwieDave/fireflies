@@ -6,6 +6,8 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { Deferred, Effect } from "effect";
+import { drained, hostContext } from "./git-host.ts";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada Lovelace", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada Lovelace", GIT_COMMITTER_EMAIL: "a@x" };
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "git-view-")));
@@ -53,26 +55,16 @@ mock.module("gpui-base", () => ({
 (globalThis as any).window = { paint_path: () => el };
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
-const pending = new Set<Promise<unknown>>();
-const cx: any = {
-  spawn: (f: Function) => { const p = Promise.resolve().then(() => f(cx)); pending.add(p); p.finally(() => pending.delete(p)); },
-  notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }),
-  timer: { every() {}, after() {} }, write_to_clipboard(t: string) { cx.clip = t; },
-};
+const { cx } = hostContext();
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
+const { runtime: gitRuntime } = await import("../defaults/mods/git/fx.ts");
+/** An effect of the mod run on its own runtime (the live services over the herdr stand-in). */
+const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.runtime.runPromise(e);
 
 /** Waits until both of the window's queues are drained. */
-async function settle(v: any) {
-  for (let i = 0; i < 400; i++) {
-    await new Promise((r) => setTimeout(r, 5));
-    if (!v.acts.items.length && !v.reads.items.length && !v.working) {
-      await new Promise((r) => setTimeout(r, 30));
-      if (!v.acts.items.length && !v.reads.items.length) return;
-    }
-  }
-  throw new Error("queues never drained");
-}
+/** Until the view's lanes are drained (git-host.ts). */
+const settle = (v: any): Promise<void> => runFx(drained(v));
 
 const key = (k: string, mods: any = {}) => ({ key: k.length === 1 ? k.toLowerCase() : k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
 async function press(v: any, ...keys: (string | [string, any])[]) {
@@ -159,7 +151,7 @@ test("files: space stages, the main view shows the diff, c commits through the p
 test("staging lines: enter, space stages one line, tab and the staged side", async () => {
   const v = await open();
   sh("printf 'a\\nX\\nc\\nY\\n' > f.txt");
-  await v.reloadNow(); await settle(v);
+  v.read(v.reloadNow()); await settle(v);
   v.setPanel("files"); v.tree = false; v.moveTo(0); await settle(v);
   await press(v, "enter");
   expect(v.focus).toBe("main");
@@ -225,7 +217,7 @@ test("commits: wide mode, enter shows files, r rewords HEAD, z undoes it", async
 test("commits: squash below a straight line, drop asks, merges are refused", async () => {
   const v = await open();
   sh("git stash push -q -u -m tmp && echo 1 > one.txt && git add . && git commit -qm one && echo 2 > two.txt && git add . && git commit -qm two");
-  await v.reloadNow(); await settle(v);
+  v.read(v.reloadNow()); await settle(v);
   v.setPanel("commits"); v.moveTo(0); await settle(v);
   await press(v, "s");
   expect(v.popups.kind).toBe("confirm");
@@ -242,7 +234,7 @@ test("commits: squash below a straight line, drop asks, merges are refused", asy
 test("stash: space applies, d drops with a confirm", async () => {
   const v = await open();
   sh("git stash push -q -u -m keep");
-  await v.reloadNow(); await settle(v);
+  v.read(v.reloadNow()); await settle(v);
   await press(v, "5");
   expect(v.items("stash")[0].subject).toContain("keep");
   await press(v, "space");
@@ -553,7 +545,7 @@ test("an operation's row spins from the key to its end: push marks the pushed br
 
   // A push that fails (the remote is gone): marked while it runs, released after, the error shown.
   sh(`git commit -q --allow-empty -m 'second' && git remote set-url origin ${join(dir, "nowhere.git")}`, work);
-  await v.reloadNow(); await settle(v);
+  v.read(v.reloadNow()); await settle(v);
   v.run("push", cx);
   expect(v.busyRows.get("branch:main")).toBe(1);
   await settle(v);
@@ -569,16 +561,20 @@ test("an operation's row spins from the key to its end: push marks the pushed br
   await settle(v);
   expect(v.busyRows.size).toBe(0);
   v.popups.close();
-  v.spawn(async () => { throw new Error("boom"); });
+  // An operation held open until the test lets it throw.
+  const boom = Deferred.makeUnsafe<void>();
+  v.spawn(Effect.andThen(Deferred.await(boom), Effect.die(new Error("boom"))));
   expect(v.busyRows.get(row)).toBe(1);
-  await settle(v);
+  await runFx(Effect.andThen(Deferred.succeed(boom, undefined), drained(v)));
   expect(v.busyRows.size).toBe(0);
+  expect(v.popups.kind).toBe("confirm"); // the throw shown as the error popup
   v.popups.close();
 
-  // Two operations on one row: busy until both end. Fetch all marks no row.
-  v.spawn(async () => {}); v.spawn(async () => {});
+  // Two operations on one row, held open: busy until both end. Fetch all marks no row.
+  const one = Deferred.makeUnsafe<void>(), two = Deferred.makeUnsafe<void>();
+  v.spawn(Deferred.await(one)); v.spawn(Deferred.await(two));
   expect(v.busyRows.get(row)).toBe(2);
-  await settle(v);
+  await runFx(Effect.andThen(Effect.all([Deferred.succeed(one, undefined), Deferred.succeed(two, undefined)]), drained(v)));
   expect(v.busyRows.size).toBe(0);
   v.run("fetch", cx);
   expect(v.busyRows.size).toBe(0);
@@ -641,11 +637,11 @@ test("worktrees: settings.json's worktrees.directory says where n checks out (~ 
   sh(`git worktree remove --force ${path} && git branch -D dir/one`);
   settingsText = JSON.stringify({ worktrees: { directory: "relative/wt" } });
   const WT = await import("../defaults/mods/git/worktrees.ts");
-  expect(await WT.create(v.git, "dir/two")).toEqual({ error: "worktrees.directory must be an absolute path or start with ~/." });
+  expect(await runFx(WT.create(v.git, "dir/two"))).toEqual({ error: "worktrees.directory must be an absolute path or start with ~/." });
   settingsText = JSON.stringify({ worktrees: { directory: "/abs/wt" } });
-  expect(await WT.rootFor("/home/u")).toBe("/abs/wt");
+  expect(await runFx(WT.rootFor("/home/u"))).toBe("/abs/wt");
   settingsText = null;
-  expect(await WT.rootFor("/home/u")).toBe("/home/u/.herdr/worktrees");
+  expect(await runFx(WT.rootFor("/home/u"))).toBe("/home/u/.herdr/worktrees");
   v.popups.close();
 });
 
@@ -674,12 +670,12 @@ test("worktrees: a removal git refuses (a locked checkout) keeps the spaces on i
   const WT = await import("../defaults/mods/git/worktrees.ts");
   const closed: string[] = [];
   const space = { id: "s7", name: "locked", machine: null, attached: true, folder: path, tabs: [] };
-  const error = await WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any] }, { closeSpace: (s) => closed.push(s.id) });
+  const error = await runFx(WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any] }, { closeSpace: (s) => closed.push(s.id) }));
   expect(error).toBe("This worktree is locked: on a usb disk");
   expect(closed).toEqual([]);
   expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
   sh(`git worktree unlock ${path}`);
-  expect(await WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any], branch: true }, { closeSpace: (s) => closed.push(s.id) })).toBe("");
+  expect(await runFx(WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any], branch: true }, { closeSpace: (s) => closed.push(s.id) }))).toBe("");
   // Closed once git took the checkout away, not before.
   expect(closed).toEqual(["s7"]);
   expect(sh("git worktree list --porcelain")).not.toContain(path);

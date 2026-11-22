@@ -2,6 +2,7 @@
 // stashing, ignoring, conflicts, the Review tab's marks, a commit's files, the
 // stash's entries and staging single lines.
 
+import { Effect } from "effect";
 import { partialPatch } from "./patch.ts";
 import { shq } from "./git.ts";
 import type { Action } from "./keys.ts";
@@ -229,31 +230,31 @@ export function discardMenu(v: GitView) {
 
   const what = files.length === 1 ? first.path : `${files.length} files`;
 
-  const all = () => spawn(v, async () => {
+  const all = () => spawn(v, Effect.gen(function* () {
     const untracked = files.flatMap((f) => (f.untracked ? [f.path] : []));
     const added = files.flatMap((f) => (!f.untracked && f.x === "A" ? [f.path] : []));
     const tracked = files.flatMap((f) => (f.untracked || f.x === "A" ? [] : f.from ? [f.path, f.from] : [f.path]));
 
     if (tracked.length) {
-      const r = await g.run("Discard changes", ["checkout", "HEAD", "--", ...tracked]);
+      const r = yield* g.run("Discard changes", ["checkout", "HEAD", "--", ...tracked]);
 
       if (!r.ok) return v.error(r.err);
     }
 
     if (added.length) {
-      const r = await g.run("Discard new files", [], { shell: `git rm -q -f --cached -- ${added.map(shq).join(" ")} && rm -f -- ${added.map(shq).join(" ")}`, shown: `git rm --cached ${added.join(" ")} && rm ${added.join(" ")}` });
+      const r = yield* g.run("Discard new files", [], { shell: `git rm -q -f --cached -- ${added.map(shq).join(" ")} && rm -f -- ${added.map(shq).join(" ")}`, shown: `git rm --cached ${added.join(" ")} && rm ${added.join(" ")}` });
 
       if (!r.ok) return v.error(r.err);
     }
 
     if (untracked.length) {
-      const r = await g.run("Discard untracked", ["clean", "-fd", "--", ...untracked]);
+      const r = yield* g.run("Discard untracked", ["clean", "-fd", "--", ...untracked]);
 
       if (!r.ok) return v.error(r.err);
     }
 
-    await v.reloadNow();
-  });
+    yield* v.reloadNow();
+  }));
 
   const items: MenuItem[] = [{ key: "x", label: "Discard all changes", danger: true, go: () => v.ask({ title: "Discard", text: `Discard every change to ${what}?`, danger: true, go: all }) }];
 
@@ -303,9 +304,9 @@ export function stagePick(v: GitView) {
 
   if (!patch) return;
 
-  spawn(v, async () => {
+  spawn(v, Effect.gen(function* () {
     if (!reverse && s.file.untracked) {
-      const r = await g.run("Intent to add", ["add", "-N", "--", s.file.path]);
+      const r = yield* g.run("Intent to add", ["add", "-N", "--", s.file.path]);
 
       if (!r.ok) return v.error(r.err);
 
@@ -313,13 +314,13 @@ export function stagePick(v: GitView) {
       s.diff = { ...diff, status: "added" };
     }
 
-    const r = await g.apply(reverse ? "Unstage lines" : "Stage lines", patch, reverse ? ["--cached", "-R", "--recount"] : ["--cached", "--recount"]);
+    const r = yield* g.apply(reverse ? "Unstage lines" : "Stage lines", patch, reverse ? ["--cached", "-R", "--recount"] : ["--cached", "--recount"]);
 
     if (!r.ok) v.error(r.err);
 
     s.anchor = null;
-    await v.reloadNow();
-  });
+    yield* v.reloadNow();
+  }));
 }
 
 export function discardPick(v: GitView) {
@@ -340,13 +341,13 @@ export function discardPick(v: GitView) {
 
   v.ask({
     title: "Discard lines", text: `Discard ${keys.size} changed line${keys.size === 1 ? "" : "s"} from ${s.file.path}?`, danger: true,
-    go: () => spawn(v, async () => {
-      const r = await g.apply("Discard lines", patch, ["-R", "--recount"]);
+    go: () => spawn(v, Effect.gen(function* () {
+      const r = yield* g.apply("Discard lines", patch, ["-R", "--recount"]);
 
       if (!r.ok) v.error(r.err);
 
       s.anchor = null;
-      await v.reloadNow();
-    }),
+      yield* v.reloadNow();
+    })),
   });
 }

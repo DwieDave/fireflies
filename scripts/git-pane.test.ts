@@ -8,6 +8,8 @@ import { mkdtempSync, rmSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { Effect } from "effect";
+import { drained, hostContext } from "./git-host.ts";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada", GIT_COMMITTER_EMAIL: "a@x" };
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "git-pane-")));
@@ -76,24 +78,19 @@ const stores = new Map<string, Map<string, string>>();
   setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
 };
 
-const cx: any = {
-  spawn: (f: Function) => { Promise.resolve().then(() => f(cx)); },
-  notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }),
-  timer: { every() {}, after(_ms: number, f: Function) { f(cx); } }, write_to_clipboard() {},
-};
+const { cx, advance } = hostContext();
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
+const { runtime: gitRuntime } = await import("../defaults/mods/git/fx.ts");
+const { STEP_ASIDE } = await import("../defaults/mods/git/place.ts");
+/** An effect of the mod run on its own runtime (the live services over the herdr stand-in). */
+/** The moved-from copy steps aside STEP_ASIDE after a move (place.ts): its clock moved that far, the view's work drained. */
+const stepAside = (v: any): Promise<void> => runFx(Effect.andThen(advance(STEP_ASIDE), drained(v)));
+const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.runtime.runPromise(e);
 
-async function settle(v: any) {
-  for (let i = 0; i < 400; i++) {
-    await new Promise((r) => setTimeout(r, 5));
-    if (!v.acts.items.length && !v.reads.items.length) {
-      await new Promise((r) => setTimeout(r, 30));
-      if (!v.acts.items.length && !v.reads.items.length) return;
-    }
-  }
-  throw new Error("queues never drained");
-}
+/** Until the view's lanes are drained (git-host.ts). */
+const settle = (v: any): Promise<void> => runFx(drained(v));
+
 
 const key = (k: string, mods: any = {}) => ({ key: k.length === 1 ? k.toLowerCase() : k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
 
@@ -188,7 +185,7 @@ test("moved window -> pane -> window: what it shows goes along, the old copy ste
   win.setPanel("commits"); await settle(win);
   win.sel.commits = 1;
   win.mode = "half";
-  win.key(key("t", { control: true }), cx); await settle(win);
+  win.key(key("t", { control: true }), cx); await stepAside(win);
 
   const split = commands.find(([n]) => n === "pane.split");
   expect(split?.[1]).toMatchObject({ direction: "auto", pane: "p1", mod: "git", props: { folder: repo } });
@@ -208,7 +205,7 @@ test("moved window -> pane -> window: what it shows goes along, the old copy ste
   // And back out to a window: the pane closes (its own), the window opens on the same folder.
   pane.setPanel("branches"); await settle(pane);
   commands.length = 0;
-  pane.key(key("t", { control: true }), cx); await settle(pane);
+  pane.key(key("t", { control: true }), cx); await stepAside(pane);
   const spec = opened.at(-1);
   expect(spec).toMatchObject({ mod: "git", kind: "window", key: "git", props: { folder: repo } });
   expect(spec.props.slot).toBeUndefined();
@@ -222,7 +219,7 @@ test("an open window gives way when a pane moves out", async () => {
   sharedState["git.window"] = { id: "w7", beat: Date.now(), folder: other };
   panesNow = [{ pane: "p3", mod: "git", props: { folder: repo, slot: "s1" }, focused: true }];
   const pane = await open({ folder: repo, slot: "s1" });
-  pane.key(key("t", { control: true }), cx); await settle(pane);
+  pane.key(key("t", { control: true }), cx); await stepAside(pane);
   expect(closed).toContain("w7");
   expect((sharedState["git.window"] as any).id).toBe(`o${overlayN}`);
 });

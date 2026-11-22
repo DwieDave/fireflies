@@ -1,6 +1,7 @@
 // The git actions on branches, remotes and tags (keys.ts): checkout, new,
 // delete, merge, rebase, upstreams, pull requests, a remote's branches.
 
+import { Effect } from "effect";
 import { run as herdrRun, setShared } from "herdr";
 import { shq } from "./git.ts";
 import type { Action } from "./keys.ts";
@@ -11,6 +12,7 @@ import { enterSub } from "./navigate.ts";
 import type { Handler } from "./acting.ts";
 import { refOf, git, branchOf, spawn, upstreamResetMenu, remoteOf, it } from "./acting.ts";
 import { short } from "./draw.ts";
+import { nowMs } from "./place.ts";
 
 export const BRANCH_ACTIONS = {
   // ---- branches
@@ -41,14 +43,14 @@ export const BRANCH_ACTIONS = {
 
     const remote = b.upstream && !b.gone ? b.upstream : null;
 
-    const delLocal = () => spawn(v, async () => {
-      const r = await g.run("Delete branch", ["branch", "-d", b.name]);
+    const delLocal = (): void => spawn(v, Effect.gen(function* () {
+      const r = yield* g.run("Delete branch", ["branch", "-d", b.name]);
 
-      if (r.ok) return v.reloadNow();
+      if (r.ok) return yield* v.reloadNow();
 
       if (/not fully merged/.test(r.err)) v.ask({ title: "Force delete", text: `${b.name} isn't fully merged. Delete it anyway?`, danger: true, go: () => git(v, "Force delete branch", ["branch", "-D", b.name]) });
       else v.error(r.err);
-    });
+    }));
 
     const delRemote = (up: string) => {
       const [rem = "", ...rest] = up.split("/");
@@ -173,7 +175,7 @@ export const BRANCH_ACTIONS = {
 
     if (!b) return;
 
-    setShared("github.create", { folder: v.folder, on: v.on, head: b.name, at: Date.now() });
+    setShared("github.create", { folder: v.folder, on: v.on, head: b.name, at: nowMs() });
     herdrRun("nocturne.github-pr");
   },
   "pr-open": (v) => {
@@ -222,11 +224,11 @@ export const BRANCH_ACTIONS = {
       title: `Rename ${r.name}`, value: r.name,
       ok: (name) => v.prompt({
         title: `Url of ${name.trim() || r.name}`, value: r.url,
-        ok: (url) => spawn(v, async () => {
+        ok: (url) => spawn(v, Effect.gen(function* () {
           let n = r.name;
 
           if (name.trim() && name.trim() !== r.name) {
-            const x = await g.run("Rename remote", ["remote", "rename", r.name, name.trim()]);
+            const x = yield* g.run("Rename remote", ["remote", "rename", r.name, name.trim()]);
 
             if (!x.ok) return v.error(x.err);
 
@@ -234,13 +236,13 @@ export const BRANCH_ACTIONS = {
           }
 
           if (url.trim() && url.trim() !== r.url) {
-            const x = await g.run("Set remote url", ["remote", "set-url", n, url.trim()]);
+            const x = yield* g.run("Set remote url", ["remote", "set-url", n, url.trim()]);
 
             if (!x.ok) return v.error(x.err);
           }
 
-          await v.reloadNow();
-        }),
+          yield* v.reloadNow();
+        })),
       }),
     });
   },
@@ -306,17 +308,17 @@ export function checkoutRef(v: GitView, ref: string) {
 
   if (!g) return;
 
-  spawn(v, async () => {
-    const r = await g.run("Checkout", ["checkout", ref]);
+  spawn(v, Effect.gen(function* () {
+    const r = yield* g.run("Checkout", ["checkout", ref]);
 
-    if (r.ok) return v.reloadNow();
+    if (r.ok) return yield* v.reloadNow();
 
     if (/would be overwritten|commit your changes or stash/i.test(r.err)) {
       v.ask({ title: "Checkout", text: `Your local changes would be overwritten. Stash them, check out ${short(ref)}, then pop them back?`, go: () => git(v, "Autostash checkout", [], { shell: `git stash push -q -m "git autostash" && git checkout ${shq(ref)} && git stash pop -q`, shown: `git stash && git checkout ${ref} && git stash pop` }) });
     } else v.error(r.err);
 
-    await v.reloadNow();
-  });
+    yield* v.reloadNow();
+  }));
 }
 
 export function gh(v: GitView, title: string, args: readonly string[]) {
@@ -324,9 +326,9 @@ export function gh(v: GitView, title: string, args: readonly string[]) {
 
   if (!g) return;
 
-  spawn(v, async () => {
-    const r = await g.run(title, [], { shell: `gh ${args.map(shq).join(" ")}`, shown: `gh ${args.join(" ")}` });
+  spawn(v, Effect.gen(function* () {
+    const r = yield* g.run(title, [], { shell: `gh ${args.map(shq).join(" ")}`, shown: `gh ${args.join(" ")}` });
 
     if (!r.ok) v.error(r.err);
-  }, { row: null });
+  }), { row: null });
 }

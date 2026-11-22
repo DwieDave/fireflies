@@ -3,6 +3,8 @@
 // on the window's queue, and the menus and prompts several tables share.
 
 import type { Context } from "gpui-kit";
+import { Effect } from "effect";
+import type { GitServices } from "./fx.ts";
 import type { StatusFile } from "./parse.ts";
 import type { default as GitView } from "./main.ts";
 import type { ExecOptions, SpawnOptions } from "./state.ts";
@@ -19,9 +21,9 @@ export const it = (v: GitView) => v.item();
 /** A git action that reloads after; errors open lazygit's error popup. */
 export function git(v: GitView, title: string, args: readonly string[], opts?: ExecOptions) { v.exec(title, args, opts); }
 
-/** Runs `fn` on the action queue; a quiet spawn when the result isn't kept. */
-export function spawn(v: GitView, fn: () => Promise<void>, options?: SpawnOptions) {
-  v.spawn(async () => { await fn(); }, options);
+/** Runs `job` on the actions lane; a failure opens the error popup. */
+export function spawn<E>(v: GitView, job: Effect.Effect<void, E, GitServices>, options?: SpawnOptions): void {
+  v.spawn(job, options);
 }
 
 /** The ref a branch / tag / commit / remote branch row stands for. */
@@ -94,14 +96,14 @@ export function commit(v: GitView, flags: string) {
   if (!files.some((f) => f.staged)) {
     return v.ask({
       title: "Nothing staged", text: "No files are staged. Stage every change and commit?",
-      go: async () => {
-        const r = await g.run("Stage all", ["add", "-A"]);
+      go: () => spawn(v, Effect.gen(function* () {
+        const r = yield* g.run("Stage all", ["add", "-A"]);
 
         if (!r.ok) return v.error(r.err);
 
-        await v.reloadNow();
+        yield* v.reloadNow();
         go();
-      },
+      })),
     });
   }
 
@@ -130,22 +132,20 @@ export function push(v: GitView) {
 
   if (!s || !head || !g) return v.error("Not on a branch: nothing to push.");
 
-  const go = (args: readonly string[], title = "Push") => spawn(v, async () => {
+  const go = (args: readonly string[], title = "Push"): void => spawn(v, Effect.gen(function* () {
     // The pushed branch's row spins (whichever row is selected).
     v.busy(`Pushing ${head}…`);
 
-    const r = await g.run(title, args, { timeout: 300000 });
+    const r = yield* g.run(title, args, { timeout: 300000 }).pipe(Effect.ensuring(Effect.sync(() => v.busy(null))));
 
-    v.busy(null);
-
-    if (r.ok) return v.reloadNow();
+    if (r.ok) return yield* v.reloadNow();
 
     if (/rejected|non-fast-forward|fetch first/i.test(r.err)) {
       v.ask({ title: "Force push", text: `${head} was rejected: the remote has commits you don't. Force push (with lease)?`, danger: true, go: () => go(["push", "--force-with-lease"], "Force push") });
     } else v.error(r.err);
 
-    await v.reloadNow();
-  }, { row: `branch:${head}` });
+    yield* v.reloadNow();
+  }), { row: `branch:${head}` });
 
   if (s.upstream) return go(["push"]);
 
@@ -170,17 +170,15 @@ export function pull(v: GitView) {
 
   if (!s || !head || !g) return v.error("Not on a branch: nothing to pull.");
 
-  const go = (args: readonly string[]) => spawn(v, async () => {
+  const go = (args: readonly string[]): void => spawn(v, Effect.gen(function* () {
     v.busy(`Pulling ${head}…`);
 
-    const r = await g.run("Pull", args, { timeout: 300000 });
-
-    v.busy(null);
+    const r = yield* g.run("Pull", args, { timeout: 300000 }).pipe(Effect.ensuring(Effect.sync(() => v.busy(null))));
 
     if (!r.ok) v.error(r.err);
 
-    await v.reloadNow();
-  }, { row: `branch:${head}` });
+    yield* v.reloadNow();
+  }), { row: `branch:${head}` });
 
   if (s.upstream) return go(["pull", "--no-edit"]);
 
@@ -190,12 +188,12 @@ export function pull(v: GitView) {
 
   v.prompt({
     title: "Pull from (and set as upstream)", value: `${remote}/${head}`,
-    ok: (x) => spawn(v, async () => {
-      const r = await g.run("Set upstream", ["branch", `--set-upstream-to=${x.trim()}`]);
+    ok: (x) => spawn(v, Effect.gen(function* () {
+      const r = yield* g.run("Set upstream", ["branch", `--set-upstream-to=${x.trim()}`]);
 
       if (!r.ok) return v.error(r.err);
 
       go(["pull", "--no-edit"]);
-    }),
+    })),
   });
 }

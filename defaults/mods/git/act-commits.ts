@@ -2,6 +2,7 @@
 // amend, moving and squashing (history.ts rewrites), cherry-picking, copying.
 
 import type { Context } from "gpui-kit";
+import { Effect, String as Str } from "effect";
 import { run as herdrRun } from "herdr";
 import type { Rewrite } from "./history.ts";
 import { rewrite } from "./history.ts";
@@ -42,8 +43,8 @@ export const COMMIT_ACTIONS = {
 
     if (v.rebasing()) return v.error("Mid-rebase: press m to continue or abort first.");
 
-    spawn(v, async () => {
-      const msg = (await g.text(["log", "-1", "--format=%B", c.hash])).trim();
+    spawn(v, Effect.gen(function* () {
+      const msg = Str.trim(yield* g.out(["log", "-1", "--format=%B", c.hash]));
 
       v.commitPopup({
         title: `Reword ${short(c.hash)}`, value: msg,
@@ -53,7 +54,7 @@ export const COMMIT_ACTIONS = {
           rebaseRewrite(v, "reword", { NOCTURNE_GIT_MSG: m });
         },
       });
-    });
+    }));
   },
   "reword-editor": (v) => {
     const c = commitOf(v);
@@ -136,14 +137,14 @@ export const COMMIT_ACTIONS = {
 
     v.ask({
       title: "Cherry-pick", text: `Paste ${list.length} commit${list.length === 1 ? "" : "s"} onto ${v.data.status?.head ?? "HEAD"}?`,
-      go: () => spawn(v, async () => {
-        const r = await g.run("Cherry-pick", ["cherry-pick", ...list], { timeout: 120000 });
+      go: () => spawn(v, Effect.gen(function* () {
+        const r = yield* g.run("Cherry-pick", ["cherry-pick", ...list], { timeout: 120000 });
 
         if (r.ok) v.copied = [];
         else v.error(r.err);
 
-        await v.reloadNow();
-      }),
+        yield* v.reloadNow();
+      })),
     });
   },
   "cherry-reset": (v) => {
@@ -162,8 +163,8 @@ export const COMMIT_ACTIONS = {
 
     if (!c || !g) return;
 
-    spawn(v, async () => {
-      const [msg, diff] = await Promise.all([g.text(["log", "-1", "--format=%B", c.hash]), g.text(["show", "--format=", c.hash])]);
+    spawn(v, Effect.gen(function* () {
+      const [msg, diff] = yield* Effect.all([g.out(["log", "-1", "--format=%B", c.hash]), g.out(["show", "--format=", c.hash])], { concurrency: "unbounded" });
       const url = commitUrl(v, c.hash);
 
       v.menu({
@@ -177,7 +178,7 @@ export const COMMIT_ACTIONS = {
           ...(url ? [{ key: "u", label: "Url", sub: url, go: (cx2: Context) => v.copy(url, cx2) }] : []),
         ],
       });
-    });
+    }));
   },
   "open-commit-browser": (v) => {
     const hash = hashOf(it(v));
@@ -253,15 +254,15 @@ export function rebaseRewrite(v: GitView, action: Rewrite, env: Env = {}, after?
 
   if (!g) return;
 
-  spawn(v, async () => {
-    const r = await g.rebase(rewriteTitle(action), plan.base, plan.todo, env);
+  spawn(v, Effect.gen(function* () {
+    const r = yield* g.rebase(rewriteTitle(action), plan.base, plan.todo, env);
 
     if (!r.ok && !/stopped at|Stopped at/i.test(r.out + r.err)) v.error(r.err);
     else if (action === "edit") v.note("Rebase stopped at the commit: change it, amend, then m to continue");
     else after?.();
 
-    await v.reloadNow();
-  });
+    yield* v.reloadNow();
+  }));
 }
 
 /** https://host/owner/repo/commit/<hash> from the first remote's url, if it's a GitHub-style one. */

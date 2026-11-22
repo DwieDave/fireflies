@@ -9,6 +9,8 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { Effect } from "effect";
+import { drained, hostContext } from "./git-host.ts";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada Lovelace", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada Lovelace", GIT_COMMITTER_EMAIL: "a@x" };
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "git-scroll-")));
@@ -61,27 +63,17 @@ mock.module("gpui-base", () => ({
 (globalThis as any).window = { paint_path: () => el };
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
-const pending = new Set<Promise<unknown>>();
-const cx: any = {
-  spawn: (f: Function) => { const p = Promise.resolve().then(() => f(cx)); pending.add(p); p.finally(() => pending.delete(p)); },
-  notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }),
-  timer: { every() {}, after() {} }, write_to_clipboard(t: string) { cx.clip = t; },
-};
+const { cx } = hostContext();
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
+const { runtime: gitRuntime } = await import("../defaults/mods/git/fx.ts");
+/** An effect of the mod run on its own runtime (the live services over the herdr stand-in). */
+const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.runtime.runPromise(e);
 const { rangeHolds } = await import("../defaults/mods/git/items.ts");
 
 /** Waits until both of the window's queues are drained. */
-async function settle(v: any) {
-  for (let i = 0; i < 400; i++) {
-    await new Promise((r) => setTimeout(r, 5));
-    if (!v.acts.items.length && !v.reads.items.length && !v.working) {
-      await new Promise((r) => setTimeout(r, 30));
-      if (!v.acts.items.length && !v.reads.items.length) return;
-    }
-  }
-  throw new Error("queues never drained");
-}
+/** Until the view's lanes are drained (git-host.ts). */
+const settle = (v: any): Promise<void> => runFx(drained(v));
 
 
 

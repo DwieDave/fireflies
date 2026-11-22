@@ -2,7 +2,10 @@
 // read, the cursor by change line or hunk, the lines picked, the other side,
 // the next file.
 
+import { Effect } from "effect";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.ts";
+import type { GitError } from "./git.ts";
+import type { GitServices } from "./fx.ts";
 import type { StatusFile } from "./parse.ts";
 import type { default as GitView } from "./main.ts";
 import { moveBy } from "./navigate.ts";
@@ -10,10 +13,12 @@ import { moveBy } from "./navigate.ts";
 export function startStaging(v: GitView, file: StatusFile) {
   v.staging = { file, side: file.unstaged ? "unstaged" : "staged", diff: null, rows: [], cur: 0, anchor: null, hunkMode: false, other: null };
   v.focus = "main";
-  v.reads.push(async () => { await loadStaging(v, true); });
+  v.read(loadStaging(v, true));
 }
 
-export async function loadStaging(v: GitView, first = false) {
+/** The staged file's diffs read again (its side, the other side), the cursor kept on a change line. */
+export function loadStaging(v: GitView, first = false): Effect.Effect<void, GitError, GitServices> {
+  return Effect.gen(function* () {
   const s = v.staging, g = v.git;
 
   if (!s || !g) return;
@@ -33,10 +38,10 @@ export async function loadStaging(v: GitView, first = false) {
 
   if (s.side === "staged" && !now.staged) s.side = "unstaged";
 
-  const [mine, other] = await Promise.all([
+  const [mine, other] = yield* Effect.all([
     g.fileDiff(now, { cached: s.side === "staged", context: v.context, ws: false }),
-    (s.side === "staged" ? now.unstaged : now.staged) ? g.fileDiff(now, { cached: s.side !== "staged", context: v.context }) : Promise.resolve(null),
-  ]);
+    (s.side === "staged" ? now.unstaged : now.staged) ? g.fileDiff(now, { cached: s.side !== "staged", context: v.context }) : Effect.succeed(null),
+  ], { concurrency: "unbounded" });
 
   if (v.staging !== s) return;
 
@@ -56,6 +61,7 @@ export async function loadStaging(v: GitView, first = false) {
   if (first || !isChange(s.rows[s.cur])) s.cur = changes.find((i) => i >= (first ? 0 : s.cur)) ?? changes[changes.length - 1] ?? 0;
 
   s.top = Math.min(s.top ?? 0, s.cur);
+  });
 }
 
 export function pickedKeys(v: GitView): Set<string> {
@@ -121,7 +127,7 @@ export function switchSide(v: GitView) {
   s.side = s.side === "staged" ? "unstaged" : "staged";
   s.anchor = null;
   s.cur = 0;
-  v.reads.push(async () => { await loadStaging(v, true); });
+  v.read(loadStaging(v, true));
 }
 
 export function stepFile(v: GitView, d: number) {
