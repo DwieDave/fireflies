@@ -343,3 +343,46 @@ test("other files sent to a scratchpad's pane open in an editor beside it", asyn
   expect(ran.find(([n]) => n === "editor.open")).toEqual(["editor.open", { path: "/p/src/a.rs", line: 3, col: 1 }]);
   expect(p.docs.length).toBe(1);
 });
+
+test("typing past the view's bottom scrolls the caret's row back into view; in view, or not typing, the view stays", async () => {
+  const paras = Array.from({ length: 40 }, (_, i) => `para ${i}`);
+  const text = ["# Long", "", ...paras.flatMap((l) => [l, ""]), "last"].join("\n");
+  const p = await pane("/p/long.md", text);
+  const v = p.cur.rendered;
+  const last = text.split("\n").length - 1;
+  // The caret on the last line (as vim's G would): its block lit and shown at the bottom.
+  main(p).set_cursor(last, 0);
+  v.pull(cx());
+  p.renderedView(theme);
+  expect(block(p).value()).toBe("last");
+  const caretIn = () => {
+    const y = v.litTop + v.padTop + (block(p).cursor().line) * v.rowH;
+    return y >= 0 && y + v.rowH <= v.viewH;
+  };
+  expect(caretIn()).toBe(true);
+  // Enter enter enter...: the block grows below the view's bottom; the view follows the caret.
+  let now = "last";
+  for (let i = 0; i < 6; i++) {
+    now += `\nline ${i}`;
+    block(p).type(now, { line: i + 1, col: 6 });
+    const before = v.scrollY;
+    p.renderedView(theme);
+    expect(caretIn()).toBe(true);
+    if (i > 0) expect(v.scrollY).toBeGreaterThan(before);
+  }
+  // A letter on the same row, the caret in view already: the view doesn't move.
+  const still = v.scrollY;
+  now += "x";
+  block(p).type(now, { line: 6, col: 7 });
+  p.renderedView(theme);
+  expect(v.scrollY).toBe(still);
+  // Scrolled up by hand, nothing typed: drawn again, the view stays where it was put.
+  v.scrollY = still - 300;
+  p.renderedView(theme);
+  expect(v.scrollY).toBe(still - 300);
+  // Typed again: the caret comes back into view.
+  now += "y";
+  block(p).type(now, { line: 6, col: 8 });
+  p.renderedView(theme);
+  expect(caretIn()).toBe(true);
+});

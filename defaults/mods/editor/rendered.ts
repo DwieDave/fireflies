@@ -179,6 +179,7 @@ export class Rendered {
   viewH = 400;
   litTop = 0;
   reveal = true; // keep the lit block in view on the next draw
+  follow = false; // typed into: keep the caret's row in view on the next draw
   /** The unit drawn at the top as last drawn: its first line, the scroll past its top (layout px). */
   topAt: { line: number; dy: number } | null = null;
   /** A line to put back at the top on the next draw (a reload, keepTop), before revealing the lit block. */
@@ -447,6 +448,7 @@ export class Rendered {
     this.syncCaret(true);
     this.split();
     this.measureSoon(cx);
+    this.follow = true;
     this.host.notify(cx);
   }
 

@@ -61,6 +61,16 @@ export function wrappedRows(text: string, width: number, cw = CHAR): number {
   return n;
 }
 
+/** The caret's row in the lit block, from the block's top (layout px): the rows its text up
+ *  to the caret takes as it wraps. */
+function caretY(v: Rendered): number {
+  const c = v.block.cursor();
+  const lines = v.piece.split("\n");
+  const upTo = [...lines.slice(0, c.line), (lines[c.line] ?? "").slice(0, c.col)].join("\n");
+
+  return v.padTop + (wrappedRows(upTo, v.litW, v.cw) - 1) * v.rowH;
+}
+
 /** The rows placed: each one's top, the column's height, the lit row's index (-1: none). */
 interface Placed {
   readonly tops: readonly number[];
@@ -73,7 +83,7 @@ const rowH = (v: Rendered, r: Row): number => (r.lit ? litHeight(v) : v.height(r
 
 /** Places the rows top to bottom; puts a kept line back at the top (a reload: rendered.ts
  *  keepTop), else scrolls the lit block into view (with room around it) when it asks to be
- *  shown; keeps the scroll within the column and notes the unit at the top. */
+ *  shown, or the caret's row when typed into (follow); keeps the scroll within the column and notes the unit at the top. */
 function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const tops: number[] = [];
   let y = PAD_TOP;
@@ -109,8 +119,15 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
     else if (bottom + 24 > v.scrollY + v.viewH) v.scrollY = Math.max(0, bottom + 24 - v.viewH);
 
     v.reveal = false;
+  } else if (v.follow && li >= 0) {
+    // Typed into: the caret's row stays in view with room around it, the view still while it is.
+    const y = (tops[li] ?? 0) + Math.min(caretY(v), Math.max(0, litHeight(v) - v.rowH));
+
+    if (y - 24 < v.scrollY) v.scrollY = Math.max(0, y - 24);
+    else if (y + v.rowH + 24 > v.scrollY + v.viewH) v.scrollY = y + v.rowH + 24 - v.viewH;
   }
 
+  v.follow = false;
   v.scrollY = Math.max(0, Math.min(v.scrollY, Math.max(0, total - v.viewH)));
   v.litTop = li >= 0 ? (tops[li] ?? 0) - v.scrollY : 0;
 
