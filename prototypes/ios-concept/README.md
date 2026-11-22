@@ -7,8 +7,8 @@ those of `docs/ios-app.md`.
 
 | Page | What it shows |
 |---|---|
-| `concept-a.html` | **The pick.** Night sky: home, a space's pane map, a terminal, git |
-| `concept-b.html` | The alternative: machine map with a bottom dock, the same four screens |
+| `concept-a.html` | **Chosen (2026-11-22).** Night sky: home, a space's pane map, a terminal, git |
+| `concept-b.html` | Not chosen, kept to compare: machine map with a bottom dock, the same four screens |
 | `a-panes.html` | Browser pane, GitHub, databases, k8s as touch mods |
 | `a-terminal.html` | The terminal's keys: pad placement, folded, docked tray; the paged hotkey row |
 | `a-reach.html` | Lock-screen notification and its long press, alerts, hosts with the VPN switch, first run |
@@ -81,16 +81,20 @@ Changed for the phone:
 - **Web pages are the site's own**, no nocturne chrome inside the web view.
 - Database rows become cards in portrait.
 
+## Decided
+
+- **2026-11-22: concept A.** Developer: "We pick concept A." `concept-b.html` stays
+  here as the alternative that was not chosen.
+
 ## Open questions for Developer
 
-1. **A or B?** A is drawn out; B's four screens are there to compare.
-2. **Replies from the lock screen** ("y" + Enter, esc to an agent without opening
+1. **Replies from the lock screen** ("y" + Enter, esc to an agent without opening
    the app): allowed, and behind Face ID or not?
-3. **Pane map: read-only, or edit too?** Closing a pane and moving it to the dock
+2. **Pane map: read-only, or edit too?** Closing a pane and moving it to the dock
    are drawn; splitting and resizing the Mac's panes from the phone are not.
-4. **Which mods ship on the phone first?** Drawn: git, github, databases, k8s,
+3. **Which mods ship on the phone first?** Drawn: git, github, databases, k8s,
    alerts; files and usage are only in the flow.
-5. **The hotkey row's pages**: are these the keys you reach for (esc, tab, ctrl,
+4. **The hotkey row's pages**: are these the keys you reach for (esc, tab, ctrl,
    alt, ⇧tab, ~, |, then the ^ chords, then symbols)?
-6. **Pairing**: a one-line `fireflies phone pair <code>` on the Mac (or a QR the
+5. **Pairing**: a one-line `fireflies phone pair <code>` on the Mac (or a QR the
    desktop shows), with the phone's key in the Secure Enclave: right for you?
