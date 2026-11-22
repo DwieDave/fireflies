@@ -2,12 +2,10 @@
 // last read, and the GraphQL mutations that make them on GitHub. No herdr
 // imports, so scripts/ tests it.
 
-import { Array as Arr, Option, Predicate, String as Str } from "effect";
-import { isNumber, object } from "./guard.ts";
-import { maybe } from "./guards.ts";
+import { Array as Arr, Option, Predicate, Schema, String as Str } from "effect";
+import { maybe } from "./model.ts";
 import { dateOf, iterationOf, numberOf, selectOf, textOf } from "./board-filter.ts";
 import type { Board, Content, Field, FieldValue, Item } from "./board.ts";
-import { text } from "./board.ts";
 
 // ---- edits: optimistic, laid over the last read
 
@@ -145,8 +143,10 @@ export const addDraftMutation = (projectId: string, title: string): string =>
   `mutation { addProjectV2DraftIssue(input: { projectId: ${lit(projectId)}, title: ${lit(title)} }) { projectItem { id databaseId content { ... on DraftIssue { id } } } } }`;
 
 /** addDraftMutation's answer: the new item's id. */
-export const isAddedDraft = object({}, {
-  addProjectV2DraftIssue: maybe(object({}, { projectItem: maybe(object({}, { id: text, databaseId: maybe(isNumber), content: maybe(object({}, { id: text })) })) })),
+export const AddedDraftSchema = Schema.Struct({
+  addProjectV2DraftIssue: maybe(Schema.Struct({
+    projectItem: maybe(Schema.Struct({ id: maybe(Schema.String), databaseId: maybe(Schema.Finite), content: maybe(Schema.Struct({ id: maybe(Schema.String) })) })),
+  })),
 });
 
 export const convertMutation = (itemId: string, repoId: string): string =>

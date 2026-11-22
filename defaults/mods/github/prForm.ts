@@ -8,29 +8,22 @@
 // `gh pr create`. The last step shows both commands; nothing runs before it.
 
 import { div } from "gpui-kit";
+import { Effect, String as Str } from "effect";
 import type { Context, Element, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec } from "herdr";
 import type { Theme } from "herdr";
-import { isString } from "./guard.ts";
 import type { Repo } from "./gh.ts";
-import { ghRun, api, graphql, plain } from "./gh-await.ts";
-import { isNamed, isNamedList, isPrChoices } from "./model.ts";
-import { candidates } from "./remotes.ts";
+import * as Gh from "./gh.ts";
+import type { GithubServices } from "./fx.ts";
+import { git, readChoices, readLocal, readRemoteBranches, readRemotes, readTemplate, reread } from "./pr-form-reads.ts";
 import type { Commit, LocalBranch, Numstat, PrFields, PushPlan } from "./pr-create.ts";
-import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.ts";
+import { fillFrom, startBody, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.ts";
 import { shellLine } from "./dispatch.ts";
 import type { Choice, Command, Field, FormHost, Outcome, Values } from "./form-fields.ts";
 import { flagIn, listIn, textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import { panel, empty, dither } from "./kit.ts";
 import { edge } from "@fireflies/tones";
-
-const CHOICES = `query($owner: String!, $name: String!) { viewer { login }
-  repository(owner: $owner, name: $name) {
-    assignableUsers(first: 100) { nodes { login name } }
-    labels(first: 100, orderBy: { field: NAME, direction: ASC }) { nodes { name description } }
-    milestones(first: 50, states: OPEN, orderBy: { field: DUE_DATE, direction: ASC }) { nodes { title dueOn } } } }`;
 
 /** What the form asks of the Pull requests tab: the new pull request's number (null: gh didn't say), or the form gone. */
 export interface PrTab {
@@ -126,14 +119,14 @@ export class PrForm {
         id: "base", label: "base", kind: "choice", value: base, required: true, hint: "merged into", group: "branches", pair: true, join: "←",
         options: () => this.remoteBranches?.map((b) => branchRow(b, b === this.repo.base ? "default branch" : "")) ?? null,
         onChange: (_v, cx) => {
-          void this.reread(cx);
+          this.reread(cx);
         },
       },
       {
         id: "head", label: "head", kind: "choice", value: head, required: true, free: true, hint: this.headOwner ? `from your fork, ${this.headRepo}` : "the branch with the changes",
         options: () => this.local?.map((b) => branchRow(b.name, b.upstream ? `${b.upstream}${b.ahead ? ` · ${b.ahead} to push` : ""}` : "not pushed")) ?? null,
         onChange: (_v, cx) => {
-          void this.reread(cx);
+          this.reread(cx);
         },
       },
       { id: "title", label: "title", kind: "text", value: "", required: true, placeholder: "what this pull request does", group: "pull request" },
@@ -195,111 +188,14 @@ export class PrForm {
 
   // ---- reading
 
-  async git(args: readonly string[]): Promise<string> {
-    const r = await exec("git", [...args], this.repo.on ? { cwd: this.repo.root, on: this.repo.on, timeout: 30000 } : { cwd: this.repo.root, timeout: 30000 });
-
-    if (r.code === 0) return r.stdout;
-
-    throw new Error(r.stderr.trim().split("\n").pop() || `git ${args[0] ?? ""} failed`);
+  /** Everything the form lists, at once (pr-form-reads.ts); then the commits between base and head. */
+  load(_cx: Context): void {
+    for (const read of [readRemotes, readLocal, readRemoteBranches, readChoices, readTemplate]) this.app.run(read(this));
   }
 
-  /** Everything the form lists, at once; then the commits between base and head. */
-  load(cx: Context): void {
-    const repo = this.repo, [owner = "", name = ""] = repo.full.split("/");
-
-    const done = (cx: Context) => {
-      if (!this.closed) cx.notify();
-    };
-
-    this.app.spawn(cx, async (cx) => {
-      const cfg = await this.git(["config", "--get-regexp", "^(remote|branch)\\."]).catch(() => "");
-      const list = candidates(cfg, repo.branch);
-
-      this.remote = remoteFor(list, this.headRepo, repo.host);
-      this.baseRemote = remoteFor(list, repo.full, repo.host) ?? this.remote;
-      await this.reread(cx);
-    });
-    this.app.spawn(cx, async (cx) => {
-      const out = await this.git(["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)%09%(upstream:short)%09%(upstream:track)", "refs/heads"]).catch(() => "");
-
-      this.local = parseBranches(out);
-      done(cx);
-    });
-    this.app.spawn(cx, async (cx) => {
-      const { data } = await api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] }));
-      const names = (data ?? []).map((b) => b.name);
-
-      // The default branch first, the rest as GitHub sorts them.
-      this.remoteBranches = repo.base && names.includes(repo.base) ? [repo.base, ...names.filter((n) => n !== repo.base)] : names;
-      done(cx);
-    });
-    this.app.spawn(cx, async (cx) => {
-      const d = await graphql(repo, CHOICES, isPrChoices, [["owner", owner], ["name", name]], { partial: true }).catch(() => null);
-      const r = d?.repository;
-
-      this.choices = {
-        me: d?.viewer?.login ?? null,
-        users: r?.assignableUsers?.nodes ?? [], labels: r?.labels?.nodes ?? [], milestones: r?.milestones?.nodes ?? [],
-      };
-      done(cx);
-    });
-    this.app.spawn(cx, async (cx) => {
-      const files = await this.git(["ls-files", "--", ":(icase)pull_request_template*", ":(icase).github/pull_request_template*", ":(icase)docs/pull_request_template*"]).catch(() => "");
-
-      this.templates = templatesIn(files.split("\n").filter(Boolean));
-
-      const [first] = this.templates;
-
-      if (first === undefined) return;
-
-      this.template = await this.git(["show", `HEAD:${first}`]).catch(() => "");
-      this.fill();
-      done(cx);
-    });
-  }
-
-  /** Base or head changed: what's between them, whether head is on GitHub, and the fill. */
-  async reread(cx: Context): Promise<void> {
-    const base = this.form.text("base"), head = this.form.text("head");
-    const gen = ++this.gen;
-
-    this.range = base && head ? { base, head, commits: null, stat: null, error: "" } : null;
-    this.headState = null;
-    cx.notify();
-
-    if (!base || !head) return;
-
-    const baseRef = await this.baseRef(base);
-    const failed = (cause: unknown) => ({ error: cause instanceof Error ? cause.message : String(cause) });
-
-    const [log, stat, onRemote] = await Promise.all([
-      baseRef ? this.git(["log", "--format=%H%x1f%s%x1f%b%x1e", "-n", "200", `${baseRef}..${head}`]).catch(failed) : { error: `${base} isn't fetched here: fetch to see the commits.` },
-      baseRef ? this.git(["diff", "--numstat", `${baseRef}...${head}`]).catch(() => "") : "",
-      api(this.repo, `repos/${this.headRepo}/branches/${encodeURIComponent(head)}`, plain(isNamed), { fresh: true })
-        .then(() => true)
-        .catch((cause: unknown) => (cause instanceof Error && /not found|404/i.test(cause.message) ? false : null)),
-    ]);
-
-    if (gen !== this.gen || this.closed) return;
-
-    this.range = { base, head, commits: isString(log) ? parseLog(log) : null, stat: parseNumstat(stat), error: isString(log) ? "" : log.error };
-    this.headState = { head, onRemote };
-    this.fill();
-    this.syncPush();
-    cx.notify();
-  }
-
-  /** Where base is in this clone: the remote's copy, else a local branch of that name. */
-  async baseRef(base: string): Promise<string | null> {
-    const tries = [...(this.baseRemote ? [`refs/remotes/${this.baseRemote}/${base}`] : []), `refs/heads/${base}`];
-
-    for (const ref of tries) {
-      const ok = await this.git(["rev-parse", "--verify", "--quiet", ref]).then(() => true).catch(() => false);
-
-      if (ok) return ref.replace(/^refs\/(remotes|heads)\//, "");
-    }
-
-    return null;
+  /** Base or head changed: what's between them (pr-form-reads.ts), the newest ask winning. */
+  reread(_cx: Context): void {
+    this.app.run(reread(this), { key: "pr-range" });
   }
 
   /** Title and body from the commits (and the template), until the person writes their own. */
@@ -353,21 +249,18 @@ export class PrForm {
     return out;
   }
 
-  async send(): Promise<Outcome<Created>> {
-    const v = this.form.values(), plan = this.plan();
+  /** gh pr create (with git push first when asked): how it went, gh's or git's words when not. */
+  send(): Effect.Effect<Outcome<Created>, never, GithubServices> {
+    const v = this.form.values(), plan = this.plan(), repo = this.repo;
+    const push = plan !== null && flagIn(v, "push") ? Effect.mapError(git(repo, [...plan.args], 180000), (e) => `git push: ${e.message}`) : Effect.void;
 
-    if (plan && flagIn(v, "push")) {
-      const where = this.repo.on ? { cwd: this.repo.root, on: this.repo.on, timeout: 180000 } : { cwd: this.repo.root, timeout: 180000 };
-      const r = await exec("git", [...plan.args], where);
-
-      if (r.code !== 0) return { ok: false, err: `git push: ${r.stderr.trim().split("\n").filter(Boolean).pop() ?? "failed"}` };
-    }
-
-    const r = await ghRun(this.repo, prArgs(fieldsOf(v, this.headOwner)), { timeout: 120000 });
-
-    if (!r.ok) return { ok: false, err: r.err };
-
-    return { ok: true, number: createdNumber(r.out), url: r.out.trim() };
+    return push.pipe(
+      Effect.andThen(Effect.mapError(Gh.ghRun(repo, prArgs(fieldsOf(v, this.headOwner)), 120000), (e) => e.message)),
+      Effect.match({
+        onFailure: (err): Outcome<Created> => ({ ok: false, err }),
+        onSuccess: (out): Outcome<Created> => ({ ok: true, number: createdNumber(out), url: Str.trim(out) }),
+      }),
+    );
   }
 
   // ---- beside the form

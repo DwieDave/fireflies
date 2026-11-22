@@ -28,6 +28,7 @@
 //   (shares its row with the next field, `join` between them).
 
 import { div } from "gpui-kit";
+import { Effect } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, InputState, TextareaState } from "gpui-base";
 import { window as appWindow } from "herdr";
@@ -428,27 +429,22 @@ export class Form<R> {
     cx.notify();
   }
 
+  /** Sends what the form wrote (its spec's send, a run on the window): done, or back to the review with why. */
   send(cx: Context): void {
+    const live = this.app.acx ?? cx;
+
     this.stage = "sending";
     this.sendError = "";
-    this.app.spawn(cx, async (cx) => {
-      let r: Outcome<R>;
-
-      try {
-        r = await this.spec.send(cx);
-      } catch (err) {
-        r = { ok: false, err: err instanceof Error ? err.message : String(err) };
-      }
-
+    this.app.run(Effect.map(this.spec.send(cx), (r: Outcome<R>) => {
       if (r.ok) {
         this.release();
-        this.spec.done?.(r, cx);
+        this.spec.done?.(r, live);
       } else {
         this.stage = "confirm";
         this.confirmAt = 0;
-        this.sendError = r.err || "gh didn't answer.";
+        this.sendError = r.err === "" ? "gh didn't answer." : r.err;
       }
-    });
+    }));
   }
 
   // ---- lists

@@ -49,7 +49,7 @@ import { appHome, theme, props, closeOverlay, openOverlay, shared, setShared, sp
 import type { Theme } from "herdr";
 import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { RunOptions } from "@fireflies/kit";
-import type { Repo } from "./gh-await.ts";
+import type { Repo } from "./gh.ts";
 import type { GhError } from "./gh.ts";
 import { runtime } from "./fx.ts";
 import type { GithubFx, GithubServices } from "./fx.ts";
@@ -420,19 +420,6 @@ export default class GitHub extends View implements Host {
     });
   }
 
-  /** Background work for a tab, started with the cx of whatever asked for it; `fn` gets the
-   *  task's own, which stays good across its awaits (the asker's is refused once its call returned). */
-  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void {
-    cx.spawn(async (cx) => {
-      try {
-        await fn(cx);
-      } catch {
-        /* shown by the caller */
-      }
-
-      if (!this.closed) cx.notify();
-    });
-  }
 
   save(all = true): void {
     const kept = { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() };
