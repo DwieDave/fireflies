@@ -16,9 +16,58 @@ The UI concept Developer picked on 2026-11-22 (concept A, the night sky) is in [
 | h | Native notifications with icon, machine, agent title, message | yes | APNs `.p8` key from his account; a small sender on each machine (a mod or `bin/` script watching herdr-core agent states) POSTs to APNs HTTP/2 directly: no third-party server; Notification Service Extension + communication notification (`INSendMessageIntent`) shows the agent/machine icon (from memory); tap opens that pane | — | A machine that sleeps or is offline sends nothing; the APNs key lives on his machines; Pushover becomes redundant |
 | i | Toggleable floating arrow/Enter pad for terminals, repositionable | yes | In-app: a draggable floating pad (arrows + Enter) over terminal panes, sending the escape sequences to the terminal; toggled from the `inputAccessoryView` hotkey row or a toolbar; position kept per device; hardware keyboard via `UIKeyCommand`/`pressesBegan` | — | Terminal panes only (other panes are touch-optimized instead); no system keyboard extension (not asked) |
 | j | Local host (homelab.local) + WireGuard on cellular, auto-switch, VPN native in-app | yes | Packet Tunnel Provider extension (his account grants the Network Extension entitlement) with WireGuardKit (wireguard-apple); `NETunnelProviderManager.onDemandRules`: `NEOnDemandRuleConnect` on `.cellular`, `NEOnDemandRuleDisconnect` on Wi-Fi `ssidMatch` home: iOS switches by itself, no WireGuard app; per-host profile {local addr, VPN addr}, picked by `NWPathMonitor` + a quick probe of the local name | — | iOS runs one VPN at a time: replaces Tailscale/WireGuard app while on; `.local` mDNS only on home Wi-Fi; the tunnel carries the whole phone's traffic to the home subnets you route (split tunnel via AllowedIPs) |
-| k | Mosh for terminals (roams Wi-Fi ↔ cellular, survives sleep) | yes | Blink Shell's iOS build of mosh as a library (github.com/blinksh/mosh: GPL-3.0 with the OpenSSL exception, plus mosh's COPYING.iOS waiver for the App Store conflict); the app bootstraps over its SSH session (`mosh-server new -- fireflies attach <t>`, i.e. hc's attach in mosh-server's pty), then UDP 60000–61000; mosh-client's screen output feeds libghostty-vt like any terminal's; `mosh-server` is already on his machines (`/private/etc/nix-darwin/configurations/mosh.nix`: `pkgs.mosh`, Remote Login, firewall allow) | — | The iOS app links GPLv3 code: its build must ship under GPLv3 terms (Fireflies is Apache-2.0, which may go into GPLv3; source offered); no scrollback in mosh: history comes from herdr-core (`fireflies read`) over the SSH channel; mosh roams the phone's address, not the machine's: keep one machine address for the session (the WireGuard one, or route the home subnet through the tunnel), else the j) LAN ↔ VPN switch drops it; one mosh-server and UDP port per open terminal |
+| k | Mosh for terminals, bundled, SSH fallback (roams Wi-Fi ↔ cellular, survives sleep) | yes | Phone: a mosh client library (Blink's blinksh/mosh, GPL-3.0; or mosh-go, MIT, see below); machine: `mosh-server` bundled in the desktop app and the Linux CLI build, run as `fireflies mosh-server new -- fireflies attach <t>` over the app's SSH session, then UDP; mosh-client's screen output feeds libghostty-vt; if mosh fails the same `fireflies attach <t>` runs over an SSH pty | — | GPL: the iOS app's source offered under GPLv3 if it links Blink's library; no mosh scrollback (history from herdr-core over SSH); one machine address per session (mosh roams the phone's address, not the machine's: from memory); macOS firewall may ask once, Linux firewalls need UDP opened (root, once); one mosh-server and UDP port per open terminal |
 
 **Mosh (k) beside the rest:** mosh carries a terminal's screen state only (its own protocol, predicted local echo, roaming client), so it suits the terminal panes and nothing else; the mods' channel (`fireflies serve --stdio`, docs/ios-mods-over-ssh.md) stays on SSH, and over the WireGuard tunnel its TCP survives a Wi-Fi ↔ cellular move because the tunnel keeps the inner addresses (a longer drop: reconnect, resubscribe, replay by id). Recommended: mosh for terminals now (proven on iOS by Blink, already served by his machines, `hc attach` is a plain pty program, reasoned, not run under mosh here), scrollback fetched from herdr-core; not our own prediction protocol, which would rebuild mosh. From memory: mosh's server follows the client's newest authenticated address but the client never changes the server's; predicted echo and the UDP port range; unchecked: whether `fireflies attach` draws well inside mosh's terminal (mosh's own emulator sits between).
+
+
+### Mosh: bundling, fallback, license
+
+Developer's words: "I want it bundled (not need to install anything ideally
+besides desktop app and ios app)"; "Terminal only via mosh with a ssh
+fallback if mosh doesnt work"; "what about the licensing? … Or can we load it
+as a bundle similiar to chromium?" License lines are this agent's reading of
+the texts, **not legal advice**.
+
+| question | answer | known / guessed |
+|---|---|---|
+| ship mosh-server in the desktop app | yes: a separate executable in the bundle (macOS `Contents/MacOS/`, Linux beside the CLI), started as `fireflies mosh-server …` (src/cli.rs routes a word to a binary as it routes `core`), so nothing is on PATH; the phone's bootstrap runs `~/.local/bin/fireflies mosh-server new -c 256 -- fireflies attach <t>` by path | route: read in src/cli.rs; the CLI link's location: core_bin.rs `install_cli_link` |
+| its dependencies | protobuf, ncurses (terminfo), zlib, OpenSSL or nettle (mosh build docs; buildroot picks either) | known |
+| self-contained | Linux: static with musl works in practice (dtinth/mosh-static; Blink publishes static server builds); macOS: protobuf/ncurses/zlib/crypto static, libSystem dynamic (macOS has no fully static binaries); a nix derivation beside modules/herdr-app.nix's | Linux known; macOS link and size guessed (a few MB, protobuf dominates) |
+| UTF-8 locale | mosh-server refuses a non-UTF-8 locale: the wrapper sets `LC_ALL=C.UTF-8` (Linux) / `en_US.UTF-8` (macOS) | from memory |
+| a Linux server with only herdr-core + CLI | distribution/install.sh installs the app and, if missing, the core (into `~/.local/bin`); a CLI-only install that carries `mosh-server` too is new | install.sh read; the CLI-only path is a proposal |
+| not zero-setup: sshd | needed for the bootstrap and the fallback: Remote Login on macOS, sshd on Linux | known |
+| not zero-setup: macOS firewall | off by default; when on, an incoming-connection prompt per binary, once; "automatically allow signed software" should cover a Developer-ID-signed helper inside our signed app; `socketfilterfw --add` needs root (practice; Apple's docs don't say), so no silent pre-authorisation | Apple docs for the prompt and the signed option; helper/UDP coverage and sudo guessed |
+| not zero-setup: Linux firewall | ufw/firewalld must allow UDP 60000–61000, or one fixed port (`-p 60001`); root, once | known |
+
+| fallback step (phone) | how |
+|---|---|
+| 1. show the terminal at once | open `fireflies attach <t>` over an SSH pty channel first (it is the same herdr-core terminal either way, attach only views it: nothing is lost on a switch) |
+| 2. start mosh beside it | `fireflies mosh-server new …` over the same SSH session; a missing binary, a non-zero exit or no `MOSH CONNECT <port> <key>` line within 5 s: stay on SSH ("mosh: no server") |
+| 3. the UDP handshake is the probe | no separate probe: no authenticated reply within 3 s → stay on SSH ("mosh: UDP blocked"), kill that mosh-server over SSH (it prints its pid) |
+| 4. upgrade | first reply: swap the pane's stream to mosh, close the SSH pty; remember the result per network (SSID or cellular) for an hour |
+| what Developer sees | the pane opens immediately; a small `SSH` or `mosh` mark in its corner; the reason in the pane's menu with "try mosh again" |
+| versions | both ends from our builds at one pinned mosh version; a system mosh-server on PATH is never used |
+
+| license question | reading |
+|---|---|
+| a) desktop, mosh-server beside the app | an aggregate (GPLv3 §5): Fireflies stays Apache-2.0. Duties: mosh's GPLv3 text and copyright notices in the bundle; its corresponding source at the exact version (tag + our build recipe and patches) offered for as long as we ship it (§6, a link we host); a `licenses/inventory.json` component and `licenses/mosh-COPYING.txt`, its static deps' notices (protobuf BSD-3, ncurses MIT-style, zlib, OpenSSL Apache-2.0 or nettle LGPL) in THIRD-PARTY-NOTICES, `tests/notices.rs` then checks them in full; mosh's OpenSSL exception covers the OpenSSL link |
+| b) iOS, Blink's client library linked in | the app binary becomes one GPLv3 work: its complete corresponding source (our Rust, Swift, build scripts, vendored crates) offered under GPLv3; our files keep their Apache-2.0 headers (Apache-2.0 code may go into a GPLv3 work); every linked piece must be GPLv3-compatible: libghostty-vt MIT, WireGuardKit MIT, quickjs-jit MIT, Effect MIT, the vendored GPUI crates Apache-2.0 (`vendor/gpui-pre*/Cargo.toml`, `LICENSE-APACHE`): all fine; herdr-core is not in the iOS app (it runs on the machine) |
+| b) App Store / TestFlight | mosh's COPYING.iOS: its copyright holders "committed not to pursue any license violation that results solely from the conflict between the GPLv3" and Apple's terms, "as long as you comply with the GPL in all other respects" (source and license text). It binds only mosh's holders: no other GPL code may enter the app |
+| c) download at first use, like CEF | desktop: we would still convey mosh (our URL, our pick of version): same duties, only moved; a few MB saved against CEF's hundreds, and a download step is the opposite of "nothing to install": not worth it. iOS: closed. App Review 2.5.2 forbids downloading executable code, and iOS only maps code signed into the app bundle (from memory) |
+| d) no GPL in the iOS app | **mosh-go** (github.com/unixshells/mosh-go, MIT): pure Go client and server, says it is wire-compatible (AES-128-OCB3, SSP); on iOS through gomobile's c-archive (a Go runtime in the app); young, maturity unknown. It could also be the bundled server (one static Go binary per platform, none of protobuf's linking pain). **moshpit** (Rust, MIT/Apache-2.0): its own protocol and key auth, not mosh-compatible; fine since we ship both ends, but young. A client out of process: impossible on iOS (no helper processes). Our own roaming transport: rebuilding SSP (UDP, OCB, screen-state sync, predicted echo, roaming): weeks to months |
+
+**Recommendation:** bundle C mosh-server in the desktop app and a CLI-only
+Linux build (aggregation, notices, source link), with the SSH-first,
+mosh-upgrade fallback above. On the phone, Blink's library if the iOS app's
+source may be public under GPLv3 (fewest unknowns; the fork is public
+already); otherwise mosh-go, after a test that it talks to C mosh-server.
+
+**Developer's decisions:** the iOS app's source public under GPLv3, or
+mosh-go to avoid it; C mosh-server or mosh-go as the bundled server; a fixed
+UDP port or the 60000–61000 range; whether a CLI-only Linux install is
+wanted; accepting one macOS firewall prompt (his nix config pre-allows the
+nix mosh-server today).
 
 **Own minimal iOS backend for vendor/gpui-pre-apple** (the core in `vendor/gpui-pre` already speaks mobile: `Touch(TouchEvent)`, `LongPress`, `TouchDrag`, `Pinch` inputs; a portable gesture arena in `gestures.rs` turning tap into `ClickEvent::Touch` and pan into `ScrollWheelEvent`; `AppLifecyclePhase`, `insets()`, `show_soft_keyboard()`, `on_memory_warning` in `platform.rs` with their iOS mapping documented. Missing is only the platform crate.)
 
