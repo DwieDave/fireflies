@@ -9,8 +9,7 @@ import { appHome } from "herdr";
 import type { Guard } from "./guard.ts";
 import type { ApiOptions, Fetched, GraphqlOptions, Read, Repo, RepoPlace, Where } from "./gh.ts";
 import * as Gh from "./gh.ts";
-import type { Doc, Entry } from "./cache.ts";
-import { parse } from "./cache.ts";
+import type { Entry } from "./cache.ts";
 import type { GqlVar } from "./model.ts";
 import * as store from "./store.ts";
 import type { Slugged } from "./remotes.ts";
@@ -67,13 +66,10 @@ export const repoOf = (folder: string | null | undefined, on: string | null): Pr
 /** gh.ts viewRepo. */
 export const viewRepo = (want: Slugged | null, place: RepoPlace, { quiet = false } = {}): Promise<Repo | null> => run(Gh.viewRepo(want, place, quiet));
 
-// ---- the cache file (store.ts), for main.ts and window-reads.ts
+// ---- the cache file (store.ts), for window-reads.ts
 
 /** The cache file of this app. */
 const cacheFile = (): string => store.cachePath(appHome());
-
-/** store.ts load: a file that can't be read opens as a blank cache, as before. */
-export const loadCache = (): Promise<Doc> => run(Effect.catchTag(store.load(cacheFile()), "FileError", () => Effect.succeed(parse(null))));
 
 /** store.ts save at the window's time: true once written, false when it couldn't be. */
 export const saveCache = (folder: string | null, entry: Entry): Promise<boolean> =>
