@@ -8,7 +8,7 @@ import { h_flex, v_flex, v_virtual_list, Input } from "gpui-base";
 import type { Theme } from "herdr";
 import { readAgo, ago } from "./model.ts";
 import { markdown } from "@fireflies/markdown";
-import { dither, pip, empty, band, stop, unzoom, ART, ansiColor } from "./kit.ts";
+import { dither, pip, empty, lit, stop, unzoom, ART, ansiColor } from "./kit.ts";
 import type { Board, Content, Field, FieldValue, Item } from "./board.ts";
 import type { At, Layout, Lane } from "./board-layout.ts";
 import { filterTokens, selectOf } from "./board-filter.ts";
@@ -321,7 +321,7 @@ export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, ch
 
   return v_flex().id(`pcard-${item.id}`).relative().w_full().h(cardH(proj, item, chars, fields)).pl(10).pr(8).pt(6).gap(4).flex_none()
     .hover((s) => s.bg(`${edgeTone(t)}55`))
-    .when(sel && !lifted, (el) => el.children(band(t, active)))
+    .when(sel && !lifted, (el) => lit(t, el, active))
     .when(lifted, (el) => el.border(1).border_color(t.accent).child(dither(`${t.accent}30`, 1)))
     .when(!sel && !lifted, (el) => el.child(div().absolute().left(8).right(8).top(0).h(1).child(dither(edgeTone(t), 1))))
     .child(h_flex().relative().gap(7).items_start().text_size(12)

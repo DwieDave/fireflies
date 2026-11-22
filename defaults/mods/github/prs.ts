@@ -172,7 +172,7 @@ export default class Prs {
   /** Made: the form goes, the list shows every open pull request and selects the new one once GitHub lists it. */
   created(number: number | null, cx: Context): void {
     this.closeForm();
-    this.app.note = noteOf(number ? `Opened #${number}.` : "Opened the pull request.", "done");
+    this.app.note = noteOf(number ? `Opened #${number}.` : "Opened the pull request.", "done", Date.now());
 
     if (number === null) {
       this.app.refresh(cx, true);

@@ -21,7 +21,7 @@ export function refused(proj: Projects, cause: unknown): void {
   const message = cause instanceof Error ? cause.message : String(cause);
   const s = scopeProblem(message, true);
 
-  proj.app.note = noteOf(s ? s.text : `GitHub refused it: ${message}`, "failed");
+  proj.app.note = noteOf(s ? s.text : `GitHub refused it: ${message}`, "failed", Date.now());
   proj.keepSel();
 }
 
@@ -47,7 +47,7 @@ export function editBatch(proj: Projects, ops: readonly Op[], send: (repo: Repo)
 export function sendEdits(proj: Projects, entries: readonly Pending[], send: (repo: Repo) => Promise<void>, ok: string | null, cx: Context): void {
   const repo = proj.app.repo;
 
-  proj.app.note = noteOf("…", "working");
+  proj.app.note = noteOf("…", "working", Date.now());
   cx.spawn(async (cx) => {
     try {
       if (!repo) throw new Error("No repo.");
@@ -59,7 +59,7 @@ export function sendEdits(proj: Projects, entries: readonly Pending[], send: (re
         e.doneAt = Date.now();
       }
 
-      proj.app.note = ok ? noteOf(ok, "done") : null;
+      proj.app.note = ok ? noteOf(ok, "done", Date.now()) : null;
       proj.settleAt = Date.now() + SETTLE;
       proj.app.next = Math.min(proj.app.next, proj.settleAt);
     } catch (err) {
@@ -83,7 +83,7 @@ export function setField(proj: Projects, item: Item, field: Field, choice: strin
   const value = valueFor(field, choice);
 
   if (choice !== null && choice !== "" && !value) {
-    proj.app.note = noteOf(`That isn't a ${field.type} for ${field.name}.`, "failed");
+    proj.app.note = noteOf(`That isn't a ${field.type} for ${field.name}.`, "failed", Date.now());
 
     return;
   }

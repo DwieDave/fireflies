@@ -6,7 +6,7 @@ import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
-import { dither, stop, band, sweep, empty, unzoom } from "./kit.ts";
+import { dither, stop, lit, sweep, empty, unzoom } from "./kit.ts";
 import { submitKey } from "@fireflies/form-keys";
 import type { Cell, Layout, Row as LayoutRow } from "./form-layout.ts";
 import { cellOf, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, FOOTER, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.ts";
@@ -250,7 +250,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
 
   const row = (r: Choice, i: number) => h_flex().id(`fp-${i}`).relative().h(hOf(r)).flex_none().px(8).gap(8).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edgeTone(t)}55`))
-    .when(i === p.at, (el) => el.children(band(t, true)))
+    .when(i === p.at, (el) => lit(t, el, true))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       p.at = i;

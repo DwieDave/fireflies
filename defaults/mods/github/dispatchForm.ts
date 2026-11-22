@@ -23,7 +23,7 @@ import type { Command, Field, FormHost, Outcome, Values } from "./form-fields.ts
 import { textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import type { Note } from "./kit.ts";
-import { panel, empty, band, noteOf } from "./kit.ts";
+import { panel, empty, lit, noteOf } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
 const WAIT_FOR = 120000; // how long to look for the new run (how often: model.ts soon, a backoff)
@@ -379,7 +379,7 @@ export class DispatchForm {
 
     a.closeForm();
     a.waiting = { name: r.workflow.name, ref: r.ref, since: r.since };
-    this.app.note = noteOf(`Started ${r.workflow.name} on ${r.ref}; waiting for its run…`, "working");
+    this.app.note = noteOf(`Started ${r.workflow.name} on ${r.ref}; waiting for its run…`, "working", Date.now());
     // The task's own cx: the one handed in belongs to a call that has returned by the first await.
     this.app.spawn(cx, async (cx) => {
       for (let n = 0; Date.now() - r.since < WAIT_FOR && !this.app.closed && a.waiting?.since === r.since; n++) {
@@ -394,7 +394,7 @@ export class DispatchForm {
         if (!run) continue;
 
         a.waiting = null;
-        this.app.note = noteOf(`${r.workflow.name} #${run.run_number ?? ""} is ${run.status === "queued" ? "queued" : "running"}.`, "done");
+        this.app.note = noteOf(`${r.workflow.name} #${run.run_number ?? ""} is ${run.status === "queued" ? "queued" : "running"}.`, "done", Date.now());
         a.show(run.id, null, cx);
         a.focus = "runs";
 
@@ -403,7 +403,7 @@ export class DispatchForm {
 
       if (a.waiting?.since === r.since) {
         a.waiting = null;
-        this.app.note = noteOf("GitHub took it, but its run hasn't shown up yet: r reads again.", "working");
+        this.app.note = noteOf("GitHub took it, but its run hasn't shown up yet: r reads again.", "working", Date.now());
       }
     });
   }
@@ -421,7 +421,7 @@ export class DispatchForm {
       body = v_flex().id("wf-side").size_full().overflow_y_scroll().py(4).text_size(11)
         .children(list.map((w, i) => h_flex().id(`wf-${i}`).relative().h(32).flex_none().px(10).gap(8).items_center().cursor_pointer()
           .hover((s) => s.bg(`${edge(t)}55`))
-          .when(w === cur, (el) => el.children(band(t, false)))
+          .when(w === cur, (el) => lit(t, el, false))
           .on_click((_e, cx) => {
             this.form.set("workflow", w.path, { force: true });
 

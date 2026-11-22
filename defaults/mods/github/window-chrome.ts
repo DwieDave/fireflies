@@ -10,7 +10,7 @@ import { placeMenu } from "@fireflies/menu-place";
 import type { Guarded } from "./guard.ts";
 import { literal } from "./guard.ts";
 import type { Hint } from "./kit.ts";
-import { dither, chip, stop, pip, band, ART, popupScrim, unzoom } from "./kit.ts";
+import { dither, chip, stop, pip, lit, ART, veil, unzoom } from "./kit.ts";
 import { keysView } from "@fireflies/keyhelp";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";
@@ -128,7 +128,7 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
 
   const rows = p.rows.map((r, i) => h_flex().id(`pick-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edge(t)}55`))
-    .when(i === p.at, (el) => el.children(band(t, true)))
+    .when(i === p.at, (el) => lit(t, el, true))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       v.picker = null;
@@ -160,7 +160,7 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
       v.picker = null;
       cx.notify();
     })
-    .child(popupScrim("gh-picker-scrim"))
+    .child(veil("gh-picker-scrim"))
     .child(v_flex().id("gh-picker-box").when(at !== null, (el) => el.absolute().left(at?.x ?? 0).top(at?.y ?? 0)).w(w).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(v.pickerScroll)
       .on_mouse_down("left", stop)
       .child(div().px(10).pb(4).text_size(10).text_color(t.muted).child(p.title))

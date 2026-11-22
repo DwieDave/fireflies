@@ -360,7 +360,7 @@ export default class GitHub extends View implements Host {
     if (!r || !to || this.switching) return;
 
     this.switching = true;
-    this.note = noteOf(`Opening ${to.full}…`, "working");
+    this.note = noteOf(`Opening ${to.full}…`, "working", Date.now());
     cx.spawn(async (cx) => {
       try {
         const next = await viewRepo(to, { root: r.root, on: r.on, branch: r.branch });
@@ -378,7 +378,7 @@ export default class GitHub extends View implements Host {
         this.show(next, cx, store.peek()?.repos.get(repoKey(next)) ?? null);
         this.dirty = true;
       } catch (err) {
-        this.note = noteOf(err instanceof Error ? err.message : String(err), "failed");
+        this.note = noteOf(err instanceof Error ? err.message : String(err), "failed", Date.now());
       } finally {
         this.switching = false;
         cx.notify();
@@ -609,7 +609,7 @@ export default class GitHub extends View implements Host {
 
   /** Runs a gh action; says how it went, then reads again soon. */
   act(promise: Promise<Ran>, ok: string, cx: Context, after?: () => void): void {
-    this.note = noteOf("…", "working");
+    this.note = noteOf("…", "working", Date.now());
     cx.spawn(async (cx) => {
       let r: Ran;
 
@@ -621,7 +621,7 @@ export default class GitHub extends View implements Host {
 
       if (r.ok) after?.();
 
-      this.note = r.ok ? (ok ? noteOf(ok, "done") : null) : noteOf(r.err, "failed");
+      this.note = r.ok ? (ok ? noteOf(ok, "done", Date.now()) : null) : noteOf(r.err, "failed", Date.now());
 
       if (!r.ok && !this.overlay) notify({ title: "GitHub", body: r.err, level: "error" });
 

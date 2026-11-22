@@ -93,7 +93,7 @@ export function pickLink(v: GitHub): void {
   const links: WebLink[] = tab instanceof Actions ? [] : tab.links();
 
   if (!links.length) {
-    v.note = noteOf("No links in what's shown.", "working");
+    v.note = noteOf("No links in what's shown.", "working", Date.now());
 
     return;
   }

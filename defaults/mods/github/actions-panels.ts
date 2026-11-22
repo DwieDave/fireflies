@@ -12,7 +12,7 @@ import type { Theme } from "herdr";
 import type { LogLine, Run } from "./model.ts";
 import type { PickRow } from "./host.ts";
 import { tone, duration, ago } from "./model.ts";
-import { dither, pip, panel, empty, band, TONE_WORD, sweep, stop, unzoom, unzoomSize, chip } from "./kit.ts";
+import { dither, pip, panel, empty, lit, TONE_WORD, sweep, stop, unzoom, unzoomSize, chip } from "./kit.ts";
 import { canvas, layout, NW, NH } from "./graph.ts";
 import type { default as Actions } from "./actions.ts";
 import { ROW, STEP, LINE } from "./actions.ts";
@@ -25,7 +25,7 @@ export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element
 
   return v_flex().id(`run-${r.id}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none().overflow_hidden()
     .hover((s) => s.bg(`${edge(t)}55`))
-    .when(sel, (el) => el.children(band(t, active)))
+    .when(sel, (el) => lit(t, el, active))
     .when(k === "working", (el) => el.child(sweep(t, t.working, 420)))
     .child(h_flex().relative().gap(7).items_center().text_size(12)
       .child(pip(t, k, 7))
@@ -215,7 +215,7 @@ export function stepsPanel(v: Actions, t: Theme): Element {
         v.app.focusSelf();
         cx.notify();
       })
-      .when(sel, (el) => el.children(band(t, active)))
+      .when(sel, (el) => lit(t, el, active))
       .when(k === "working", (el) => el.child(sweep(t, t.working, 360)))
       // The timeline's thread: a dithered line through every pip.
       .child(div().absolute().left(13).top(0).bottom(0).w(1).child(dither(edge(t), 1)))

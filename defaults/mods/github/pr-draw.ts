@@ -9,7 +9,7 @@ import type { Theme } from "herdr";
 import { isNumber } from "./guard.ts";
 import type { CheckRow, PrRow, PrView, Tone } from "./model.ts";
 import { rowTone, ago, duration } from "./model.ts";
-import { dither, pip, band, toneColor, TONE_WORD, stop } from "./kit.ts";
+import { dither, pip, lit, toneColor, TONE_WORD, stop } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
 /** A row of the list, and of the checks, is this tall. */
@@ -36,7 +36,7 @@ export function prRow(t: Theme, p: PrRow, sel: boolean, active: boolean): Elemen
 
   return v_flex().id(`pr-${p.number}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none()
     .hover((s) => s.bg(`${edge(t)}55`))
-    .when(sel, (el) => el.children(band(t, active)))
+    .when(sel, (el) => lit(t, el, active))
     .child(h_flex().relative().gap(7).items_center().text_size(12)
       .child(pip(t, tone ?? (p.isDraft ? "skipped" : null), 7))
       .child(div().flex_none().text_color(sel ? t.accent : t.muted).child(`#${p.number}`))
@@ -99,7 +99,7 @@ export function checkRow(t: Theme, c: CheckRow, i: number, sel: boolean, onClick
     .hover((s) => s.bg(`${edge(t)}55`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => onClick(cx))
-    .when(sel, (el) => el.children(band(t, true)))
+    .when(sel, (el) => lit(t, el, true))
     .when(c.tone === "working", (el) => el.child(div().absolute().inset_0().overflow_hidden().child(sweepLite(t))))
     .child(pip(t, c.tone, 7))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : t.muted).child(c.workflow ? `${c.workflow} / ${c.name}` : c.name))

@@ -59,7 +59,7 @@ types:
 
 # The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
 # converted mod joins this list in its conversion's commit.
-effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts defaults/mods/git defaults/mods/github/workflow.ts defaults/mods/github/graph.ts defaults/mods/github/remotes.ts defaults/mods/github/pr-menu.ts defaults/mods/github/log-fold.ts defaults/mods/github/form-fields.ts defaults/mods/github/wires.ts"
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts defaults/mods/git defaults/mods/github/workflow.ts defaults/mods/github/graph.ts defaults/mods/github/remotes.ts defaults/mods/github/pr-menu.ts defaults/mods/github/log-fold.ts defaults/mods/github/form-fields.ts defaults/mods/github/wires.ts defaults/mods/github/kit.ts"
 
 # oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
