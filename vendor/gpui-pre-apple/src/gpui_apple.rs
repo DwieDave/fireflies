@@ -10,8 +10,3 @@ mod metal_atlas;
 pub mod metal_renderer;
 
 pub use dispatcher::{AppleActivity, AppleDispatcher};
-
-/// A minimal UIKit platform: one full-screen window whose CAMetalLayer and
-/// frame clock belong to a host view (Swift), which forwards touches.
-#[cfg(target_os = "ios")]
-pub mod ios;
