@@ -15,15 +15,13 @@
 // those are this app's, per project (shared state "github.boards").
 
 import { div, svg } from "gpui-kit";
-import { Semaphore } from "effect";
+import { Semaphore, Array as Arr, Schema } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import { h_flex, v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { shared, setShared } from "herdr";
 import type { Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import type { JsonMap } from "./guards.ts";
-import { mapOf, maybe, toJson, toMap } from "./guards.ts";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
+import { maybe } from "./model.ts";
 import { pollProjects, readDetail } from "./projects-reads.ts";
 import type { WebLink } from "./model.ts";
 import { SLOW, linksIn } from "./model.ts";
@@ -34,7 +32,7 @@ import { dither, empty, ART } from "./kit.ts";
 import type { Board, Choices, Detail, Field, Item, ProjectList, ScopeProblem, StoredBoard, View } from "./board.ts";
 import type { At, Carry, Layout, Lane } from "./board-layout.ts";
 import type { Op } from "./board-edits.ts";
-import { slimBoard, isStoredBoard, boardOf, isListedProject } from "./board.ts";
+import { slimBoard, StoredBoardSchema, boardOf, ListedProjectSchema } from "./board.ts";
 import { layout, grid, find, carried } from "./board-layout.ts";
 import { overlay } from "./board-edits.ts";
 import type { Host, ReadOptions } from "./host.ts";
@@ -50,13 +48,13 @@ import { edge } from "@fireflies/tones";
 // folded columns for a view. As shared state holds it:
 // { repos: { repoKey: projectId }, projects: { id: { view, folded: { viewId: [key] }, lanes: { viewId: [key] }, limits: { fieldId: { key: n } } } } }
 
-const isLocalJson = object({}, {
-  view: maybe(isString), folded: maybe(mapOf(arrayOf(isString))), lanes: maybe(mapOf(arrayOf(isString))), limits: maybe(mapOf(mapOf(isNumber))),
+// Each map read entry by entry (the kit's mapOf): one project's settings in another shape are left out, the rest read.
+const LocalSchema = Schema.Struct({
+  view: Schema.optionalKey(Schema.String), folded: Schema.optionalKey(mapOf(Schema.Array(Schema.String))), lanes: Schema.optionalKey(mapOf(Schema.Array(Schema.String))),
+  limits: Schema.optionalKey(mapOf(mapOf(Schema.Finite))),
 });
 
-const isPrefsJson = object({}, { repos: maybe(mapOf(isString)), projects: maybe(mapOf(isLocalJson)) });
-
-const PREFS = sharedKey("github.boards", isPrefsJson);
+const PREFS = sharedKey("github.boards", Schema.Struct({ repos: Schema.optionalKey(mapOf(Schema.String)), projects: Schema.optionalKey(mapOf(LocalSchema)) }));
 
 /** A project's own settings here: its view, each view's folded columns and lanes, each field's column limits. */
 interface Local {
@@ -74,14 +72,13 @@ interface Prefs {
 
 const NO_LOCAL: Local = { folded: new Map(), lanes: new Map(), limits: new Map() };
 
-const localOf = (l: Guarded<typeof isLocalJson>): Local => ({
-  view: l.view ?? undefined, folded: toMap(l.folded ?? {}), lanes: toMap(l.lanes ?? {}),
-  limits: new Map([...toMap(l.limits ?? {})].map(([k, v]) => [k, toMap(v)])),
+const localOf = (l: typeof LocalSchema.Type): Local => ({
+  view: l.view, folded: l.folded ?? new Map(), lanes: l.lanes ?? new Map(), limits: l.limits ?? new Map(),
 });
 
-function localJson(l: Local): Guarded<typeof isLocalJson> {
-  const limits = toJson(new Map([...l.limits].map(([k, v]): [string, JsonMap<number>] => [k, toJson(v)])));
-  const out = { folded: toJson(l.folded), lanes: toJson(l.lanes), limits };
+/** A project's settings as shared state holds them (the view only when there is one). */
+function localJson(l: Local): typeof LocalSchema.Type {
+  const out = { folded: l.folded, lanes: l.lanes, limits: l.limits };
 
   return l.view === undefined ? out : { ...out, view: l.view };
 }
@@ -92,9 +89,9 @@ import type { ProjectsKept } from "./kept.ts";
 export type { ProjectsKept };
 
 /** The picker's list as the cache keeps it, with when it was read. */
-const isListPiece = object({ projects: arrayOf(isListedProject) }, { viewer: nullable(isString), repoId: nullable(isString), at: maybe(isNumber) });
+const isListPiece = Schema.is(Schema.Struct({ projects: Schema.Array(ListedProjectSchema), viewer: maybe(Schema.String), repoId: maybe(Schema.String), at: maybe(Schema.Finite) }));
 
-const isBoardPiece = object({ board: isStoredBoard }, { at: maybe(isNumber) });
+const isBoardPiece = Schema.is(Schema.Struct({ board: StoredBoardSchema, at: maybe(Schema.Finite) }));
 
 /** The cache's part for this tab (cache.ts entry.projects). */
 export interface ProjectsCached {
@@ -308,12 +305,12 @@ export default class Projects {
   prefs(): Prefs {
     const p = readShared(shared, PREFS, {});
 
-    return { repos: toMap(p.repos ?? {}), projects: new Map([...toMap(p.projects ?? {})].map(([k, v]) => [k, localOf(v)])) };
+    return { repos: p.repos ?? new Map(), projects: new Map(Arr.map(Arr.fromIterable(p.projects ?? new Map<string, typeof LocalSchema.Type>()), ([k, v]) => [k, localOf(v)] as const)) };
   }
 
   /** Writes the prefs back, in the shape shared state holds them. */
   setPrefs(p: Prefs): void {
-    writeShared(setShared, PREFS, { repos: toJson(p.repos), projects: toJson(new Map([...p.projects].map(([k, v]) => [k, localJson(v)]))) });
+    writeShared(setShared, PREFS, { repos: p.repos, projects: new Map(Arr.map(Arr.fromIterable(p.projects), ([k, v]) => [k, localJson(v)] as const)) });
   }
 
   local(): Local {
