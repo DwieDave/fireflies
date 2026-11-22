@@ -17,6 +17,8 @@
 // neither side it takes the larger and scrolls inside it. It never covers
 // the footer or leaves the panel.
 
+import { Array as Arr, Option } from "effect";
+
 export const COLUMN = 640; // the form panel's width beside the side panel
 export const WIDE = 860; // from here the side panel shows
 export const LABEL = 16, LABEL_GAP = 4, CONTROL = 28, ERROR = 16, TOGGLE = 24;
@@ -126,14 +128,14 @@ export function layout<F extends Placed>(fields: readonly F[], { width, viewH = 
 
     // A section: a gap over it (none at the top), its eyebrow line, a little air under it.
     const section = (title: string) => {
-      if (rows.length) y += ROW_GAP + 4;
+      if (rows.length > 0) y += ROW_GAP + 4;
 
       rows.push({ kind: "section", title, y, h: SECTION - 10 });
       y += SECTION;
     };
 
     const push = (cells: Cell<F>[], join: string | null = null) => {
-      const h = Math.max(...cells.map((c) => c.h));
+      const h = Math.max(...Arr.map(cells, (c) => c.h));
 
       if (rows.at(-1)?.kind === "fields") y += ROW_GAP;
 
@@ -148,17 +150,17 @@ export function layout<F extends Placed>(fields: readonly F[], { width, viewH = 
     for (let i = 0; i < fields.length; i++) {
       const f = fields[i];
 
-      if (!f) continue;
+      if (f === undefined) continue;
 
-      if (f.group && f.group !== group) {
+      if (f.group !== undefined && f.group !== "" && f.group !== group) {
         group = f.group;
         section(f.group);
       }
 
       const next = fields[i + 1];
-      const sameGroup = next && (!next.group || next.group === group);
+      const sameGroup = next !== undefined && (next.group === undefined || next.group === "" || next.group === group);
 
-      if (f.pair && next && sameGroup && pairs) {
+      if (f.pair === true && next !== undefined && sameGroup && pairs) {
         const w = Math.floor((inner - JOIN) / 2);
 
         push([cell(f, i, pad, w), cell(next, i + 1, pad + w + JOIN, inner - w - JOIN)], f.join ?? null);
@@ -167,7 +169,7 @@ export function layout<F extends Placed>(fields: readonly F[], { width, viewH = 
         continue;
       }
 
-      if (isHalf(f) && pairs && next && sameGroup && isHalf(next) && !next.pair) {
+      if (isHalf(f) && pairs && next !== undefined && sameGroup && isHalf(next) && next.pair !== true) {
         const w = Math.floor((inner - COL_GAP) / 2);
 
         push([cell(f, i, pad, w), cell(next, i + 1, pad + w + COL_GAP, inner - w - COL_GAP)]);
@@ -186,7 +188,7 @@ export function layout<F extends Placed>(fields: readonly F[], { width, viewH = 
   let out = build(AREA_MIN), area = AREA_MIN;
 
   // One multi-line field takes the room the column leaves free (up to AREA_MAX).
-  if (viewH > 0 && fields.some((f) => f.kind === "area") && out.height < viewH) {
+  if (viewH > 0 && Arr.some(fields, (f) => f.kind === "area") && out.height < viewH) {
     area = Math.min(AREA_MAX, AREA_MIN + Math.floor(viewH - out.height));
 
     if (area > AREA_MIN) out = build(area);
@@ -205,18 +207,27 @@ export interface CellPlace {
   readonly controlH: number;
 }
 
+/** A field's control's height: a toggle's, the multi-line field's (`area`), else one line's. */
+function controlHeight(f: Placed, area: number): number {
+  switch (f.kind) {
+    case "toggle": return TOGGLE;
+    case "area": return area;
+    default: return CONTROL;
+  }
+}
+
 /** Where field `index` sits in a layout: { y, h, x, w, controlY, controlH }, or null. */
 export function cellOf<F extends Placed>(lay: Layout<F>, index: number): CellPlace | null {
   for (const r of lay.rows) {
     if (r.kind !== "fields") continue;
 
-    const c = r.cells.find((x) => x.index === index);
+    const found = Arr.findFirst(r.cells, (x) => x.index === index);
 
-    if (!c) continue;
+    if (Option.isNone(found)) continue;
 
-    const f = c.field;
+    const c = found.value, f = c.field;
     const controlY = r.y + (f.kind === "toggle" ? 0 : LABEL + LABEL_GAP);
-    const controlH = f.kind === "toggle" ? TOGGLE : f.kind === "area" ? lay.area : CONTROL;
+    const controlH = controlHeight(f, lay.area);
 
     return { y: r.y, h: r.h, x: c.x, w: c.w, controlY, controlH };
   }
@@ -231,15 +242,15 @@ export interface Sized {
 
 /** A list's height for its rows (null: still reading; `sub`: rows with a second line), its filter line included. */
 export function pickerHeight(rows: readonly Sized[] | null | undefined): number {
-  if (!rows) return PICK_HEAD + 60 + 2;
+  if (rows === null || rows === undefined) return PICK_HEAD + 60 + 2;
 
-  const shown = rows.slice(0, PICK_MAX);
+  const shown = Arr.take(rows, PICK_MAX);
 
-  if (!shown.length) return PICK_HEAD + 34 + 2;
+  if (shown.length === 0) return PICK_HEAD + 34 + 2;
 
   let body = 8;
 
-  for (const r of shown) body += r.sub ? PICK_ROW_SUB : PICK_ROW;
+  for (const r of shown) body += r.sub === undefined || r.sub === "" ? PICK_ROW : PICK_ROW_SUB;
 
   return PICK_HEAD + body + 2;
 }
