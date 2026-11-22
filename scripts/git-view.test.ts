@@ -111,6 +111,23 @@ test("opens on the repo: every panel reads, renders without throwing", async () 
   for (const mode of ["normal", "half", "full"]) { v.mode = mode; for (const p of ["status", "files", "branches", "commits", "stash"]) { v.setPanel(p); await settle(v); v.render(); } }
 });
 
+test("opening starts in the Files panel's files tab, whatever the folder's window showed last; keys act on the files", async () => {
+  sharedState = { "git.state": { [repo]: { panel: "commits", tabOf: { files: "review", branches: "tags", commits: "reflog" }, mode: "half" } } };
+  const v = new GitView();
+  v.init({ folder: repo }, cx);
+  await settle(v);
+  v.render();
+  expect(v.panel).toBe("files");
+  expect(v.tabOf).toEqual({ files: "files", branches: "tags", commits: "reflog" });
+  expect(v.focus).toBe("side");
+  expect(v.ctx()).toBe("files");
+  expect(v.mode).toBe("half");
+  v.tree = false; v.render();
+  expect(v.item().path).toBe("f.txt");
+  await press(v, "j");
+  expect(v.item().path).toBe("new.txt");
+});
+
 test("narrow: one thing at a time, enter into the main view and esc back", async () => {
   const v = await open();
   v.size = { width: 500, height: 600 };

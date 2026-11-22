@@ -23,10 +23,36 @@ export const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation()
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
-export function zoom() {
+/** What every row of one draw shares, read from the app once per draw
+ *  (drawing() runs the draw): a dithered row would otherwise ask the app for
+ *  its settings, platform and layout on every row of every scroll step. */
+interface Frame {
+  readonly zoom: number;
+  readonly dpr: number;
+  readonly dithered: boolean;
+}
+
+let frame: Frame | null = null;
+
+const readZoom = () => {
   const z = Number(settings().zoom);
 
   return z > 0 ? z : 1;
+};
+
+/** Runs `draw` with the app's zoom, platform and look read once for it. */
+export function drawing<A>(draw: () => A): A {
+  frame = { zoom: readZoom(), dpr: appWindow().platform === "macos" ? 2 : 1, dithered: flat(POPUP_SCRIM, 1) === null };
+
+  try {
+    return draw();
+  } finally {
+    frame = null;
+  }
+}
+
+export function zoom() {
+  return frame?.zoom ?? readZoom();
 }
 
 export const unzoom = (v: number) => v / zoom();
@@ -35,11 +61,13 @@ export const unzoomSize = (size: { readonly width: number; readonly height: numb
 
 /** A layer filling its parent with a 50% checker dither (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
-  const plain = flat(color, cell);
+  if (!frame?.dithered) {
+    const plain = flat(color, cell);
 
-  if (plain) return plain;
+    if (plain) return plain;
+  }
 
-  const dpr = appWindow().platform === "macos" ? 2 : 1;
+  const dpr = frame?.dpr ?? (appWindow().platform === "macos" ? 2 : 1);
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
@@ -296,6 +324,31 @@ function roleColor(t: Theme, role: string): Color | null {
   }
 }
 
+/** herdr.highlight's spans by file and line text: a scroll step parses
+ *  only the lines it brings into view, not every line in view again. Cleared
+ *  whole when it grows past HIGHLIGHT_CACHE lines. */
+type Spans = ReturnType<NonNullable<typeof herdr.highlight>>;
+
+const highlights = new Map<string, Spans>();
+
+export const HIGHLIGHT_CACHE = 20_000;
+
+function highlighted(text: string, path: string): Spans {
+  const key = `${path}\0${text}`;
+  const known = highlights.get(key);
+
+  if (known) return known;
+
+  // An app without herdr.highlight (or a test's stand-in) draws plain text.
+  const spans = herdr.highlight?.(text, path) ?? [];
+
+  if (highlights.size >= HIGHLIGHT_CACHE) highlights.clear();
+
+  highlights.set(key, spans);
+
+  return spans;
+}
+
 /** Syntax spans for a diff line's text, by the file's language: tree-sitter
  *  (herdr.highlight) in moonfly's roles, `base` between them; null for plain
  *  text (no grammar, nothing to color, a very long line). Each line is
@@ -304,8 +357,7 @@ function roleColor(t: Theme, role: string): Color | null {
 export function codeSpans(text: string, path: string | null | undefined, t: Theme, base: Color = t.foreground): Span[] | null {
   if (!path || !text || text.length > 2000) return null;
 
-  // An app without herdr.highlight (or a test's stand-in) draws plain text.
-  const spans = herdr.highlight?.(text, path) ?? [];
+  const spans = highlighted(text, path);
 
   if (!spans.length) return null;
 
