@@ -136,7 +136,6 @@ export interface FormSpec<R> {
 /** What a form asks of the window: the keyboard back, and work in the background. */
 export interface FormHost {
   focusSelf(): void;
-  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
   /** The window's own cx (init's): good after the handler that asked has returned. */
   readonly acx?: Context | null;
   /** Runs `effect` for the window (interrupted when it closes); a failure is shown as its note. */

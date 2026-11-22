@@ -60,9 +60,6 @@ export interface Host {
   now(): number;
   /** Runs `effect` for this copy (interrupted when it closes); a failure is shown as the window's note. */
   run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void;
-  /** Work in the background: `fn` gets the task's own cx, good across its awaits (the one a
-   *  handler was given is refused once that handler has returned). */
-  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
   openUrl(url: string, cx: Context): void;
   openDiff(number: number): void;
   showRun(runId: number, jobId: number | null, cx: Context): void;
