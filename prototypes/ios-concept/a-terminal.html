@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fireflies iOS: concept A, terminal keys</title>
+<link rel="stylesheet" href="phone.css">
+<link rel="stylesheet" href="a.css">
+<style>
+  .tray { flex: none; display: grid; grid-template-columns: 1fr 156px; gap: 12px; padding: 12px 16px 0; border-top: 1px solid var(--edge); background: #0b0b0b; }
+  .tray .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; align-content: start; }
+  .tray .grid span { height: 46px; border: 1px solid var(--edge); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .tray .pad { position: static; }
+  .typing { position: absolute; left: 0; right: 0; height: 22px; outline: 1px dashed var(--working); z-index: 15; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <h1>Concept A · the terminal's keys</h1>
+  <p>Three states of one terminal. The pad never covers the line being typed: its default place is the top right, over old scrollback; it folds to a nub on the edge; with the keyboard down it docks into a tray in the thumb zone. The hotkey row pages sideways, six keys a page, and the pad toggle is pinned at its right end.</p>
+</header>
+<div class="row">
+
+<!-- 1. pad at its default place -->
+<figure class="shot">
+<div class="phone">
+  <div class="status"><span>21:41</span><i class="island"></i><span class="sig">wg ▮▮▮ 82</span></div>
+  <div class="screen">
+    <div class="safe-top"></div>
+    <div class="termbar"><span class="x">⌄</span><div class="grow"><i class="art pip working" data-art="pip"></i><span>claude</span><span class="sm t-muted">fireflies · 2 agents</span></div><span class="tag m-studio">studio</span><span class="x">⋯</span></div>
+    <div class="term" style="flex:1;position:relative"><span class="t-dim">● Read(defaults/mods/nocturne/kit.ts)
+  ⎿ Read 512 lines
+● Read(docs/ios-app.md)
+  ⎿ Read 70 lines</span>
+
+<span class="t-muted">● Write(prototypes/ios-concept/phone.css)</span>
+  ⎿ Wrote 168 lines
+
+<span class="t-muted">● Bash(git commit …)</span>
+  ⎿ [feat/ios-concept 9c2e1a] docs(ios)…
+
+<span class="t-work">* Drawing concept B… (esc to interrupt)</span>
+<span class="t-dim">────────────────────────────────────────────</span>
+&gt; also show the hotkey row<span class="cur"> </span>
+<span class="t-dim">────────────────────────────────────────────</span>
+  <span class="t-dim">⏵⏵ auto mode on</span></div>
+    <div class="pad" style="right:10px;top:112px">
+      <span class="grip">::</span><span class="arrow">↑</span><span class="grip"></span>
+      <span class="arrow">←</span><span class="enter">⏎</span><span class="arrow">→</span>
+      <span class="grip">‹</span><span class="arrow">↓</span><span class="grip">x</span>
+    </div>
+    <div class="hk">
+      <div class="pg"><i class="on"></i><i></i><i></i></div>
+      <div class="keys"><span class="k">esc</span><span class="k">tab</span><span class="k on">ctrl</span><span class="k">alt</span><span class="k">⇧tab</span><span class="k">~</span><span class="k">|</span></div>
+      <span class="pin on">✥</span>
+    </div>
+    <div class="kbd">
+      <div class="r"><span>q</span><span>w</span><span>e</span><span>r</span><span>t</span><span>z</span><span>u</span><span>i</span><span>o</span><span>p</span></div>
+      <div class="r"><span>a</span><span>s</span><span>d</span><span>f</span><span>g</span><span>h</span><span>j</span><span>k</span><span>l</span></div>
+      <div class="r"><span class="w">⇧</span><span>y</span><span>x</span><span>c</span><span>v</span><span>b</span><span>n</span><span>m</span><span class="w">⌫</span></div>
+      <div class="r"><span class="w">123</span><span class="w">🌐</span><span class="sp">space</span><span class="w">return</span></div>
+    </div>
+  </div>
+  <i class="home-ind"></i>
+</div>
+<figcaption><b>Pad shown, keyboard up.</b> Default place: top right, over scrollback the agent already wrote; the input line and the last lines stay clear. Drag by <b>::</b> anywhere; <b>‹</b> folds it to the edge, <b>x</b> hides it. The row: page 1 of 3, keys 54 px wide, a fade says there is more; ✥ pinned and lit while the pad shows.</figcaption>
+</figure>
+
+<!-- 2. pad folded, row on page 2 -->
+<figure class="shot">
+<div class="phone">
+  <div class="status"><span>21:42</span><i class="island"></i><span class="sig">wg ▮▮▮ 82</span></div>
+  <div class="screen">
+    <div class="safe-top"></div>
+    <div class="termbar"><span class="x">⌄</span><div class="grow"><span class="t-muted">&gt;_</span><span>zsh</span><span class="sm t-muted">fireflies · 1 code</span></div><span class="tag m-studio">studio</span><span class="x">⋯</span></div>
+    <div class="term" style="flex:1">~/coding/fireflies <span class="t-acc">feat/ios-concept</span>
+$ just lint
+<span class="t-done">Found 0 warnings and 0 errors.</span>
+~/coding/fireflies <span class="t-acc">feat/ios-concept</span>
+$ bun test defaults/mods/git
+<span class="t-dim">bun test v1.3.4</span>
+ <span class="t-done">✓</span> stage row swipes to staged
+ <span class="t-done">✓</span> discard asks first
+ <span class="t-done">42 pass</span>  0 fail
+~/coding/fireflies <span class="t-acc">feat/ios-concept</span>
+$ git log --oneline<span class="cur"> </span></div>
+    <span class="nub" style="top:112px">✥</span>
+    <div class="hk">
+      <div class="pg"><i></i><i class="on"></i><i></i></div>
+      <div class="keys"><span class="k">^C</span><span class="k">^D</span><span class="k">^R</span><span class="k">^Z</span><span class="k">^L</span><span class="k">^A</span><span class="k">^E</span></div>
+      <span class="pin">✥</span>
+    </div>
+    <div class="kbd">
+      <div class="r"><span>q</span><span>w</span><span>e</span><span>r</span><span>t</span><span>z</span><span>u</span><span>i</span><span>o</span><span>p</span></div>
+      <div class="r"><span>a</span><span>s</span><span>d</span><span>f</span><span>g</span><span>h</span><span>j</span><span>k</span><span>l</span></div>
+      <div class="r"><span class="w">⇧</span><span>y</span><span>x</span><span>c</span><span>v</span><span>b</span><span>n</span><span>m</span><span class="w">⌫</span></div>
+      <div class="r"><span class="w">123</span><span class="w">🌐</span><span class="sp">space</span><span class="w">return</span></div>
+    </div>
+  </div>
+  <i class="home-ind"></i>
+</div>
+<figcaption><b>Pad folded, row on page 2.</b> The pad folds to a nub on the screen edge where it was (tap to unfold, drag along the edge). Swipe the row for the chord page (^C ^D ^R ^Z ^L ^A ^E), page 3 is symbols (/ - _ $ ` ' "). Pages and their keys are editable; a long press on a key sends it repeatedly.</figcaption>
+</figure>
+
+<!-- 3. keyboard down: the tray -->
+<figure class="shot">
+<div class="phone">
+  <div class="status"><span>21:44</span><i class="island"></i><span class="sig">wg ▮▮▮ 82</span></div>
+  <div class="screen">
+    <div class="safe-top"></div>
+    <div class="termbar"><span class="x">⌄</span><div class="grow"><i class="art pip blocked" data-art="pip"></i><span class="t-block">codex</span><span class="sm t-muted">fireflies · 2 agents</span></div><span class="tag m-studio">studio</span><span class="x">⋯</span></div>
+    <div class="term" style="flex:1"><span class="t-dim">› migrate platform-pg</span>
+
+  3 migrations pending:
+    0042_orders_index.sql
+    0043_drop_legacy.sql
+    0044_status_enum.sql
+
+<span class="t-block">Run them on platform-pg?</span>
+
+  <span class="t-bright">› 1. yes</span>
+    2. yes, and don't ask again
+    3. no, tell codex what to do
+
+  <span class="t-dim">↑↓ to choose · enter to confirm</span></div>
+    <div class="tray">
+      <div class="grid"><span>esc</span><span>tab</span><span>^C</span><span>y</span><span>n</span><span class="t-acc">kbd</span></div>
+      <div class="pad">
+        <span class="grip">::</span><span class="arrow">↑</span><span class="grip"></span>
+        <span class="arrow">←</span><span class="enter">⏎</span><span class="arrow">→</span>
+        <span class="grip"></span><span class="arrow">↓</span><span class="grip"></span>
+      </div>
+    </div>
+    <div class="safe-bot" style="background:#0b0b0b"></div>
+  </div>
+  <i class="home-ind"></i>
+</div>
+<figcaption><b>Keyboard down: the tray.</b> Answering an agent's menu needs arrows and Enter, not letters. With the keyboard down the pad docks in a tray at the thumb, beside the six most used keys (kbd brings the keyboard back; the tray then turns into the row). Mirrored for the left hand in settings.</figcaption>
+</figure>
+
+</div>
+<script src="assets.js"></script>
+<script src="phone.js"></script>
+</body>
+</html>

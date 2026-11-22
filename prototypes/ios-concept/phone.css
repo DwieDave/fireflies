@@ -139,7 +139,7 @@ canvas.px { image-rendering: pixelated; display: block; }
 .kbd .r span { width: 33px; height: 43px; background: #3a3a3c; color: #e4e4e4; display: flex; align-items: center; justify-content: center; font: 20px -apple-system, system-ui, sans-serif; border-radius: 5px; box-shadow: 0 1px 0 #000; }
 .kbd .r span.w { width: 46px; background: #2b2b2d; font-size: 14px; }
 .kbd .r span.sp { width: 182px; font-size: 15px; }
-.pad { position: absolute; z-index: 20; width: 156px; height: 156px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); background: rgba(8, 8, 8, 0.82); border: 1px solid var(--edge); }
+.pad { position: absolute; z-index: 20; width: 156px; height: 156px; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); background: rgba(8, 8, 8, 0.95); border: 1px solid var(--edge); }
 .pad span { display: flex; align-items: center; justify-content: center; color: var(--bright); font-size: 18px; }
 .pad .arrow { border: 1px solid #1d1d1d; }
 .pad .enter { color: var(--bg); background: var(--accent); font-size: 13px; }
@@ -148,3 +148,17 @@ canvas.px { image-rendering: pixelated; display: block; }
 /* ---- annotations on the sheet */
 .note { position: absolute; z-index: 40; font-size: 10.5px; color: var(--bg); background: var(--working); padding: 2px 6px; white-space: nowrap; }
 .note.right { right: -2px; }
+
+/* ---- the hotkey row, paged: keys scroll sideways in pages of six, the pad
+   toggle is pinned at the right end so it never scrolls away */
+.hk { display: flex; height: 48px; border-top: 1px solid var(--edge); background: #0d0d0d; flex: none; position: relative; }
+.hk .keys { flex: 1; display: flex; overflow: hidden; position: relative; }
+.hk .keys::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 28px; background: linear-gradient(90deg, transparent, #0d0d0d); }
+.hk .k { flex: none; width: 54px; display: flex; align-items: center; justify-content: center; color: var(--fg); font-size: 13px; border-right: 1px solid #1a1a1a; }
+.hk .k.on { color: var(--bg); background: var(--working); }
+.hk .pin { flex: none; width: 54px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--edge); color: var(--accent); font-size: 17px; }
+.hk .pin.on { color: var(--bg); background: var(--accent); }
+.hk .pg { position: absolute; left: 0; right: 54px; top: -1px; display: flex; gap: 4px; justify-content: center; }
+.hk .pg i { width: 12px; height: 2px; background: var(--edge); }
+.hk .pg i.on { background: var(--accent); }
+.nub { position: absolute; z-index: 20; right: 0; width: 30px; height: 72px; border: 1px solid var(--edge); border-right: 0; background: rgba(8, 8, 8, 0.9); display: flex; align-items: center; justify-content: center; color: var(--accent); }
