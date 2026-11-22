@@ -754,7 +754,10 @@ the highlighted line shows where it will land.
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
   inspector, `O` the system's browser, `t` a new tab, `x` close the tab, `J` / `K`
   the tab left / right, `1`–`9` a tab (9 the last), Tab / Shift-Tab its buttons
-  and tabs (Enter presses), `?` the keys. Its keys.json section (`mod:browser`:
+  and tabs (Enter presses), the arrows / PgUp / PgDn / Home / End / Space /
+  Shift-Space scroll the page (the native view's `browser.scroll {by: "line" |
+  "page" | "end", dir: 1 | -1, axis?: "y" | "x"}`, either engine; in the page they
+  are the page's own, a field in it keeps them), `?` the keys. Its keys.json section (`mod:browser`:
   Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
   Cmd-Alt-I the inspector) applies in the bar, the address field, the page
   (after a click into it, or Enter from the bar) and its inspector pane, over
