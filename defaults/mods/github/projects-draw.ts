@@ -8,7 +8,8 @@ import { h_flex, v_flex, v_virtual_list, Input } from "gpui-base";
 import type { Theme } from "herdr";
 import { readAgo, ago } from "./model.ts";
 import { markdown } from "@fireflies/markdown";
-import { dither, pip, empty, lit, stop, unzoom, ART, ansiColor } from "./kit.ts";
+import { Array as Arr, Option, String as Str } from "effect";
+import { dither, pip, empty, lit, stop, unzoom, ART, ansiColor, within } from "./kit.ts";
 import type { Board, Content, Field, FieldValue, Item } from "./board.ts";
 import type { At, Layout, Lane } from "./board-layout.ts";
 import { filterTokens, selectOf } from "./board-filter.ts";
@@ -24,6 +25,34 @@ export const HANDLES = 16;
 
 const ansi = (t: Theme, color: string | null | undefined): Color => ansiColor(t, ansiKey(color));
 
+/** What a card says of a pull request or issue that's over: merged or closed, in its color. */
+function stateWord(t: Theme, state: string | null): readonly [string, Color] | null {
+  switch (state) {
+    case "MERGED": return ["merged", t.ansi5];
+    case "CLOSED": return ["closed", t.blocked];
+    default: return null;
+  }
+}
+
+/** A field's word in the field menu: how many labels or assignees, else its value (the title: none). */
+function fieldWord(item: Item, f: Field): string {
+  const count = (n: number) => (n === 0 ? "" : String(n));
+
+  switch (f.type) {
+    case "labels": return count(item.content.labels.length);
+    case "assignees": return count(item.content.assignees.length);
+    case "title": return "";
+    default: return valueText(f, item.values.get(f.id));
+  }
+}
+
+/** What an empty column suggests: drop the carried card, clear the filter, or add one. */
+function emptyHint(proj: Projects): string {
+  if (proj.carrying !== null) return "enter drops it here";
+
+  return proj.filterText === "" ? "a adds a draft · m carries a card here" : "esc clears the filter";
+}
+
 const KIND_WORD = { issue: "Issue", pr: "Pull request", draft: "Draft", redacted: "Item" } as const satisfies { readonly [K in Content["kind"]]: string };
 
 /** A login as a square of its initials, in its own color. */
@@ -37,7 +66,7 @@ function valueColor(t: Theme, f: Field, v: FieldValue): Color {
   if (f.type === "single") {
     const id = selectOf(v)?.optionId;
 
-    return ansi(t, f.options.find((o) => o.id === id)?.color);
+    return ansi(t, Option.getOrUndefined(Arr.findFirst(f.options, (o) => o.id === id))?.color);
   }
 
   if (f.type === "iteration") return t.ansi6;
@@ -47,10 +76,10 @@ function valueColor(t: Theme, f: Field, v: FieldValue): Color {
 
 /** The project, its views and the filter. */
 export function bar(proj: Projects, t: Theme, b: Board | null, lay: Layout | null): Element {
-  const p = proj.list?.projects.find((x) => x.id === proj.pick) ?? b?.project;
-  const views = b ? proj.views(b) : [], cur = b ? proj.view(b) : null;
+  const p = Option.getOrUndefined(Arr.findFirst(proj.list?.projects ?? [], (x) => x.id === proj.pick)) ?? b?.project;
+  const views = b === null ? [] : proj.views(b), cur = b === null ? null : proj.view(b);
 
-  const viewChips = views.map((v) => h_flex().id(`pv-${v.id}`).relative().h(20).px(7).flex_none().items_center().text_size(11)
+  const viewChips = Arr.map(views, (v) => h_flex().id(`pv-${v.id}`).relative().h(20).px(7).flex_none().items_center().text_size(11)
     .text_color(v.id === cur?.id ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
     .on_mouse_down("left", stop).on_click((_e, cx) => {
       proj.setView(v.id);
@@ -73,9 +102,9 @@ export function bar(proj: Projects, t: Theme, b: Board | null, lay: Layout | nul
     })
     .child(div().flex_none().text_color(typing ? t.accent : t.dim).child("/"))
     .child(typing ? Input.new(proj.filter).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
-      : h_flex().flex_1().min_w(0).gap(6).overflow_hidden().children(tokens.length ? tokens.map((k, i) => div().id(`tok-${i}`).flex_none().text_color(k.kind === "key" ? t.ansi5 : t.foreground).child(k.text))
+      : h_flex().flex_1().min_w(0).gap(6).overflow_hidden().children(tokens.length > 0 ? Arr.map(tokens, (k, i) => div().id(`tok-${i}`).flex_none().text_color(k.kind === "key" ? t.ansi5 : t.foreground).child(k.text))
         : [div().text_color(t.dim).truncate().child("filter")]))
-    .when(lay !== null, (el) => (lay ? el.child(div().flex_none().text_color(t.dim).child(lay.shown === lay.total ? `${lay.total}` : `${lay.shown} of ${lay.total}`)) : el));
+    .when(lay !== null, (el) => (lay !== null ? el.child(div().flex_none().text_color(t.dim).child(lay.shown === lay.total ? `${lay.total}` : `${lay.shown} of ${lay.total}`)) : el));
 
   return h_flex().h(30).flex_none().gap(8).items_center().pb(6)
     .child(h_flex().id("pf-project").flex_none().gap(6).items_center().text_size(11).max_w(300)
@@ -96,9 +125,9 @@ export function bar(proj: Projects, t: Theme, b: Board | null, lay: Layout | nul
 export function columnRows(proj: Projects, lay: Layout, ci: number): ColumnRow[] {
   const g = proj.grid(lay)[ci] ?? [];
 
-  if (!lay.lane) return g.map((item) => ({ item }));
+  if (lay.lane === null) return Arr.map(g, (item) => ({ item }));
 
-  const where = new Map(lay.lanes.flatMap((l) => l.cells.flatMap((c) => c.map((i) => [i.id, l.key] as const))));
+  const where = new Map(Arr.flatMap(lay.lanes, (l) => Arr.flatMap(l.cells, (c) => Arr.map(c, (i) => [i.id, l.key] as const))));
   const all = proj.grid(lay), chars = proj.chars, fields = proj.fields;
 
   const height = (items: readonly Item[]) => {
@@ -112,7 +141,7 @@ export function columnRows(proj: Projects, lay: Layout, ci: number): ColumnRow[]
   const out: ColumnRow[] = [];
 
   for (const lane of lay.lanes) {
-    const inLane = (col: number) => (all[col] ?? []).filter((i) => where.get(i.id) === lane.key);
+    const inLane = (col: number) => Arr.filter(all[col] ?? [], (i) => where.get(i.id) === lane.key);
     const items = inLane(ci);
 
     out.push({ lane, n: lane.folded ? lane.cells[ci]?.length ?? 0 : items.length });
@@ -121,7 +150,7 @@ export function columnRows(proj: Projects, lay: Layout, ci: number): ColumnRow[]
 
     for (const item of items) out.push({ item });
 
-    const tallest = Math.max(0, ...lay.columns.map((c, k) => (c.folded ? 0 : height(inLane(k)))));
+    const tallest = Math.max(0, ...Arr.map(lay.columns, (c, k) => (c.folded ? 0 : height(inLane(k)))));
     const gap = tallest - height(items);
 
     if (gap > 0) out.push({ pad: gap, key: lane.key });
@@ -134,7 +163,7 @@ export function columns(proj: Projects, t: Theme, b: Board, lay: Layout, size: S
   const avail = size.width - (proj.detailOpen ? DETAIL_W + GAP : 0);
   const cols = lay.columns;
 
-  if (!cols.length) return div().flex_1().h_full().child(empty(t, "This view has no columns", "Its column field has no options yet.", { moon: 0 }));
+  if (cols.length === 0) return div().flex_1().h_full().child(empty(t, "This view has no columns", "Its column field has no options yet.", { moon: 0 }));
 
   const fit = proj.fits(lay);
 
@@ -144,7 +173,7 @@ export function columns(proj: Projects, t: Theme, b: Board, lay: Layout, size: S
   let open = 0;
 
   for (let i = proj.first; i < cols.length; i++) {
-    if (!cols[i]?.folded) {
+    if (cols[i]?.folded !== true) {
       if (open >= fit) break;
 
       open++;
@@ -153,7 +182,7 @@ export function columns(proj: Projects, t: Theme, b: Board, lay: Layout, size: S
     shown.push(i);
   }
 
-  const folded = shown.filter((i) => cols[i]?.folded).length;
+  const folded = Arr.filter(shown, (i) => cols[i]?.folded === true).length;
   const w = Math.max(200, Math.floor((avail - folded * (FOLD_W + GAP) - Math.max(0, open - 1) * GAP) / Math.max(1, open)));
   const a = proj.at(lay), fields = cardFields(b, proj.view(b), lay);
   // Every open column is as wide, so a card is as tall in each (the swimlanes line up).
@@ -167,16 +196,16 @@ export function columns(proj: Projects, t: Theme, b: Board, lay: Layout, size: S
 
   return h_flex().flex_1().min_w(0).h_full().gap(GAP)
     .when(proj.first > 0, (el) => el.child(more(proj.first, "l")))
-    .children(shown.map((ci) => (cols[ci]?.folded ? foldStrip(proj, t, lay, ci) : column(proj, t, b, lay, ci, cw, a, fields))))
+    .children(Arr.map(shown, (ci) => (cols[ci]?.folded === true ? foldStrip(proj, t, lay, ci) : column(proj, t, b, lay, ci, cw, a, fields))))
     .when(shown.length > 0 && last < cols.length - 1, (el) => el.child(more(cols.length - 1 - last, "r")));
 }
 
 export function foldStrip(proj: Projects, t: Theme, lay: Layout, ci: number): Element {
   const c = lay.columns[ci];
 
-  if (!c) return div();
+  if (c === undefined) return div();
 
-  const letters = Array.from(c.name.slice(0, 14), (ch, i) => div().id(`pfl-${i}`).h(11).text_size(10).text_color(t.dim).child(ch === " " ? " " : ch));
+  const letters = Arr.map(Arr.fromIterable(Str.slice(0, 14)(c.name)), (ch, i) => div().id(`pfl-${i}`).h(11).text_size(10).text_color(t.dim).child(ch === " " ? " " : ch));
 
   return v_flex().id(`pfold-${ci}`).w(FOLD_W).flex_none().h_full().items_center().pt(6).gap(6).border(1).border_color(edgeTone(t))
     .hover((s) => s.border_color(t.muted))
@@ -191,21 +220,21 @@ export function foldStrip(proj: Projects, t: Theme, lay: Layout, ci: number): El
     })
     .child(pip(t, "done", 7).text_color(ansi(t, c.color)))
     .child(v_flex().items_center().children(letters))
-    .child(div().text_size(10).text_color(c.limit && c.count > c.limit ? t.blocked : t.dim).child(String(c.count)));
+    .child(div().text_size(10).text_color(c.limit !== null && c.limit > 0 && c.count > c.limit ? t.blocked : t.dim).child(String(c.count)));
 }
 
 export function column(proj: Projects, t: Theme, b: Board, lay: Layout, ci: number, w: number, a: At, fields: readonly Field[]): Element {
   const c = lay.columns[ci];
 
-  if (!c) return div();
+  if (c === undefined) return div();
 
   const active = a.col === ci && proj.focus === "board";
-  const over = c.limit !== null && (c.count + (proj.carrying && proj.carrying.col === ci && proj.carrying.from.col !== ci ? 1 : 0)) > c.limit;
+  const over = c.limit !== null && (c.count + (proj.carrying !== null && proj.carrying.col === ci && proj.carrying.from.col !== ci ? 1 : 0)) > c.limit;
   const edge = over ? t.blocked : active ? t.accent : edgeTone(t);
   const rows = columnRows(proj, lay, ci);
   const chars = proj.chars;
-  const heights = rows.map((r) => ("lane" in r ? LANE_H : "pad" in r ? r.pad : cardH(proj, r.item, chars, fields)));
-  const count = c.limit ? `${c.count} / ${c.limit}` : String(c.count);
+  const heights = Arr.map(rows, (r) => ("lane" in r ? LANE_H : "pad" in r ? r.pad : cardH(proj, r.item, chars, fields)));
+  const count = c.limit === null || c.limit === 0 ? String(c.count) : `${c.count} / ${c.limit}`;
 
   const head = h_flex().id(`pch-${ci}`).relative().h(22).flex_none().px(8).gap(7).items_center().text_size(11)
     .on_mouse_down("left", stop)
@@ -226,17 +255,17 @@ export function column(proj: Projects, t: Theme, b: Board, lay: Layout, ci: numb
   const keyOf = (i: number) => {
     const r = rows[i];
 
-    if (!r) return String(i);
+    if (r === undefined) return String(i);
 
     return "lane" in r ? `lane-${r.lane.key ?? ""}` : "pad" in r ? `pad-${r.key ?? ""}` : r.item.id;
   };
 
-  const list = !rows.length ? div().flex_1().min_h(0).child(empty(t, proj.filterText || proj.view(b)?.filter ? "Nothing matches" : "Nothing here", proj.carrying ? "enter drops it here" : proj.filterText ? "esc clears the filter" : "a adds a draft · m carries a card here", { moon: ci % 2 ? 0 : 1, small: false }))
+  const list = rows.length === 0 ? div().flex_1().min_h(0).child(empty(t, proj.filterText !== "" || (proj.view(b)?.filter ?? "") !== "" ? "Nothing matches" : "Nothing here", emptyHint(proj), { moon: ci % 2 === 0 ? 1 : 0, small: false }))
     : div().flex_1().min_h(0).pt(2).child(v_virtual_list(`pcol-${b.project.id}-${ci}`, rows.length, heights, keyOf,
-      (range) => rows.slice(range.start, range.end).map((r, k) => ("lane" in r ? laneRow(proj, t, r, ci, range.start + k)
+      (range) => Arr.map(within(rows, range.start, range.end), (r, k) => ("lane" in r ? laneRow(proj, t, r, ci, range.start + k)
         : "pad" in r ? div().id(`ppad-${ci}-${range.start + k}`).h(r.pad).w_full() : card(proj, t, r.item, a, ci, chars, fields))))
       .on_item_click((key, cx) => clicked(proj, lay, ci, key, cx))
-      .size_full().when(handle !== undefined, (el) => (handle ? el.track_scroll(handle) : el)));
+      .size_full().when(handle !== undefined, (el) => (handle === undefined ? el : el.track_scroll(handle))));
 
   return v_flex().id(`pcolumn-${ci}`).w(w).flex_none().h_full().min_h(0).border(1).border_color(edge)
     .on_mouse_down("left", (_e, cx) => {
@@ -251,15 +280,15 @@ export function column(proj: Projects, t: Theme, b: Board, lay: Layout, ci: numb
 }
 
 export function clicked(proj: Projects, lay: Layout, ci: number, key: string, cx: Context): void {
-  if (key.startsWith("pad-")) return;
+  if (Str.startsWith("pad-")(key)) return;
 
-  if (key.startsWith("lane-")) {
-    const lane = lay.lanes.find((l) => `lane-${l.key ?? ""}` === key);
+  if (Str.startsWith("lane-")(key)) {
+    const lane = Option.getOrUndefined(Arr.findFirst(lay.lanes, (l) => `lane-${l.key ?? ""}` === key));
     const v = proj.view();
     const k = lane?.key;
 
-    if (k !== undefined && k !== null && v) proj.setLocal((l) => ({ ...l, lanes: new Map(l.lanes).set(v.id, flipped(proj, l.lanes.get(v.id), k)) }));
-  } else if (!proj.carrying) {
+    if (k !== undefined && k !== null && v !== null) proj.setLocal((l) => ({ ...l, lanes: new Map(l.lanes).set(v.id, flipped(proj, l.lanes.get(v.id), k)) }));
+  } else if (proj.carrying === null) {
     const again = proj.sel === key;
 
     proj.sel = key;
@@ -272,7 +301,7 @@ export function clicked(proj: Projects, lay: Layout, ci: number, key: string, cx
 
       const it = proj.current(lay);
 
-      if (it) void proj.readDetail(it, cx);
+      if (it !== null) proj.readDetail(it, cx);
     }
   }
 
@@ -283,7 +312,7 @@ export function clicked(proj: Projects, lay: Layout, ci: number, key: string, cx
 export function laneRow(proj: Projects, t: Theme, r: { readonly lane: Lane; readonly n: number }, ci: number, i: number): Element {
   return h_flex().id(`plane-${ci}-${i}`).relative().h(LANE_H).px(8).gap(6).items_center().text_size(10)
     .hover((s) => s.bg(`${edgeTone(t)}55`))
-    .child(div().flex_none().text_color(r.lane.done ? t.dim : t.ansi6).child(`${r.lane.folded ? "+" : "−"} ${r.lane.name}`))
+    .child(div().flex_none().text_color(r.lane.done === true ? t.dim : t.ansi6).child(`${r.lane.folded ? "+" : "−"} ${r.lane.name}`))
     .child(div().flex_none().text_color(t.dim).child(String(r.n)))
     .child(div().relative().flex_1().h(2).child(dither(edgeTone(t), 1)));
 }
@@ -291,13 +320,13 @@ export function laneRow(proj: Projects, t: Theme, r: { readonly lane: Lane; read
 export function cardH(proj: Projects, item: Item, chars: number, fields: readonly Field[]): number {
   const lines = wrap(item.content.title, chars - numW(item)).length;
 
-  return 6 + lines * LINE + (item.content.labels.length ? 20 : 0) + (metaShown(proj, item, fields) ? 17 : 0) + 7;
+  return 6 + lines * LINE + (item.content.labels.length > 0 ? 20 : 0) + (metaShown(proj, item, fields) ? 17 : 0) + 7;
 }
 
 export function metaShown(proj: Projects, item: Item, fields: readonly Field[]): boolean {
   const c = item.content;
 
-  return c.assignees.length > 0 || fields.some((f) => item.values.get(f.id)) || c.kind === "draft" || c.repo !== proj.app.repo?.full || c.state === "CLOSED" || c.state === "MERGED";
+  return c.assignees.length > 0 || Arr.some(fields, (f) => item.values.has(f.id)) || c.kind === "draft" || c.repo !== proj.app.repo?.full || c.state === "CLOSED" || c.state === "MERGED";
 }
 
 export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, chars: number, fields: readonly Field[]): Element {
@@ -305,16 +334,16 @@ export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, ch
   const sel = item.id === proj.sel && a.col === ci;
   const lifted = proj.carrying?.id === item.id;
   const active = sel && proj.focus === "board";
-  const pending = proj.pending.some((p) => p.state === "sending" && (p.op.kind === "add" ? p.op.item.id : p.op.item) === item.id);
+  const pending = Arr.some(proj.pending, (p) => p.state === "sending" && (p.op.kind === "add" ? p.op.item.id : p.op.item) === item.id);
   const lines = wrap(c.title, chars - numW(item));
   const num = c.kind === "draft" ? "draft" : c.number !== null ? `#${c.number}` : "";
-  const state = c.state === "MERGED" ? (["merged", t.ansi5] as const) : c.state === "CLOSED" ? (["closed", t.blocked] as const) : null;
-  const otherRepo = c.repo && c.repo !== proj.app.repo?.full ? c.repo.split("/")[1] ?? null : null;
+  const state = stateWord(t, c.state);
+  const otherRepo = c.repo !== null && c.repo !== "" && c.repo !== proj.app.repo?.full ? Str.split(c.repo, "/")[1] ?? null : null;
 
-  const values = fields.flatMap((f) => {
+  const values = Arr.flatMap(fields, (f) => {
     const v = item.values.get(f.id);
 
-    return v ? [[f, v] as const] : [];
+    return v === undefined ? [] : [[f, v] as const];
   });
 
   const titleColor = lifted || sel ? t.foreground : c.kind === "draft" ? t.dim : t.muted;
@@ -327,18 +356,18 @@ export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, ch
     .child(h_flex().relative().gap(7).items_start().text_size(12)
       .when(lifted, (el) => el.child(svg(`${ART}/wings.svg`).w(16).h(6).mt(4).flex_none().text_color(t.working).loop("opacity", { from: 0.3, to: 1, period: 700 })))
       .child(div().flex_none().text_color(sel || lifted ? t.accent : c.kind === "draft" ? t.dim : t.muted).child(num))
-      .child(v_flex().flex_1().min_w(0).children(lines.map((l, i) => div().id(`pt-${i}`).h(LINE).truncate().text_color(titleColor).child(l)))))
-    .when(c.labels.length > 0, (el) => el.child(h_flex().relative().gap(4).pl(2).h(16).overflow_hidden().children(c.labels.slice(0, 4).map((l, i) =>
+      .child(v_flex().flex_1().min_w(0).children(Arr.map(lines, (l, i) => div().id(`pt-${i}`).h(LINE).truncate().text_color(titleColor).child(l)))))
+    .when(c.labels.length > 0, (el) => el.child(h_flex().relative().gap(4).pl(2).h(16).overflow_hidden().children(Arr.map(Arr.take(c.labels, 4), (l, i) =>
       div().id(`pl-${i}`).relative().px(5).h(16).flex_none().flex().items_center().text_size(10).text_color(t.foreground)
         .child(dither(`#${l.color}88`, 1)).child(div().relative().child(l.name))))))
     .when(metaShown(proj, item, fields), (el) => el.child(h_flex().relative().h(16).gap(6).pl(2).items_center().text_size(10).text_color(t.dim).overflow_hidden()
-      .children(c.assignees.slice(0, 3).map((u, i) => avatar(t, u.login, i)))
+      .children(Arr.map(Arr.take(c.assignees, 3), (u, i) => avatar(t, u.login, i)))
       .when(c.assignees.length > 3, (e2) => e2.child(div().flex_none().child(`+${c.assignees.length - 3}`)))
-      .when(state !== null, (e2) => (state ? e2.child(div().flex_none().text_color(state[1]).child(state[0])) : e2))
+      .when(state !== null, (e2) => (state !== null ? e2.child(div().flex_none().text_color(state[1]).child(state[0])) : e2))
       .when(Boolean(otherRepo), (e2) => e2.child(div().flex_none().truncate().max_w(90).child(otherRepo ?? "")))
       .when(pending, (e2) => e2.child(div().flex_none().loop("opacity", { from: 0.3, to: 1, period: 900 }).child(pip(t, "working", 6))))
       .child(div().flex_1())
-      .children(values.map(([f, v], i) => div().id(`pv-${i}`).flex_none().truncate().max_w(110).text_color(valueColor(t, f, v)).child(valueText(f, v))))));
+      .children(Arr.map(values, ([f, v], i) => div().id(`pv-${i}`).flex_none().truncate().max_w(110).text_color(valueColor(t, f, v)).child(valueText(f, v))))));
 }
 
 /** The card docked right: its fields, its body (markdown) and the conversation. */
@@ -355,29 +384,29 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
     })
     .child(h_flex().relative().h(22).flex_none().px(8).gap(8).items_center().text_size(11)
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge, 1)))
-      .child(div().relative().flex_1().text_color(active ? t.foreground : t.muted).child(item ? KIND_WORD[item.content.kind] : "Item"))
+      .child(div().relative().flex_1().text_color(active ? t.foreground : t.muted).child(item === null ? "Item" : KIND_WORD[item.content.kind]))
       .child(div().relative().flex_none().text_color(t.dim).child(right ?? "")))
     .child(body);
 
-  if (!item) return frame(empty(t, "Nothing selected", null, { moon: 0, small: true }));
+  if (item === null) return frame(empty(t, "Nothing selected", null, { moon: 0, small: true }));
 
-  const c = item.content, kept = c.id ? proj.details.get(c.id) : undefined, d = kept?.d ?? null;
+  const c = item.content, kept = c.id === null || c.id === "" ? undefined : proj.details.get(c.id), d = kept?.d ?? null;
 
-  const rows = editableFields(b, item).flatMap((f): [string, Element][] => {
+  const rows = Arr.flatMap(editableFields(b, item), (f): [string, Element][] => {
     if (f.type === "title" || f.type === "labels" || f.type === "assignees") return [];
 
     const v = item.values.get(f.id);
 
-    return [[f.name, v ? div().text_color(valueColor(t, f, v)).child(valueText(f, v)) : div().text_color(t.dim).child("—")]];
+    return [[f.name, v === undefined ? div().text_color(t.dim).child("—") : div().text_color(valueColor(t, f, v)).child(valueText(f, v))]];
   });
 
-  const assignees: [string, Element] = ["Assignees", c.assignees.length ? h_flex().gap(6).items_center().children(c.assignees.map((u, i) => h_flex().id(`pda-${i}`).gap(4).items_center().child(avatar(t, u.login, 0)).child(div().text_color(t.foreground).child(u.login)))) : div().text_color(t.dim).child("—")];
-  const labels: [string, Element][] = c.kind === "draft" ? [] : [["Labels", c.labels.length ? h_flex().flex_wrap().gap(4).children(c.labels.map((l, i) => div().id(`pdl-${i}`).relative().px(5).h(16).flex().items_center().text_size(10).text_color(t.foreground).child(dither(`#${l.color}88`, 1)).child(div().relative().child(l.name)))) : div().text_color(t.dim).child("—")]];
+  const assignees: [string, Element] = ["Assignees", c.assignees.length > 0 ? h_flex().gap(6).items_center().children(Arr.map(c.assignees, (u, i) => h_flex().id(`pda-${i}`).gap(4).items_center().child(avatar(t, u.login, 0)).child(div().text_color(t.foreground).child(u.login)))) : div().text_color(t.dim).child("—")];
+  const labels: [string, Element][] = c.kind === "draft" ? [] : [["Labels", c.labels.length > 0 ? h_flex().flex_wrap().gap(4).children(Arr.map(c.labels, (l, i) => div().id(`pdl-${i}`).relative().px(5).h(16).flex().items_center().text_size(10).text_color(t.foreground).child(dither(`#${l.color}88`, 1)).child(div().relative().child(l.name)))) : div().text_color(t.dim).child("—")]];
 
   const grid2 = v_flex().gap(3).text_size(11)
-    .children([assignees, ...labels, ...rows].map(([k, v], i) => h_flex().id(`pdf-${i}`).gap(10).items_start().child(div().w(84).flex_none().text_color(t.dim).child(k)).child(div().flex_1().min_w(0).child(v))));
+    .children(Arr.map([assignees, ...labels, ...rows], ([k, v], i) => h_flex().id(`pdf-${i}`).gap(10).items_start().child(div().w(84).flex_none().text_color(t.dim).child(k)).child(div().flex_1().min_w(0).child(v))));
 
-  const md = (id: string, text: string | null | undefined) => markdown(t, id, text?.trim() ? text : "_No description._", { size: 12, onLink: (url, cx) => proj.app.openUrl(url, cx) });
+  const md = (id: string, text: string | null | undefined) => markdown(t, id, Str.trim(text ?? "") === "" ? "_No description._" : text ?? "", { size: 12, onLink: (url, cx) => proj.app.openUrl(url, cx) });
   const state = c.state === "MERGED" ? (["merged", t.ansi5] as const) : c.state === "CLOSED" ? (["closed", t.blocked] as const) : c.kind === "draft" ? (["draft", t.dim] as const) : (["open", t.done] as const);
   const comments = d?.comments ?? [];
 
@@ -397,13 +426,13 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
     .child(h_flex().flex_wrap().gap_x(10).gap_y(2).text_size(11).text_color(t.muted)
       .when(Boolean(c.repo), (el) => el.child(div().child(c.repo ?? "")))
       .child(div().text_color(state[1]).child(state[0]))
-      .when(Boolean(d?.createdAt), (el) => el.child(div().text_color(t.dim).child(`opened ${ago(d?.createdAt, proj.app.now())} ago${d?.author ? ` by ${d.author}` : ""}`))))
+      .when(Boolean(d?.createdAt), (el) => el.child(div().text_color(t.dim).child(`opened ${ago(d?.createdAt, proj.app.now())} ago${(d?.author ?? "") === "" ? "" : ` by ${d?.author ?? ""}`}`))))
     .child(grid2)
     .child(div().relative().h(2).child(dither(edgeTone(t), 1)))
-    .child(kept?.error ? div().text_size(11).text_color(t.blocked).child(kept.error) : md(`pd-body-${c.id ?? item.id}`, d ? d.body : c.id ? "_Reading…_" : ""))
+    .child((kept?.error ?? "") !== "" ? div().text_size(11).text_color(t.blocked).child(kept?.error ?? "") : md(`pd-body-${c.id ?? item.id}`, d === null ? ((c.id ?? "") === "" ? "" : "_Reading…_") : d.body))
     .when(comments.length > 0, (el) => el
       .child(h_flex().pt(8).gap(8).items_center().child(div().text_size(10).text_color(t.muted).child(`COMMENTS · ${comments.length + (d?.more ?? 0)}`)).child(div().relative().flex_1().h(2).child(dither(edgeTone(t), 1))))
-      .children(comments.map((cm, i) => v_flex().id(`pdc-${i}`).relative().gap(4).pl(12).py(6)
+      .children(Arr.map(comments, (cm, i) => v_flex().id(`pdc-${i}`).relative().gap(4).pl(12).py(6)
         .child(div().absolute().left(2).top(6).bottom(6).w(2).child(dither(edgeTone(t), 1)))
         .child(h_flex().gap(8).text_size(11).child(div().text_color(t.accent).child(cm.who)).child(div().flex_1()).child(div().text_color(t.dim).child(ago(cm.at, proj.app.now()))))
         .child(md(`pd-c-${c.id ?? ""}-${i}`, cm.body)))))
@@ -425,7 +454,7 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
     })
     .child(content);
 
-  return frame(view, kept?.at ? `read ${readAgo(kept.at, proj.app.now())}` : c.id ? "reading…" : "");
+  return frame(view, (kept?.at ?? 0) > 0 ? `read ${readAgo(kept?.at ?? 0, proj.app.now())}` : (c.id ?? "") === "" ? "" : "reading…");
 }
 
 /** The open menu, lazygit's: a framed list over the board. */
@@ -445,7 +474,7 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
       .text_color(on ? t.foreground : dim ? t.dim : t.muted)
       .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .when(toggle, (el) => el.child(div().relative().flex_none().w(10).text_color(cur ? t.accent : t.dim).child(cur ? "■" : "□")))
-      .when(color !== null, (el) => (color ? el.child(div().relative().child(pip(t, "done", 7).text_color(color))) : el))
+      .when(color !== null, (el) => (color !== null ? el.child(div().relative().child(pip(t, "done", 7).text_color(color))) : el))
       .when(Boolean(hex), (el) => el.child(div().relative().size(8).flex_none().child(dither(`#${hex ?? ""}`, 1))))
       .child(div().relative().flex_1().min_w(0).truncate().child(text))
       .when(Boolean(right) || (cur && !toggle), (el) => el.child(div().relative().flex_none().max_w(220).truncate().text_size(10).text_color(t.dim).child(right || "current")));
@@ -465,7 +494,7 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
   if (m.kind === "pick") {
     const top = Math.max(0, Math.min(m.at - 7, m.rows.length - 14));
 
-    return frame(m.title, v_flex().py(4).children(m.rows.slice(top, top + 14).map((r, i) => row(`pm-${top + i}`, r.label, { on: top + i === m.at, dim: r.dim ?? false, right: r.right ?? "" })
+    return frame(m.title, v_flex().py(4).children(Arr.map(within(m.rows, top, top + 14), (r, i) => row(`pm-${top + i}`, r.label, { on: top + i === m.at, dim: r.dim ?? false, right: r.right ?? "" })
       .on_mouse_down("left", stop).on_click((_e, cx) => {
         proj.menu = null;
         r.go(cx);
@@ -474,15 +503,15 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
       }))), 460);
   }
 
-  const item = b.items.find((i) => i.id === m.item);
+  const item = Option.getOrUndefined(Arr.findFirst(b.items, (i) => i.id === m.item));
 
-  if (!item) return div();
+  if (item === undefined) return div();
 
   const fields = menuFields(proj, b, m.fields);
-  const f = fields[m.at], opts = f ? options(proj, b, item, f) : [];
+  const f = fields[m.at], opts = f === undefined ? [] : options(proj, b, item, f);
 
-  const left = v_flex().w(170).flex_none().py(4).border_r(1).border_color(edgeTone(t)).children(fields.map((x, i) => {
-    const v = x.type === "labels" ? String(item.content.labels.length || "") : x.type === "assignees" ? String(item.content.assignees.length || "") : x.type === "title" ? "" : valueText(x, item.values.get(x.id));
+  const left = v_flex().w(170).flex_none().py(4).border_r(1).border_color(edgeTone(t)).children(Arr.map(fields, (x, i) => {
+    const v = fieldWord(item, x);
 
     return row(`pmf-${i}`, x.name, { on: i === m.at && m.side === "fields", right: v }).when(i === m.at && m.side !== "fields", (el) => el.text_color(t.foreground))
       .on_mouse_down("left", stop).on_click((_e, cx) => {
@@ -495,14 +524,14 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
 
   const otop = Math.max(0, Math.min(m.opt - 7, opts.length - 14));
 
-  const right = v_flex().flex_1().min_w(0).py(4).children(opts.slice(otop, otop + 14).map((o, i) => row(`pmo-${otop + i}`, o.label, {
+  const right = v_flex().flex_1().min_w(0).py(4).children(Arr.map(within(opts, otop, otop + 14), (o, i) => row(`pmo-${otop + i}`, o.label, {
     on: m.side === "opts" && otop + i === m.opt, cur: o.on ?? false, dim: o.dim ?? false, right: o.right ?? "", hex: o.hex ?? null, toggle: o.toggle ?? false,
     color: o.color === undefined ? null : ansiColor(t, o.color),
   }).on_mouse_down("left", stop).on_click((_e, cx) => {
     m.side = "opts";
     m.opt = otop + i;
 
-    if (f) choose(proj, item, f, o, cx);
+    if (f !== undefined) choose(proj, item, f, o, cx);
 
     cx.notify();
   })));
