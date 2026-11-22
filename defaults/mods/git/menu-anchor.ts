@@ -11,27 +11,30 @@
 
 import { Array as Arr, Option } from "effect";
 import type { Rect } from "@fireflies/menu-place";
+import { CARD_HEAD, GUTTER, TITLE_BAR, pick, titleShown } from "@fireflies/look";
+import { inPane } from "./place.ts";
 import type { ListContext } from "./keys.ts";
 import type { Panel } from "./state.ts";
 import { NARROW, PANELS } from "./state.ts";
 import type { default as GitView } from "./main.ts";
 
-/** The header's height and the body's top padding (main.ts render). */
-const BODY_TOP = 34 + 4;
+/** The header's height (none in a plain layout's pane, the shared title bar's
+ *  in a plain window) and the body's top padding (main.ts render). */
+const bodyTop = (v: GitView): number => (titleShown(inPane(v)) ? pick(34, TITLE_BAR) : 0) + 4;
 
 /** The body's padding at the sides (main-view.ts windowBody). */
 const SIDE_PAD = 6;
 
-/** A side column's top padding and the gap between its panels (side.ts sideColumn). */
-const COLUMN_TOP = 7;
-const PANEL_GAP = 12;
+/** A side column's top padding and the gap between its panels (side.ts sideColumn): a card's canvas in a plain layout. */
+const columnTop = (): number => pick(7, GUTTER);
+const panelGap = (): number => pick(12, GUTTER);
 
 /** A splitter's width (lists.ts splitter). */
 const SPLITTER = 6;
 
-/** A panel's border and its body's top padding (draw.ts panel). */
+/** A panel's border and its body's top padding (draw.ts panel): a card's header row in a plain layout. */
 const BORDER = 1;
-const LIST_TOP = 7;
+const listTop = (): number => pick(7, CARD_HEAD);
 
 /** Where the panel showing `p` stands: its column's left edge and the panels stacked above it
  *  in that column (one panel alone when it has a column of its own), or null when not drawn. */
@@ -67,19 +70,19 @@ export function rowAnchor(v: GitView, ctx: ListContext): Rect | null {
 
   if (col === null || box === undefined || rowH === undefined || rowH === 0) return null;
 
-  let y = BODY_TOP + COLUMN_TOP;
+  let y = bodyTop(v) + columnTop();
 
   for (const q of col.above) {
     const h = v.panelPx[q]?.height;
 
     if (h === undefined) return null;
 
-    y += h + PANEL_GAP;
+    y += h + panelGap();
   }
 
   const at = (v.sel[ctx] ?? 0) - (v.top[ctx] ?? 0);
 
   if (at < 0 || at >= (v.vis[ctx] ?? 0)) return null;
 
-  return { x: col.x + BORDER, y: y + LIST_TOP + at * rowH, w: box.width - 2 * BORDER, h: rowH };
+  return { x: col.x + BORDER, y: y + listTop() + at * rowH, w: box.width - 2 * BORDER, h: rowH };
 }

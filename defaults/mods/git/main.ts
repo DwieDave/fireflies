@@ -68,7 +68,7 @@ import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
 import { drawing, empty, isDithered, unzoomSize } from "./draw.ts";
-import { frameBox, titleShown } from "@fireflies/look";
+import { frameBox } from "@fireflies/look";
 import type { Back, Data, Panel, TabOf, Subs, Mode, Copied, MainContent, More, Staging, Note, Resizing, Show, Intent, MainHeights, OtherTops, SpawnOptions, Sub, ExecOptions, ViewContext, Tab } from "./state.ts";
 import { Lane } from "./queue.ts";
 import { openedWith, here, STATE, WINDOW_KEY, GITHUB_WINDOW, PANELS } from "./state.ts";
@@ -724,7 +724,7 @@ export default class GitView extends View {
       .on_hover((h, cx) => { if (!h) endResize(cx); });
 
     // A plain layout's pane has a header naming the mod already: no title bar of its own there.
-    const headed = titleShown(inPane(this)) ? moving.child(windowHeader(this, t)) : moving;
+    const headed = isDithered() || !inPane(this) ? moving.child(windowHeader(this, t)) : moving;
 
     const view = headed
       .child(div().id("git-body").relative().flex_1().min_h(0).pt(4)

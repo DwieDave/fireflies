@@ -13,7 +13,8 @@ import type { DiffFile } from "./patch.ts";
 import type { Commit } from "./parse.ts";
 import { dirLetters, letters, age, initials } from "./parse.ts";
 import type { ListContext } from "./keys.ts";
-import { dither, graphCell, laneColors, letterColor } from "./draw.ts";
+import { dither, graphCell, isDithered, laneColors, letterColor } from "./draw.ts";
+import { glyph } from "@fireflies/look";
 import type { DrawRow, TxtOptions } from "./state.ts";
 import { WIDE_ROW, WIDE_LANE, LANE, ROW } from "./state.ts";
 import { isCheckout, isReviewFile, hashOf, isBranch, isRemoteBranch, isTag, isTreeRow, isStash, isRemote, isReflog, isCommit, workFiles } from "./items.ts";
@@ -55,7 +56,9 @@ export function drawRow(v: GitView, t: Theme, ctx: ListContext, wide: boolean): 
       const done = v.review.marks().has(f.key);
       const [letter, c] = reviewLetter(t, f.status);
       const slash = Option.getOrElse(Str.lastIndexOf("/")(f.path), () => -1);
-      const box = div().id(`rv-box-${i}`).relative().size(10).flex_none().border(1).border_color(done ? t.ansi2 : t.muted);
+      const square = div().id(`rv-box-${i}`).relative().size(10).flex_none().border(1).border_color(done ? t.ansi2 : t.muted);
+      // A plain layout's checkbox rounds its corners.
+      const box = isDithered() ? square : square.rounded(3).overflow_hidden();
 
       return rowLine(v, [
         (done ? box.child(dither(t.ansi2, 1)) : box)
@@ -187,9 +190,11 @@ export function wideCommit(v: GitView, t: Theme, ctx: ListContext): DrawRow {
 
       const color = r.kind === "tag" ? t.ansi3 : lane;
 
-      return [r.kind === "ref"
+      const chip = r.kind === "ref"
         ? div().flex_none().h(15).px(5).flex().items_center().border(1).border_color(t.ansi5).text_size(10).text_color(t.ansi5).child(r.name)
-        : div().flex_none().h(15).px(5).flex().items_center().bg(color).text_size(10).text_color(t.background).child(r.kind === "tag" ? `◆ ${r.name}` : r.name)];
+        : div().flex_none().h(15).px(5).flex().items_center().bg(color).text_size(10).text_color(t.background).child(r.kind === "tag" ? `◆ ${r.name}` : r.name);
+
+      return [isDithered() ? chip : chip.rounded(4)];
     });
 
     const copied = Arr.some(v.copied, (x) => x.hash === c.hash);
@@ -224,7 +229,7 @@ function fileRow(v: GitView, t: Theme, ctx: ListContext): DrawRow {
       const files = r.files;
       const l = ctx === "files" ? dirLetters(workFiles(files)) : null;
 
-      return rowLine(v, [div().w(r.depth * 12).flex_none(), T(r.open ? "▾" : "▸", t.dim),
+      return rowLine(v, [div().w(r.depth * 12).flex_none(), isDithered() ? T(r.open ? "▾" : "▸", t.dim) : div().flex_none().text_color(t.dim).child(glyph(r.open ? "▾" : "▸", r.open ? "chevron-down" : "chevron-right", 12)),
         l === null ? null : h_flex().child(T(l.x, letterColor(t, l.x, true))).child(T(l.y, letterColor(t, l.y, false))),
         T(r.name, t.muted, { grow: true }), T(String(r.files.length), t.dim)]);
     }

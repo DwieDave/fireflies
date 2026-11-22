@@ -3,10 +3,11 @@
 
 import { Array as Arr, String as Str } from "effect";
 import { div } from "gpui-kit";
-import type { Element } from "gpui-kit";
+import type { Context, Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import { panel, unzoom } from "./draw.ts";
+import { byLook, isDithered, mark, panel, unzoom } from "./draw.ts";
+import { GUTTER, segmented } from "@fireflies/look";
 import type { Panel, Tab, SideOptions } from "./state.ts";
 import { PANELS, isTabbed, TABS, WIDE_ROW, ROW } from "./state.ts";
 import { drawRow } from "./rows.ts";
@@ -18,6 +19,9 @@ import { edge } from "@fireflies/tones";
 
 /** A drill-in's name in its panel's title. */
 const SUB_TITLES = { subCommits: "Commits", remoteBranches: "Remote branches", commitFiles: "Files" } as const;
+
+/** A tabbed panel's name on a plain layout's card. */
+const PANEL_NAMES = { files: "Files", branches: "Branches", commits: "Commits" } as const;
 
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];
@@ -37,6 +41,21 @@ export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: 
   }
 
   const tabs: readonly (readonly [Tab, string])[] = TABS[p];
+
+  // A plain layout's card: the panel's name, its tabs as a segmented control.
+  if (!isDithered()) {
+    const pick = (id: Tab) => (cx: Context) => {
+      v.panel = p;
+      v.focus = "side";
+      v.setTab(id);
+      cx.notify();
+    };
+
+    parts.push(div().text_color(active ? t.foreground : t.muted).child(PANEL_NAMES[p]));
+    parts.push(segmented(t, Arr.map(tabs, ([id, label]) => ({ id: `tab-${p}-${id}`, label, on: v.tabOf[p] === id, go: pick(id) }))));
+
+    return parts;
+  }
 
   Arr.forEach(tabs, ([id, label], k) => {
     if (k > 0) parts.push(div().text_color(edge(t)).child("-"));
@@ -79,7 +98,7 @@ export function modeChip(v: GitView, t: Theme, p: Panel) {
       loadMain(v);
       cx.notify();
     })
-    .child(big ? "⤡" : "⤢");
+    .child(mark(big ? "⤡" : "⤢", big ? "minimize-2" : "maximize-2", 12));
 }
 
 export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions = {}) {
@@ -136,7 +155,7 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
 }
 
 export function sideColumn(v: GitView, t: Theme, panels: readonly Panel[], compact = false) {
-  return v_flex().size_full().gap(12).pt(7).children(Arr.map(panels, (p) => {
+  return v_flex().size_full().gap(byLook(12, GUTTER)).pt(byLook(7, 0)).children(Arr.map(panels, (p) => {
     const el = sidePanel(v, t, p, { compact });
     const focusedHere = v.panel === p;
 

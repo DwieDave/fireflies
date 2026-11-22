@@ -5,6 +5,7 @@
 
 import { Array as Arr, Match, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
+import { GUTTER } from "@fireflies/look";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings } from "herdr";
@@ -12,7 +13,7 @@ import type { Theme } from "herdr";
 import { isChange } from "./patch.ts";
 import { act } from "./actions.ts";
 import type { MainRow } from "./draw.ts";
-import { panel, empty, logTail, diffLine, unzoom, short, rowWindow } from "./draw.ts";
+import { byLook, isDithered, panel, empty, logTail, diffLine, unzoom, short, rowWindow } from "./draw.ts";
 import type { Show, MainListOptions } from "./state.ts";
 import { PANELS, ROW, NARROW } from "./state.ts";
 import { splitter } from "./lists.ts";
@@ -38,13 +39,13 @@ export function mainPanel(v: GitView, t: Theme) {
     const right = div().text_color(t.dim).child(`${s.file.path}${s.hunkMode ? " · hunk" : s.anchor !== null ? " · range" : ""}`);
     const a = panel(t, "main-a", title(true, s.side === "staged" ? "Staged changes" : "Unstaged changes"), active, mine, { right, foot: active ? "tab: other side · a: hunk mode" : null }).flex_grow(1.4).flex_basis(0);
 
-    if (s.other === null) return v_flex().size_full().gap(12).pt(7).child(a);
+    if (s.other === null) return v_flex().size_full().gap(12).pt(byLook(7, 0)).child(a);
 
     const b = panel(t, "main-b", title(false, s.side === "staged" ? "Unstaged changes" : "Staged changes"), false,
       mainList(v, t, "main-other", s.other, (r) => diffLine(t, r, { code, compact: narrow, active: false, path: s.file.path }), { key: "other" }),
       { onTitle: (_e, cx) => { switchSide(v); cx.notify(); } }).flex_grow(0.8).flex_basis(0);
 
-    return v_flex().size_full().gap(12).pt(7).child(s.side === "staged" ? b : a).child(s.side === "staged" ? a : b);
+    return v_flex().size_full().gap(12).pt(byLook(7, 0)).child(s.side === "staged" ? b : a).child(s.side === "staged" ? a : b);
   }
 
   const rows = m?.rows ?? [];
@@ -77,7 +78,7 @@ export function mainPanel(v: GitView, t: Theme) {
       mainList(v, t, "main-second", second.rows, (r) => diffLine(t, r, { code, compact: narrow, active: false, path: m?.path ?? null }), { key: "second" })).flex_grow(0.8).flex_basis(0));
   }
 
-  return v_flex().size_full().gap(12).pt(7).children(parts);
+  return v_flex().size_full().gap(byLook(12, GUTTER)).pt(byLook(7, 0)).children(parts);
 }
 
 /** A main-view list: windowed like the side lists; the wheel scrolls it. */
@@ -200,6 +201,11 @@ export function logPanel(v: GitView, t: Theme) {
     { right: div().text_color(t.dim).child("@") }).size_full();
 }
 
+/** The ground under the panels: nocturne's body padding (its frames meet edge to edge), or a plain layout's canvas around the cards. */
+function ground(t: Theme, el: Element): Element {
+  return isDithered() ? el.px(6).pb(4) : el.bg(t.canvas).p(GUTTER);
+}
+
 export function mainColumn(view: GitView, t: Theme) {
   const column = v_flex().flex_1().min_w(0).h_full()
     .child(div().flex_1().min_h(0).child(mainPanel(view, t)));
@@ -213,14 +219,14 @@ export function mainColumn(view: GitView, t: Theme) {
 
 /** A ctrl-p pane: the one diff, or the review list beside its diff. */
 export function showBody(view: GitView, t: Theme, show: Show) {
-  if (show.kind !== "review") return div().size_full().px(6).pb(4).child(mainPanel(view, t));
+  if (show.kind !== "review") return ground(t, div().size_full()).child(mainPanel(view, t));
 
-  if (view.size.width < NARROW) return div().size_full().px(6).pb(4).child(view.focus === "main" ? mainPanel(view, t) : sidePanel(view, t, "files").size_full().mt(7));
+  if (view.size.width < NARROW) return ground(t, div().size_full()).child(view.focus === "main" ? mainPanel(view, t) : sidePanel(view, t, "files").size_full().mt(7));
 
   const sideW = view.sideW ?? Math.round(Math.max(220, Math.min(360, view.size.width * 0.3)));
 
-  return h_flex().size_full().px(6).pb(4)
-    .child(div().w(sideW).flex_none().h_full().pt(7).child(sidePanel(view, t, "files").size_full()))
+  return ground(t, h_flex().size_full())
+    .child(div().w(sideW).flex_none().h_full().pt(byLook(7, 0)).child(sidePanel(view, t, "files").size_full()))
     .child(splitter(view, t, "split-side", "x", "side", sideW, (v) => { view.sideW = v; }, { min: 160, max: view.size.width * 0.7 }))
     .child(div().flex_1().min_w(0).h_full().child(mainPanel(view, t)));
 }
@@ -233,13 +239,13 @@ export function windowBody(gv: GitView, t: Theme) {
 
   if (narrow) {
     // One thing at a time: the side panels, or the main view (enter / esc).
-    if (gv.focus === "main") return div().size_full().px(6).pb(4).child(mainPanel(gv, t));
+    if (gv.focus === "main") return ground(t, div().size_full()).child(mainPanel(gv, t));
 
-    return div().size_full().px(6).pb(4).child(sideColumn(gv, t, PANELS));
+    return ground(t, div().size_full()).child(sideColumn(gv, t, PANELS));
   }
 
   if (gv.mode === "full") {
-    return div().size_full().px(6).pb(4).pt(7).child(gv.focus === "main" ? mainPanel(gv, t) : sidePanel(gv, t, gv.panel, { wide: true }).size_full());
+    return ground(t, div().size_full()).pt(byLook(7, 0)).child(gv.focus === "main" ? mainPanel(gv, t) : sidePanel(gv, t, gv.panel, { wide: true }).size_full());
   }
 
   if (gv.mode === "half") {
@@ -247,17 +253,17 @@ export function windowBody(gv: GitView, t: Theme) {
     const midW = gv.midW ?? Math.round(Math.max(360, Math.min(620, w * 0.38)));
     const rail = Arr.filter(PANELS, (p) => p !== gv.panel);
 
-    return h_flex().size_full().px(6).pb(4)
+    return ground(t, h_flex().size_full())
       .child(div().w(railW).flex_none().h_full().child(sideColumn(gv, t, rail, true)))
       .child(splitter(gv, t, "split-rail", "x", "rail", railW, (v) => { gv.railW = v; }, { min: 180, max: w * 0.4 }))
-      .child(div().w(midW).flex_none().h_full().pt(7).child(sidePanel(gv, t, gv.panel, { wide: true }).size_full()))
+      .child(div().w(midW).flex_none().h_full().pt(byLook(7, 0)).child(sidePanel(gv, t, gv.panel, { wide: true }).size_full()))
       .child(splitter(gv, t, "split-mid", "x", "mid", midW, (v) => { gv.midW = v; }, { min: 280, max: w * 0.7 }))
       .child(mainColumn(gv, t));
   }
 
   const sideW = gv.sideW ?? Math.round(Math.max(280, Math.min(520, w * 0.34)));
 
-  return h_flex().size_full().px(6).pb(4)
+  return ground(t, h_flex().size_full())
     .child(div().w(sideW).flex_none().h_full().child(sideColumn(gv, t, PANELS)))
     .child(splitter(gv, t, "split-side", "x", "side", sideW, (v) => { gv.sideW = v; }, { min: 200, max: w * 0.7 }))
     .child(mainColumn(gv, t));

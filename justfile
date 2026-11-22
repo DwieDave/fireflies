@@ -84,6 +84,8 @@ test:
     bun test scripts/git-large.test.ts
     # The git window as a normal pane: no frame or ✕, esc stays, narrow widths, moved window -> pane -> window, two copies, a restart's props.
     bun test scripts/git-pane.test.ts
+    # The git window's look by layout: nocturne's dithered frames; in main (herdr-app's default) cards on the canvas, the shared title bar (none in a pane), popovers, no checker.
+    bun test scripts/git-look.test.ts
     # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.
     bun test scripts/github-scroll.test.ts
     # The Actions log's groups fold as on GitHub (enter / space / z and a click on a title open and fold them, GitHub's line numbers), with herdr and gpui stand-ins.

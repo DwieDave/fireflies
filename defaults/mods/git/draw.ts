@@ -17,7 +17,8 @@ import type { DiffRow } from "./patch.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "@fireflies/layout-look";
-import { dithered, kbd, panel as card, rule, veil } from "@fireflies/look";
+import { dithered, glyph, kbd, panel as card, rule, veil } from "@fireflies/look";
+import type { PlainIcon } from "@fireflies/look";
 
 /** A changed line's tint: added green, removed red; none for the rest. */
 function tintOf(t: Theme, kind: DiffRow["kind"]): Color | null {
@@ -76,6 +77,12 @@ export const unzoom = (v: number) => v / zoom();
 /** Whether this draw is nocturne's dithered look (read once per draw), else
  *  the plain one (herdr-app's default layout: docs/plain-look.md). */
 export const isDithered = (): boolean => frame?.dithered ?? dithered();
+
+/** A value by look, for this draw: look's pick() without asking the app again per call. */
+export const byLook = <A>(nocturne: A, plain: A): A => (isDithered() ? nocturne : plain);
+
+/** A control's mark for this draw: nocturne's text glyph, or look's line icon. */
+export const mark = (text: string, plain: PlainIcon, size = 13): Element | string => (isDithered() ? text : glyph(text, plain, size));
 
 export const unzoomSize = (size: { readonly width: number; readonly height: number }) => ({ width: unzoom(size.width), height: unzoom(size.height) });
 
