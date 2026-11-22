@@ -5,7 +5,7 @@
 import type { Context, Element, Size } from "gpui-kit";
 import type { InputState, TextareaState } from "gpui-base";
 import type { Theme } from "herdr";
-import { isString } from "./guard.ts";
+import { Predicate } from "effect";
 
 /** A row of a list field's picker: the value it stands for, its words; `typed`: what was typed, taken as it is. */
 export interface Choice {
@@ -92,7 +92,7 @@ export type Values = ReadonlyMap<string, FieldValue>;
 export function textIn(values: Values, id: string): string {
   const v = values.get(id);
 
-  return isString(v) ? v : "";
+  return Predicate.isString(v) ? v : "";
 }
 
 /** A toggle's value, false when missing. */
@@ -102,7 +102,7 @@ export const flagIn = (values: Values, id: string): boolean => values.get(id) ==
 export function listIn(values: Values, id: string): readonly string[] {
   const v = values.get(id);
 
-  return Array.isArray(v) ? v : [];
+  return v === undefined || Predicate.isString(v) || Predicate.isBoolean(v) ? [] : v;
 }
 
 /** A command the review shows before anything runs. */
@@ -148,7 +148,7 @@ export function keep(f: Field, old: Field): void {
       if (old.kind === f.kind) {
         f.value = old.value;
 
-        if (old.input) f.input = old.input;
+        if (old.input !== undefined) f.input = old.input;
       }
 
       break;
@@ -156,7 +156,7 @@ export function keep(f: Field, old: Field): void {
       if (old.kind === "area") {
         f.value = old.value;
 
-        if (old.input) f.input = old.input;
+        if (old.input !== undefined) f.input = old.input;
       }
 
       break;

@@ -1,6 +1,7 @@
 // The Actions log's groups, folded as GitHub draws them: a `##[group]` title
 // stands for its lines up to `##[endgroup]` (or the next group) until it's
 // opened. Line numbers stay GitHub's: a folded group's lines keep theirs.
+import { Array as Arr, Option, String as Str } from "effect";
 import type { LogLine } from "./model.ts";
 import { logLine } from "./model.ts";
 
@@ -28,11 +29,11 @@ export function foldLog(raw: readonly string[], open: (at: number) => boolean): 
   const items: (LogLine | "end")[] = [];
 
   for (const r of raw) {
-    if (r.startsWith("##[endgroup]")) items.push("end");
+    if (Str.startsWith("##[endgroup]")(r)) items.push("end");
     else {
       const l = logLine(r);
 
-      if (l) items.push(l);
+      if (l !== null) items.push(l);
     }
   }
 
@@ -71,7 +72,7 @@ export function foldLog(raw: readonly string[], open: (at: number) => boolean): 
 
 /** enter: the first group title from the view's top line down, if any. */
 export function groupAt(lines: readonly ShownLine[], top: number): Fold | null {
-  return lines.slice(Math.max(0, top)).find((l) => l.group && l.group.size > 0)?.group ?? null;
+  return Option.getOrNull(Arr.findFirst(Arr.drop(lines, Math.max(0, top)), (l) => Option.fromNullishOr(l.group).pipe(Option.filter((g) => g.size > 0))));
 }
 
 /** Opens or folds one group (its title's number) in `opened`, or with "all" every group: open while any is shut. */
@@ -84,8 +85,8 @@ export function toggleFold(opened: Set<string>, prefix: string, lines: readonly 
     return;
   }
 
-  const groups = lines.flatMap((l) => (l.group && l.group.size > 0 ? [l.group] : []));
-  const shut = groups.some((g) => !g.open);
+  const groups = Arr.flatMap(lines, (l) => Arr.filter(Arr.fromNullishOr(l.group), (g) => g.size > 0));
+  const shut = Arr.some(groups, (g) => !g.open);
 
   for (const g of groups) {
     if (shut) opened.add(`${prefix}${g.at}`);
