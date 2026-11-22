@@ -2,7 +2,7 @@
 // folded folders, drill-ins, the filter, the screen mode, the diff's context,
 // and esc (the innermost thing gives way first).
 
-import { Effect } from "effect";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
 import { InputState } from "gpui-base";
 import { fileTree } from "./parse.ts";
 import type { Panel, Sub, Tab, NewSub } from "./state.ts";
@@ -15,7 +15,7 @@ import type { default as GitView } from "./main.ts";
 import { loadSub } from "./reads.ts";
 
 export function setPanel(v: GitView, p: Panel) {
-  if (v.show && p !== "files") return;
+  if (v.show !== null && p !== "files") return;
 
   if (v.panel === p && v.focus === "side") return;
 
@@ -31,7 +31,7 @@ export function ensureLoaded(v: GitView) {
   const ctx = v.ctxOf(v.panel);
   const g = v.git;
 
-  if (ctx === "reflog" && !v.data.reflog.length && g) {
+  if (ctx === "reflog" && !Arr.isReadonlyArrayNonEmpty(v.data.reflog) && g !== null) {
     v.read(Effect.gen(function* () {
       v.data.reflog = yield* g.reflog();
       loadMain(v);
@@ -69,19 +69,19 @@ export function setTab(v: GitView, id: Tab) {
 export function stepTab(v: GitView, d: number) {
   const p = v.panel;
 
-  if (!isTabbed(p) || v.sub()) return;
+  if (!isTabbed(p) || v.sub() !== null) return;
 
   const tabs: readonly (readonly [Tab, string])[] = TABS[p];
-  const i = tabs.findIndex(([t]) => t === v.tabOf[p]);
+  const i = Option.getOrElse(Arr.findFirstIndex(tabs, ([t]) => t === v.tabOf[p]), () => -1);
   const next = tabs[(i + d + tabs.length) % tabs.length];
 
-  if (next) v.setTab(next[0]);
+  if (next !== undefined) v.setTab(next[0]);
 }
 
 export function moveBy(v: GitView, d: number) {
   const ctx = v.ctxOf(v.panel), n = v.items(ctx).length;
 
-  if (!n) return;
+  if (n === 0) return;
 
   v.sel[ctx] = Math.max(0, Math.min(n - 1, (v.sel[ctx] ?? 0) + d));
   v.follow[ctx] = true;
@@ -103,14 +103,14 @@ export function pageRows(v: GitView) { return Math.max(1, (v.vis[v.ctxOf(v.panel
 export function toggleRange(v: GitView) {
   const ctx = v.ctxOf(v.panel);
 
-  if (v.focus === "main" && v.staging) {
+  if (v.focus === "main" && v.staging !== null) {
     v.staging.anchor = v.staging.anchor === null ? v.staging.cur : null;
     v.staging.hunkMode = false;
 
     return;
   }
 
-  v.range = v.range ? null : { ctx, anchor: v.sel[ctx] ?? 0 };
+  v.range = v.range !== null ? null : { ctx, anchor: v.sel[ctx] ?? 0 };
 }
 
 export function toggleDir(v: GitView, path: string) {
@@ -167,7 +167,7 @@ export function openFilter(v: GitView) {
 
 /** esc: the innermost thing gives way first. */
 export function giveWay(v: GitView) {
-  if (v.filtering) {
+  if (v.filtering !== null) {
     const c = v.filtering.ctx;
 
     v.filtering = null;
@@ -177,7 +177,7 @@ export function giveWay(v: GitView) {
     return;
   }
 
-  if (v.show && v.show.kind !== "review") {
+  if (v.show !== null && v.show.kind !== "review") {
     closePane(v);
 
     return;
@@ -191,7 +191,7 @@ export function giveWay(v: GitView) {
     return;
   }
 
-  if (v.range) {
+  if (v.range !== null) {
     v.range = null;
 
     return;
@@ -199,33 +199,33 @@ export function giveWay(v: GitView) {
 
   const ctx = v.ctxOf(v.panel);
 
-  if (ctx === "worktrees" && v.wtPicked.size) {
+  if (ctx === "worktrees" && v.wtPicked.size > 0) {
     v.wtPicked = new Set();
 
     return;
   }
 
-  if (v.filters[ctx]) {
+  if (Str.isNonEmpty(v.filters[ctx] ?? "")) {
     v.filters[ctx] = "";
 
     return;
   }
 
-  if (v.sub()) {
+  if (v.sub() !== null) {
     v.subs[v.panel] = v.subs[v.panel].slice(0, -1);
     loadMain(v);
 
     return;
   }
 
-  if (v.diffBase) {
+  if (v.diffBase !== null) {
     v.diffBase = null;
     loadMain(v);
 
     return;
   }
 
-  if (v.copied.length && (ctx === "commits" || ctx === "reflog" || ctx === "subCommits")) {
+  if (Arr.isReadonlyArrayNonEmpty(v.copied) && (ctx === "commits" || ctx === "reflog" || ctx === "subCommits")) {
     v.copied = [];
     v.note("Copied commits forgotten");
 
@@ -247,10 +247,10 @@ export function focusMain(v: GitView) {
   if (ctx === "files") {
     const f = statusFileOf(v.item());
 
-    if (f) return startStaging(v, f);
+    if (f !== null) return startStaging(v, f);
   }
 
-  if (!v.main?.rows.length) return;
+  if (!Arr.isReadonlyArrayNonEmpty(v.main?.rows ?? [])) return;
 
   v.focus = "main";
 }
@@ -265,7 +265,7 @@ export function setContext(v: GitView, d: number) {
   v.context = Math.max(0, Math.min(30, v.context + d));
   v.note(`Diff context: ${v.context} lines`);
 
-  if (v.staging) v.read(loadStaging(v));
+  if (v.staging !== null) v.read(loadStaging(v));
 
   loadMain(v);
 }
@@ -274,7 +274,7 @@ export function scrollMain(v: GitView, d: number, lines: number | null = null) {
   const n = (v.staging?.rows ?? v.main?.rows ?? []).length;
   const step = lines ?? Math.max(4, Math.floor((v.mainVis ?? 20) / 2));
 
-  if (v.staging && lines === null) {
+  if (v.staging !== null && lines === null) {
     stepLine(v, d * step);
 
     return;

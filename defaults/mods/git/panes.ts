@@ -2,21 +2,23 @@
 // opening it beside or in a new tab, and closing or leaving (q, esc, back to
 // the GitHub window).
 
+import { String as Str } from "effect";
 import { run, closeOverlay, openOverlay } from "herdr";
+import { baseName } from "./parse.ts";
 import type { Show } from "./state.ts";
-import { ownPane } from "./place.ts";
+import { ownPane, randomId } from "./place.ts";
 import { pathOf, hashOf, isBranch, isRemoteBranch, isTag, statusFileOf, isTreeRow, isStash, nameOf } from "./items.ts";
 import type { default as GitView } from "./main.ts";
 
 /** A ctrl-p tab's name. */
 export function paneName(s: Show) {
   switch (s.kind) {
-    case "file": return s.path.split("/").pop() ?? s.path;
-    case "review": return s.pr ? `#${s.pr}` : "review";
+    case "file": return baseName(s.path);
+    case "review": return s.pr === undefined ? "review" : `#${s.pr}`;
     case "range": return "diff";
     case "log": return s.ref;
-    case "commit": return s.hash.slice(0, 7);
-    case "stash": return s.ref.slice(0, 7);
+    case "commit": return Str.slice(0, 7)(s.hash);
+    case "stash": return Str.slice(0, 7)(s.ref);
   }
 }
 
@@ -24,19 +26,19 @@ export function paneName(s: Show) {
 export function showNow(v: GitView): Show | null {
   const ctx = v.ctxOf(v.panel), x = v.item(ctx);
 
-  if (v.diffBase) {
+  if (v.diffBase !== null) {
     const ref = hashOf(x) ?? (isBranch(x) || isRemoteBranch(x) || isTag(x) ? x.oid : null);
 
-    if (ref) return v.diffReverse ? { kind: "range", a: ref, b: v.diffBase } : { kind: "range", a: v.diffBase, b: ref };
+    if (ref !== null) return v.diffReverse ? { kind: "range", a: ref, b: v.diffBase } : { kind: "range", a: v.diffBase, b: ref };
   }
 
-  if (v.staging) return { kind: "file", path: v.staging.file.path };
+  if (v.staging !== null) return { kind: "file", path: v.staging.file.path };
 
   switch (ctx) {
     case "files": {
       const f = statusFileOf(x);
 
-      if (f) return { kind: "file", path: f.path };
+      if (f !== null) return { kind: "file", path: f.path };
 
       const first = isTreeRow(x) && x.kind === "dir" ? x.files[0]?.path : undefined;
 
@@ -44,16 +46,16 @@ export function showNow(v: GitView): Show | null {
     }
 
     case "review": {
-      const review: Show = v.review.pr ? { kind: "review", scope: v.review.scope, pr: v.review.pr, repo: v.review.prRepo } : { kind: "review", scope: v.review.scope };
+      const review: Show = v.review.pr !== null ? { kind: "review", scope: v.review.scope, pr: v.review.pr, repo: v.review.prRepo } : { kind: "review", scope: v.review.scope };
       const path = pathOf(x);
 
-      return path ? { ...review, path } : review;
+      return path === null ? review : { ...review, path };
     }
 
     case "commits": case "subCommits": case "reflog": {
       const hash = hashOf(x);
 
-      return hash ? { kind: "commit", hash } : null;
+      return hash === null ? null : { kind: "commit", hash };
     }
 
     case "commitFiles": {
@@ -63,14 +65,14 @@ export function showNow(v: GitView): Show | null {
 
       const path = isTreeRow(x) && x.kind === "dir" ? null : pathOf(x);
 
-      return s.stash ? (path ? { kind: "stash", ref: s.hash, path } : { kind: "stash", ref: s.hash }) : (path ? { kind: "commit", hash: s.hash, path } : { kind: "commit", hash: s.hash });
+      return s.stash ? (path === null ? { kind: "stash", ref: s.hash } : { kind: "stash", ref: s.hash, path }) : (path === null ? { kind: "commit", hash: s.hash } : { kind: "commit", hash: s.hash, path });
     }
 
     case "stash": return isStash(x) ? { kind: "stash", ref: x.hash } : null;
     case "branches": case "tags": case "remoteBranches": {
       const name = nameOf(x);
 
-      return name ? { kind: "log", ref: name } : null;
+      return name === null ? null : { kind: "log", ref: name };
     }
 
     default: return null;
@@ -81,19 +83,19 @@ export function showNow(v: GitView): Show | null {
  *  tab); the window steps aside. */
 export function openPane(v: GitView, tab = false) {
   const g = v.git;
-  const show = g ? v.showNow() : null;
+  const show = g === null ? null : v.showNow();
 
-  if (!g || !show) return v.error("Nothing in the main view to open as a pane.");
+  if (g === null || show === null) return v.error("Nothing in the main view to open as a pane.");
 
-  const paneId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-  const props = v.on ? { folder: g.root, on: v.on, show, paneId } : { folder: g.root, show, paneId };
+  const paneId = randomId(5);
+  const props = v.on !== null ? { folder: g.root, on: v.on, show, paneId } : { folder: g.root, show, paneId };
 
   if (tab) run("tab.new", { mod: "git", props, name: paneName(show) });
   else run("pane.split", { direction: "auto", mod: "git", props });
 
   // The window steps aside a moment later: closed in the same turn, the new
   // pane's first tasks were cancelled with it (it stayed on "Reading…").
-  if (v.overlay) {
+  if (v.overlay !== null) {
     v.saveState();
 
     const id = v.overlay;
@@ -106,13 +108,13 @@ export function openPane(v: GitView, tab = false) {
 export function closePane(v: GitView) {
   const mine = ownPane(v);
 
-  run("pane.close", mine ? { pane: mine.pane } : {});
+  run("pane.close", mine === null ? {} : { pane: mine.pane });
 }
 
 export function goBack(v: GitView) {
   const back = v.backTo;
 
-  if (!back) return;
+  if (back === null) return;
 
   v.saveState();
   openOverlay({ mod: back.mod, kind: "window", key: "github", frame: "none", scrim: true, width: 0.85, height: 0.85, props: back.props ?? {} });
@@ -121,11 +123,11 @@ export function goBack(v: GitView) {
 /** q: back to the GitHub window when it opened this, else close. esc
  *  at the top level closes only a window (a pane stays). */
 export function quit(v: GitView, fromEsc = false) {
-  if (v.show) return closePane(v);
+  if (v.show !== null) return closePane(v);
 
-  if (v.backTo) return v.goBack();
+  if (v.backTo !== null) return v.goBack();
 
-  if (v.overlay) {
+  if (v.overlay !== null) {
     v.saveState();
     closeOverlay(v.overlay);
 
