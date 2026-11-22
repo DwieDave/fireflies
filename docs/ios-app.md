@@ -1,6 +1,8 @@
 # The Fireflies iOS app: what is feasible, and the proof that GPUI draws there
 
-The evaluation Developer asked for on 2026-11-22 (features a to j of his scratchpad task), the pieces an own iOS backend for `vendor/gpui-pre-apple` needs, and the result of the smallest proof (branch `feat/ios-mvp`, not merged).
+The evaluation Developer asked for on 2026-11-22 (features a to j of his scratchpad task), the pieces an own iOS backend for `vendor/gpui-pre-apple` needs, and the result of the smallest proof (its code is in `prototypes/ios-mvp` and `vendor/gpui-pre-apple/src/ios`).
+
+The UI concept Developer picked on 2026-11-22 (concept A, the night sky) is in [prototypes/ios-concept](../prototypes/ios-concept/README.md); the simulator screenshots are in [ios-app/](ios-app/).
 
 | # | Feature (Developer's words, shortened) | Feasible | How | What is possible if not fully | Compromises |
 |---|---|---|---|---|---|
@@ -43,7 +45,7 @@ The evaluation Developer asked for on 2026-11-22 (features a to j of his scratch
 
 ## ios-mvp: GPUI draws and takes taps on the iOS Simulator (branch feat/ios-mvp, not merged)
 
-**Screenshot:** `/Volumes/data/coding/fireflies-wt/refs/ios-mvp-3-text-five-taps.png` (also `ios-mvp-1-elements.png` with no taps, `ios-mvp-2-three-taps.png`), iPhone 18 Pro, iOS 27.0.
+**Screenshot:** `ios-app/ios-mvp-3-text-five-taps.png` (also `ios-mvp-1-elements.png` with no taps, `ios-mvp-2-three-taps.png`), iPhone 18 Pro, iOS 27.0.
 
 **Run it** (absolute paths, from any folder):
 1. `/Volumes/data/coding/fireflies-wt/ios-mvp/prototypes/ios-mvp/build.sh` (nix toolchain from `toolchain.nix`, cargo for `aarch64-apple-ios-sim`, swiftc, ad-hoc codesign)
@@ -60,7 +62,7 @@ The evaluation Developer asked for on 2026-11-22 (features a to j of his scratch
 
 ## Effect mods on iOS: they run (branch feat/ios-mvp, integrate merged in)
 
-**Screenshot:** `/Volumes/data/coding/fireflies-wt/refs/ios-mvp-4-effect-mod.png`: the MVP view with an Effect-written mod's panel drawn by GPUI ("decoded nocturne, busy true", "caught DecodeError") and "effect + kit + mod loaded in 490 ms".
+**Screenshot:** `ios-app/ios-mvp-4-effect-mod.png`: the MVP view with an Effect-written mod's panel drawn by GPUI ("decoded nocturne, busy true", "caught DecodeError") and "effect + kit + mod loaded in 490 ms".
 
 1. **The engine compiles for `aarch64-apple-ios-sim`:** gpui-shell with its default `quickjs` feature, i.e. quickjs-jit, the JIT runtime (`vendor/quickjs-jit-runtime`, `compiler` feature) and the LLRT stdlib facade. Two fixes, both prototype-only: quickjs-jit-sys ships no prebuilt bindings for iOS, so its `bindgen` feature generates them (Xcode's libclang, `LIBCLANG_PATH` in build.sh); `gpui-pre-platform`'s `current_platform` had no iOS branch, so `prototypes/ios-mvp/patches/gpui-pre-platform` adds one returning `IosPlatform`. The JIT compiles and links; whether it emitted machine code on the simulator was not measured. On a device App Store apps get no executable memory (from memory), so there it must run as the interpreter.
 2. + 3. **One Effect mod, the real path:** `defaults/lib` (effect@4 bundle, `effect/http`, `@fireflies/kit` and the other libraries) is copied into the app and served through `gpui_shell::library_modules::export_libraries`, as `src/mods.rs` does; `ShellRuntime::new` → `load_application(mod, "main.ts")` → `mount_application` gives a `ScriptView` the MVP view embeds. The mod (`prototypes/ios-mvp/mod/main.ts`, TypeScript blanked by the engine) builds `modRuntime(Layer.empty)` from the kit, runs an `Effect.gen` with two `decodeJson(Schema.Struct …)` decodes, one failing and caught with `Effect.catch`, and renders the result with gpui-kit's `div()`. Load time for effect + kit + mod: 490 ms on the simulator, debug build (docs/effect-mods.md measured 0.4 s for the first mod on the desktop, also debug).
