@@ -4,8 +4,6 @@
 // the window and never overlaps another read.
 
 import { Array as Arr, Effect, Option, Record as Rec } from "effect";
-import { watchFolder } from "herdr";
-import { fileError } from "@fireflies/kit";
 import { Git, LOG_LIMIT } from "./git.ts";
 import type { GitError } from "./git.ts";
 import { layoutGraph } from "./graph.ts";
@@ -15,6 +13,7 @@ import { loadStaging } from "./staging.ts";
 import { loadMain } from "./content.ts";
 import { worktreeIntent } from "./checkouts.ts";
 import type { GitServices } from "./fx.ts";
+import { FolderWatch } from "./watch.ts";
 import type { default as GitView } from "./main.ts";
 
 /** Opens the repo holding the window's folder: everything read, the folder watched, where worktrees go. */
@@ -59,7 +58,7 @@ export function watch(v: GitView): void {
 
   if (v.on !== null || v.watching || g === null) return;
 
-  const change = Effect.tryPromise({ try: () => watchFolder(g.root), catch: fileError(g.root) });
+  const change = FolderWatch.use((w) => w.next(g.root));
 
   v.watching = true;
   v.run$(Effect.forever(Effect.flatMap(change, (paths) => Effect.sync(() => {

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { Deferred, Effect } from "effect";
-import { drained, hostContext } from "./git-host.ts";
+import { drained, gitHerdr, gitServices, hostContext, newHost } from "./git-host.ts";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada Lovelace", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada Lovelace", GIT_COMMITTER_EMAIL: "a@x" };
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "git-view-")));
@@ -18,32 +18,14 @@ function sh(cmd: string, cwd = repo) {
   return r.stdout;
 }
 
-// ---- stand-ins
+// ---- stand-ins: the kit's test layers and the one herdr stand-in (git-host.ts)
 
-let sharedState: Record<string, unknown> = {};
-let zoomNow = 1;
-let propsNow: any = null;
-let spacesNow: any[] = [], panesNow: any[] = [], agentsNow: any[] = [], homeNow = "/home/u";
-// settings.json as the app home holds it (null: none).
-let settingsText: string | null = null;
-const commands: [string, any][] = [];
-mock.module("herdr", () => ({
-  settings: () => ({ zoom: zoomNow, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
-  shared: (k: string) => sharedState[k] ?? null,
-  setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  props: () => propsNow,
-  spaces: () => spacesNow, panes: () => panesNow, focused: () => null, agents: () => agentsNow, home: () => homeNow,
-  appHome: () => "/app-home",
-  readTextFile: async (path: string) => (path === "/app-home/settings.json" ? settingsText : null),
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  nextCommand: () => new Promise(() => {}),
-  watchFolder: () => new Promise(() => {}),
-  closeOverlay: () => {}, openOverlay: () => "o1", notify: () => {},
-  exec: async (cmd: string, args: string[], opts: any) => {
-    const r = spawnSync(cmd, args, { cwd: opts?.cwd, env: ENV, encoding: "utf8" });
-    return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-  },
-}));
+const host = newHost();
+const files = new Map<string, string>();
+const SETTINGS = "/app-home/settings.json";
+/** settings.json as the app home holds it (null: none). */
+const setSettings = (text: string | null) => (text === null ? files.delete(SETTINGS) : files.set(SETTINGS, text));
+mock.module("herdr", () => gitHerdr(host, theme));
 const el: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : (...a: any[]) => { for (const x of a) if (typeof x === "function" && String(k) === "when" && a[0]) x(el); return el; }), apply: () => el });
 mock.module("gpui-kit", () => ({ View: class {}, div: () => el, svg: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 class Input { handlers: Record<string, Function> = {}; v = ""; constructor(o: any) { this.v = o?.value ?? ""; } on(e: string, f: Function) { this.handlers[e] = f; return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } fire(e: string) { this.handlers[e]?.({}, cx); } }
@@ -58,18 +40,20 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 const { cx } = hostContext();
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
-const { runtime: gitRuntime } = await import("../defaults/mods/git/fx.ts");
+const { runtime: gitRuntime, useServices } = await import("../defaults/mods/git/fx.ts");
+const { FolderWatchStill } = await import("../defaults/mods/git/watch.ts");
+useServices(gitServices(ENV, FolderWatchStill, files).layer);
 /** An effect of the mod run on its own runtime (the live services over the herdr stand-in). */
-const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.runtime.runPromise(e);
+const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.managed().runPromise(e);
 
 /** Waits until both of the window's queues are drained. */
 /** Until the view's lanes are drained (git-host.ts). */
 const settle = (v: any): Promise<void> => runFx(drained(v));
 
 const key = (k: string, mods: any = {}) => ({ key: k.length === 1 ? k.toLowerCase() : k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-async function press(v: any, ...keys: (string | [string, any])[]) {
-  for (const k of keys) { v.key(Array.isArray(k) ? key(k[0], k[1]) : key(k), cx); v.render(); await settle(v); }
-}
+/** Each key pressed in turn, the window drawn and its work drained after each. */
+const press = (v: any, ...keys: (string | [string, any])[]): Promise<void> =>
+  runFx(Effect.forEach(keys, (k) => Effect.andThen(Effect.sync(() => { v.key(Array.isArray(k) ? key(k[0], k[1]) : key(k), cx); v.render(); }), drained(v)), { discard: true }));
 
 beforeAll(() => {
   mkdirSync(repo);
@@ -81,14 +65,15 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-async function open() {
-  sharedState = {};
+/** A window on the repo, read and drawn. */
+const open = (): Promise<any> => runFx(Effect.gen(function* () {
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: repo }, cx);
-  await settle(v);
+  yield* drained(v);
   v.render();
   return v;
-}
+}));
 
 test("opens on the repo: every panel reads, renders without throwing", async () => {
   const v = await open();
@@ -104,7 +89,7 @@ test("opens on the repo: every panel reads, renders without throwing", async () 
 });
 
 test("opening starts in the Files panel's files tab, whatever the folder's window showed last; keys act on the files", async () => {
-  sharedState = { "git.state": { [repo]: { panel: "commits", tabOf: { files: "review", branches: "tags", commits: "reflog" }, mode: "half" } } };
+  host.shared = { "git.state": { [repo]: { panel: "commits", tabOf: { files: "review", branches: "tags", commits: "reflog" }, mode: "half" } } };
   const v = new GitView();
   v.init({ folder: repo }, cx);
   await settle(v);
@@ -252,7 +237,7 @@ test("review: the Files panel's Review tab marks and hides like diff", async () 
   expect(n).toBeGreaterThan(0);
   await press(v, "space");
   expect(v.review.marks().size).toBe(1);
-  expect((sharedState["diff.reviewed"] as any)[v.git.root].length).toBe(1);
+  expect((host.shared["diff.reviewed"] as any)[v.git.root].length).toBe(1);
   await press(v, "a");
   expect(v.review.marks().size).toBe(n);
   await press(v, "a");
@@ -321,14 +306,14 @@ test("ctrl-p opens the main view as a pane (ctrl-shift-p a tab); the pane shows 
   const v = await open();
   v.overlay = "w1";
   v.setPanel("commits"); v.moveTo(0); await settle(v);
-  commands.length = 0;
+  host.commands.length = 0;
   await press(v, ["p", { control: true }]);
-  const [name, args] = commands.find(([n]) => n === "pane.split")!;
+  const [name, args] = host.commands.find(([n]) => n === "pane.split")!;
   expect(name).toBe("pane.split");
   expect(args.mod).toBe("git");
   expect(args.props.show).toEqual({ kind: "commit", hash: v.data.commits[0].hash });
   await press(v, ["p", { control: true, shift: true }]);
-  expect(commands.some(([n, a]) => n === "tab.new" && a.mod === "git")).toBe(true);
+  expect(host.commands.some(([n, a]) => n === "tab.new" && a.mod === "git")).toBe(true);
   // right-click menus offer it too
   v.rowMenu("commits", 0, cx);
   expect(v.popups.top.items.some((x: any) => x.key === "ctrl-p")).toBe(true);
@@ -336,17 +321,17 @@ test("ctrl-p opens the main view as a pane (ctrl-shift-p a tab); the pane shows 
 
   // the pane: its props as the window sent them
   const pane = new GitView();
-  propsNow = args.props;
+  host.props = args.props;
   pane.init(args.props, cx);
-  propsNow = null;
+  host.props = null;
   await settle(pane);
   expect(pane.state).toBe("ready");
   pane.render();
   expect(pane.ctx()).toBe("main");
   expect(pane.main.title.startsWith("Patch")).toBe(true);
-  commands.length = 0;
+  host.commands.length = 0;
   await press(pane, "q");
-  expect(commands.some(([n]) => n === "pane.close")).toBe(true);
+  expect(host.commands.some(([n]) => n === "pane.close")).toBe(true);
 });
 
 test("branches: the main view shows the branch's log on the lane graph; ctrl-p opens it as a log pane", async () => {
@@ -404,7 +389,7 @@ test("a log cut at its limit: the rows that fit follow the row height, the open 
   // 310 commits with a side branch open across the cut: more than the branch
   // log (200) and the Commits panel (300) read.
   const long = longRepo();
-  sharedState = {};
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: long }, cx);
   await settle(v);
@@ -445,7 +430,7 @@ test("a log cut at its limit: the rows that fit follow the row height, the open 
 // is unzoomed to layout units, and fits whole rows of the list's row height.
 for (const zoom of [0.9, 1]) {
   test(`zoom ${zoom}: at the end of every list the last row ends inside the list`, async () => {
-    zoomNow = zoom;
+    host.zoom = zoom;
     try {
       const { rowWindow } = await import("../defaults/mods/git/draw.ts");
       const { unzoom } = await import("../defaults/mods/git/draw.ts");
@@ -461,13 +446,13 @@ for (const zoom of [0.9, 1]) {
           }
         }
       }
-    } finally { zoomNow = 1; }
+    } finally { host.zoom = 1; }
   });
 }
 
 test("a history cut at its limit reads further when its end comes into view: the Commits panel, a branch's commits, the branch log", async () => {
   const long = longRepo();
-  sharedState = {};
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: long }, cx);
   await settle(v);
@@ -514,7 +499,7 @@ test("a history cut at its limit reads further when its end comes into view: the
 
   // A filtered list's end isn't the history's: no read.
   const v2 = new GitView();
-  sharedState = {};
+  host.shared = {};
   v2.init({ folder: long }, cx);
   await settle(v2);
   v2.listPx = { commits: 360 };
@@ -528,7 +513,7 @@ test("an operation's row spins from the key to its end: push marks the pushed br
   const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
   sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);
   sh("git commit -q --allow-empty -m 'to push'", work);
-  sharedState = {};
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: work }, cx);
   await settle(v);
@@ -582,8 +567,8 @@ test("an operation's row spins from the key to its end: push marks the pushed br
 });
 
 test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as a space; space goes to its space; d removes it", async () => {
-  homeNow = join(dir, "home");
-  commands.length = 0;
+  host.home = join(dir, "home");
+  host.commands.length = 0;
   const v = await open();
   v.setPanel("files"); v.setTab("worktrees"); await settle(v);
   expect(v.items("worktrees").map((w: any) => w.main)).toEqual([true]);
@@ -593,21 +578,21 @@ test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as 
   expect(v.popups.suggestions(v.popups.top).map((s: any) => s.value)).toEqual(["side"]);
   v.popups.top.input.set_value("feat/wt");
   await press(v, "enter");
-  const path = join(homeNow, ".herdr/worktrees/repo/feat-wt");
+  const path = join(host.home, ".herdr/worktrees/repo/feat-wt");
   expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
   expect(sh("git -C " + path + " branch --show-current").trim()).toBe("feat/wt");
-  expect(commands.find(([n]) => n === "space.new")?.[1]).toMatchObject({ folder: path });
+  expect(host.commands.find(([n]) => n === "space.new")?.[1]).toMatchObject({ folder: path });
   // A space on it now: space goes there instead of making another.
-  spacesNow = [{ id: "s9", name: "feat-wt", machine: null, attached: true, folder: path, tabs: [] }];
-  agentsNow = [];
+  host.spaces = [{ id: "s9", name: "feat-wt", machine: null, attached: true, folder: path, tabs: [] }];
+  host.agents = [];
   v.setTab("worktrees"); await settle(v);
   const i = v.items("worktrees").findIndex((x: any) => x.path === path);
   v.moveTo(i); await settle(v);
   expect(v.main.title).toBe("Worktree · feat/wt");
   expect(v.main.rows.some((r: any) => r.parts?.[1]?.[0] === "feat-wt")).toBe(true);
-  commands.length = 0;
+  host.commands.length = 0;
   await press(v, "space");
-  expect(commands[0]).toEqual(["space.select", { id: "s9" }]);
+  expect(host.commands[0]).toEqual(["space.select", { id: "s9" }]);
   // d: a confirm that names what goes; b also deletes the branch.
   sh(`echo x > ${path}/dirty.txt`);
   await press(v, "d");
@@ -617,30 +602,30 @@ test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as 
   await press(v, "b", "enter");
   expect(sh("git worktree list --porcelain")).not.toContain(path);
   expect(sh("git branch --list feat/wt").trim()).toBe("");
-  expect(commands.some(([n, a]) => n === "space.close" && a.id === "s9")).toBe(true);
-  spacesNow = [];
+  expect(host.commands.some(([n, a]) => n === "space.close" && a.id === "s9")).toBe(true);
+  host.spaces = [];
 });
 
 // Upstream's worktree dialog fixes (Herdr 0.1.16), ported to the git window's Worktrees tab.
 test("worktrees: settings.json's worktrees.directory says where n checks out (~ is the repo machine's home); a bad one says why", async () => {
-  homeNow = join(dir, "home");
-  settingsText = JSON.stringify({ worktrees: { directory: "~/elsewhere/wt/" } });
-  commands.length = 0;
+  host.home = join(dir, "home");
+  setSettings(JSON.stringify({ worktrees: { directory: "~/elsewhere/wt/" } }));
+  host.commands.length = 0;
   const v = await open();
   v.setPanel("files"); v.setTab("worktrees"); await settle(v);
   await press(v, "n");
   expect(v.popups.top.note).toContain("~/elsewhere/wt/repo/");
   v.popups.top.input.set_value("dir/one");
   await press(v, "enter");
-  const path = join(homeNow, "elsewhere/wt/repo/dir-one");
+  const path = join(host.home, "elsewhere/wt/repo/dir-one");
   expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
   sh(`git worktree remove --force ${path} && git branch -D dir/one`);
-  settingsText = JSON.stringify({ worktrees: { directory: "relative/wt" } });
+  setSettings(JSON.stringify({ worktrees: { directory: "relative/wt" } }));
   const WT = await import("../defaults/mods/git/worktrees.ts");
   expect(await runFx(WT.create(v.git, "dir/two"))).toEqual({ error: "worktrees.directory must be an absolute path or start with ~/." });
-  settingsText = JSON.stringify({ worktrees: { directory: "/abs/wt" } });
+  setSettings(JSON.stringify({ worktrees: { directory: "/abs/wt" } }));
   expect(await runFx(WT.rootFor("/home/u"))).toBe("/abs/wt");
-  settingsText = null;
+  setSettings(null);
   expect(await runFx(WT.rootFor("/home/u"))).toBe("/home/u/.herdr/worktrees");
   v.popups.close();
 });
@@ -662,9 +647,9 @@ test("worktrees: a bare repo kept in <project>/.bare puts its checkouts under th
 });
 
 test("worktrees: a removal git refuses (a locked checkout) keeps the spaces on it", async () => {
-  homeNow = join(dir, "home");
-  settingsText = null;
-  const path = join(homeNow, "wt-locked");
+  host.home = join(dir, "home");
+  setSettings(null);
+  const path = join(host.home, "wt-locked");
   sh(`git worktree add -q -b locked-one ${path} HEAD && git worktree lock --reason "on a usb disk" ${path}`);
   const v = await open();
   const WT = await import("../defaults/mods/git/worktrees.ts");
@@ -683,27 +668,27 @@ test("worktrees: a removal git refuses (a locked checkout) keeps the spaces on i
 
 // The Agents line named every agent "agent": it read a.name, which herdr's agent listing doesn't have.
 test("worktrees: the main view names the agents in a checkout by their program", async () => {
-  homeNow = join(dir, "home");
-  sh(`git worktree add -q -b named ${join(homeNow, "wt-n")} HEAD`);
-  agentsNow = [{ pane: "p1", status: "working", title: "fix the parser", program: { key: "claude", name: "Claude Code" } }];
-  panesNow = [{ pane: "p1", tab: "t1", cwd: join(homeNow, "wt-n") }];
+  host.home = join(dir, "home");
+  sh(`git worktree add -q -b named ${join(host.home, "wt-n")} HEAD`);
+  host.agents = [{ pane: "p1", status: "working", title: "fix the parser", program: { key: "claude", name: "Claude Code" } }];
+  host.panes = [{ pane: "p1", tab: "t1", cwd: join(host.home, "wt-n") }];
   const v = await open();
   v.setPanel("files"); v.setTab("worktrees"); await settle(v);
-  const i = v.items("worktrees").findIndex((w: any) => w.path === join(homeNow, "wt-n"));
+  const i = v.items("worktrees").findIndex((w: any) => w.path === join(host.home, "wt-n"));
   v.moveTo(i); await settle(v);
   const agents = v.main.rows.find((r: any) => r.kind === "text" && r.parts[0][0].startsWith("Agents"));
   expect(agents.parts[1][0]).toBe("Claude Code (working)");
-  sh(`git worktree remove --force ${join(homeNow, "wt-n")} && git branch -D named`);
-  agentsNow = []; panesNow = [];
+  sh(`git worktree remove --force ${join(host.home, "wt-n")} && git branch -D named`);
+  host.agents = []; host.panes = [];
 });
 
 test("worktrees: the main checkout can't go; M picks merged ones, U unused ones, d removes the picked", async () => {
-  homeNow = join(dir, "home");
+  host.home = join(dir, "home");
   sh("git branch done-a && git branch done-b");
-  sh(`git worktree add -q ${join(homeNow, "wt-a")} done-a && git worktree add -q ${join(homeNow, "wt-b")} done-b && git worktree add -q -b fresh ${join(homeNow, "wt-c")} HEAD`);
-  sh(`cd ${join(homeNow, "wt-c")} && git commit -q --allow-empty -m 'not merged'`);
-  agentsNow = [{ pane: "p1", name: "claude", status: "working" }];
-  panesNow = [{ pane: "p1", tab: "t1", cwd: join(homeNow, "wt-a") }];
+  sh(`git worktree add -q ${join(host.home, "wt-a")} done-a && git worktree add -q ${join(host.home, "wt-b")} done-b && git worktree add -q -b fresh ${join(host.home, "wt-c")} HEAD`);
+  sh(`cd ${join(host.home, "wt-c")} && git commit -q --allow-empty -m 'not merged'`);
+  host.agents = [{ pane: "p1", name: "claude", status: "working" }];
+  host.panes = [{ pane: "p1", tab: "t1", cwd: join(host.home, "wt-a") }];
   const v = await open();
   v.setPanel("files"); v.setTab("worktrees"); await settle(v);
   v.moveTo(0); await settle(v);
@@ -711,9 +696,9 @@ test("worktrees: the main checkout can't go; M picks merged ones, U unused ones,
   expect(v.popups.top.error).toBe(true);
   await press(v, "enter");
   await press(v, "M");
-  expect([...v.wtPicked].sort()).toEqual([join(homeNow, "wt-a"), join(homeNow, "wt-b")]);
+  expect([...v.wtPicked].sort()).toEqual([join(host.home, "wt-a"), join(host.home, "wt-b")]);
   await press(v, "U");
-  expect([...v.wtPicked].sort()).toEqual([join(homeNow, "wt-b"), join(homeNow, "wt-c")]);
+  expect([...v.wtPicked].sort()).toEqual([join(host.home, "wt-b"), join(host.home, "wt-c")]);
   await press(v, "escape");
   expect(v.wtPicked.size).toBe(0);
   await press(v, "M", "d");
@@ -725,20 +710,20 @@ test("worktrees: the main checkout can't go; M picks merged ones, U unused ones,
   expect(left).not.toContain("wt-b");
   expect(left).toContain("wt-c");
   expect(sh("git branch --list done-a").trim()).toBe("done-a"); // b was off: the branches stay
-  sh(`git worktree remove --force ${join(homeNow, "wt-c")} && git branch -D fresh done-a done-b`);
-  agentsNow = []; panesNow = [];
+  sh(`git worktree remove --force ${join(host.home, "wt-c")} && git branch -D fresh done-a done-b`);
+  host.agents = []; host.panes = [];
 });
 
 test("worktrees: opened from a space's menu with a branch, tab and argv, it makes the worktree at once", async () => {
-  homeNow = join(dir, "home");
-  commands.length = 0;
-  sharedState = {};
+  host.home = join(dir, "home");
+  host.commands.length = 0;
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: repo, worktrees: { action: "new", branch: "agent/one", tab: "claude", argv: ["claude"] } }, cx);
   await settle(v); await settle(v);
   expect(v.tabOf.files).toBe("worktrees");
-  const path = join(homeNow, ".herdr/worktrees/repo/agent-one");
+  const path = join(host.home, ".herdr/worktrees/repo/agent-one");
   expect(sh("git worktree list --porcelain")).toContain(path);
-  expect(commands.find(([n]) => n === "space.new")?.[1]).toEqual({ folder: path, machine: "", tab: "claude", argv: ["claude"] });
+  expect(host.commands.find(([n]) => n === "space.new")?.[1]).toEqual({ folder: path, machine: "", tab: "claude", argv: ["claude"] });
   sh(`git worktree remove --force ${path} && git branch -D agent/one`);
 });

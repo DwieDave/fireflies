@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { Effect } from "effect";
-import { drained, hostContext } from "./git-host.ts";
+import { drained, gitHerdr, gitServices, hostContext, newHost } from "./git-host.ts";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada Lovelace", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada Lovelace", GIT_COMMITTER_EMAIL: "a@x" };
 const dir = realpathSync(mkdtempSync(join(tmpdir(), "git-scroll-")));
@@ -21,37 +21,13 @@ function sh(cmd: string, cwd = repo) {
   return r.stdout;
 }
 
-// ---- stand-ins
+// ---- stand-ins: the kit's test layers and the one herdr stand-in (git-host.ts)
 
-let sharedState: Record<string, unknown> = {};
-let zoomNow = 1;
-let propsNow: any = null;
-let spacesNow: any[] = [], panesNow: any[] = [], agentsNow: any[] = [], homeNow = "/home/u";
-// herdr.highlight calls (tree-sitter in the app).
-let highlights = 0;
-// settings.json as the app home holds it (null: none).
-let settingsText: string | null = null;
-const commands: [string, any][] = [];
-const hostCalls: Record<string, number> = {};
-const counted = (o: Record<string, any>) => Object.fromEntries(Object.entries(o).map(([k, f]) => [k, (...a: any[]) => { hostCalls[k] = (hostCalls[k] ?? 0) + 1; return f(...a); }]));
-mock.module("herdr", () => counted({
-  settings: () => ({ zoom: zoomNow, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
-  shared: (k: string) => sharedState[k] ?? null,
-  setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  props: () => propsNow,
-  spaces: () => spacesNow, panes: () => panesNow, focused: () => null, agents: () => agentsNow, home: () => homeNow,
-  appHome: () => "/app-home",
-  highlight: (text: string, _path: string) => { highlights++; return text ? [[0, Math.min(3, text.length), "keyword"]] : []; },
-  readTextFile: async (path: string) => (path === "/app-home/settings.json" ? settingsText : null),
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  nextCommand: () => new Promise(() => {}),
-  watchFolder: () => new Promise(() => {}),
-  closeOverlay: () => {}, openOverlay: () => "o1", notify: () => {},
-  exec: async (cmd: string, args: string[], opts: any) => {
-    const r = spawnSync(cmd, args, { cwd: opts?.cwd, env: ENV, encoding: "utf8" });
-    return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-  },
-}));
+const host = newHost();
+const files = new Map<string, string>();
+// herdr.highlight (tree-sitter in the app): a keyword at the start of each line.
+host.highlight = (text) => (text.length > 0 ? [[0, Math.min(3, text.length), "keyword"]] : []);
+mock.module("herdr", () => gitHerdr(host, theme));
 const el: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : (...a: any[]) => { for (const x of a) if (typeof x === "function" && String(k) === "when" && a[0]) x(el); return el; }), apply: () => el });
 mock.module("gpui-kit", () => ({ View: class {}, div: () => el, svg: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 class Input { handlers: Record<string, Function> = {}; v = ""; constructor(o: any) { this.v = o?.value ?? ""; } on(e: string, f: Function) { this.handlers[e] = f; return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } fire(e: string) { this.handlers[e]?.({}, cx); } }
@@ -66,9 +42,11 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 const { cx } = hostContext();
 
 const { default: GitView } = await import("../defaults/mods/git/main.ts");
-const { runtime: gitRuntime } = await import("../defaults/mods/git/fx.ts");
+const { runtime: gitRuntime, useServices } = await import("../defaults/mods/git/fx.ts");
+const { FolderWatchStill } = await import("../defaults/mods/git/watch.ts");
+useServices(gitServices(ENV, FolderWatchStill, files).layer);
 /** An effect of the mod run on its own runtime (the live services over the herdr stand-in). */
-const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.runtime.runPromise(e);
+const runFx = <A, E>(e: Effect.Effect<A, E, any>): Promise<A> => gitRuntime.managed().runPromise(e);
 const { rangeHolds } = await import("../defaults/mods/git/items.ts");
 
 /** Waits until both of the window's queues are drained. */
@@ -92,23 +70,24 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-async function open() {
-  sharedState = {};
+/** A window on the repo, read, its lists sized, drawn. */
+const open = (): Promise<any> => runFx(Effect.gen(function* () {
+  host.shared = {};
   const v = new GitView();
   v.init({ folder: repo }, cx);
-  await settle(v);
+  yield* drained(v);
   v.mainPx.main = 18 * 40;
   v.listPx.files = 18 * 30;
   v.render();
   return v;
-}
+}));
 
 /** The app calls one draw makes while the view scrolls by `rows`. */
 function step(v: any, scroll: () => void) {
-  for (const k in hostCalls) delete hostCalls[k];
+  for (const k in host.calls) delete host.calls[k];
   scroll();
   v.render();
-  return { ...hostCalls };
+  return { ...host.calls };
 }
 
 test("scrolling a 4000-line diff: a step highlights only the lines it brings into view, asks the app for its settings once", async () => {
