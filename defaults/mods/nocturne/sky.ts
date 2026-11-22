@@ -50,7 +50,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, oneListing, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, tidyTabs, onShelf, storedRecords, PANES_KEY, TABS_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
@@ -58,11 +58,13 @@ import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
 import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "@fireflies/keyhelp";
+import { shownAgents, withMachineBar } from "./machines.ts";
+import type { MachineView } from "./machines.ts";
 import { SIDEBAR_HELP, blockOf, isLayoutNode } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.ts";
 import { UsageSection } from "./usage.ts";
-import { focusFiles } from "./files.ts";
+import { focusFiles, pathCommand } from "./files.ts";
 import { togglePicker } from "./picker.ts";
 import { copyScratchpadPath, openScratchpad } from "./scratchpad.ts";
 import { toggleGithub, githubForm } from "./github.ts";
@@ -119,6 +121,7 @@ export default class Sky {
   reasked = false;
   field: Size = { width: 248, height: 300 };
   naming: string | null = null; // the address of the agent being named
+  machines: MachineView | null = null; // the machine filter as the last draw saw it (machines.ts)
   nameInput: InputState | null = null;
   nameAsked: number | null = null;
   clock: Clock = clock();
@@ -202,6 +205,7 @@ export default class Sky {
         else if (c === "fold") this.fold(later);
         // nocturne.git:pane / :tab / :window or :{"as", folder?, on?} (github, scripts too): inpane.ts.
         else if (databasesCommand(c)) { /* a connection sent to the Databases window, or it opened */ }
+        else if (pathCommand(c, later)) { /* nocturne.copy-path / nocturne.reveal (files.ts) */ }
         else if (openAsCommand(c)) { /* opened */ }
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
@@ -612,14 +616,23 @@ export default class Sky {
   }
 
   render(cx: Context): Element {
+    return oneListing(() => this.draw(cx));
+  }
+
+  /** The sidebar, drawn with one listing of the terminals (kit.ts oneListing). */
+  draw(cx: Context): Element {
     const t = theme();
 
     // The controls are listed again as they're drawn (nav()).
     this.navList = [];
 
     const on = this.navOn;
-    // Pinned agents first, in the order pinned (pins.ts), then by status (kit.ts agentRank).
-    const { pinned: jarred, all: list } = sortedAgents();
+    // Pinned agents first, in the order pinned (pins.ts), then by status (kit.ts agentRank),
+    // only the chosen machine's (machines.ts).
+    const sp = spaces();
+    const { view: mv, jarred, list } = shownAgents(sp, sortedAgents());
+
+    this.machines = mv;
     // Pinned panes that aren't agents, for the jar's shelf (pins.ts onShelf).
     const kept = jarNow().filter(onShelf);
 
@@ -630,8 +643,6 @@ export default class Sky {
     dockTasks(cx);
 
     glint(this, [...jarred, ...kept], cx);
-
-    const sp = spaces();
 
     this.shownSpace = sp.find((s) => s.active)?.id ?? null;
     this.shownTabs = new Set(sp.filter((s) => s.active).flatMap((s) => s.tabs.filter((c) => c.active).map((c) => c.id)));
@@ -722,6 +733,7 @@ export default class Sky {
       .child(this.header(t, list))
       .child(this.spaces.render(t, this.nav))
       .child(div().px(16).pt(8).flex_none().child(eyebrow(t, "fireflies")))
+      .map((el) => withMachineBar(el, t, mv, this.nav, () => cx.notify()))
       .child(meadowView(this, t, list, jarred, kept))
       .child(this.usage.render(t, this.nav))
       .when(on, (el) => el.child(this.hints(t))));

@@ -8,15 +8,18 @@
 import type { Context } from "gpui-kit";
 import { spaces, panes, focused, shared, setShared, run, openOverlay, closeOverlay } from "herdr";
 import { parseJson, readShared, writeShared } from "./guard.ts";
-import type { DbProps, Handover, KeptCopy } from "./state.ts";
+import type { ConnectArgs, DbProps, Handover, KeptCopy } from "./state.ts";
 import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCopy } from "./state.ts";
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
+import { shownTables } from "./panels.ts";
 import { runQuery } from "./query.ts";
 import { setCell } from "./cell-edit.ts";
 import { stopReads } from "./reads.ts";
 import { askActions } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
+import type { SpacePlace } from "./lastview.ts";
+import { keepSpacePlace, spacePlace } from "./lastview.ts";
 
 /** A folder and the machine it's on. */
 export interface Place {
@@ -91,8 +94,17 @@ function placeNow(v: DbView): KeptCopy {
   return out;
 }
 
-/** A pane keeps its place (localStorage is per mod and props: per slot). */
+/** A pane keeps its place (localStorage is per mod and props: per slot); window and pane keep it
+ *  as their space's too (lastview.ts), with a sent connection's request. */
 export function keepCopy(v: DbView): void {
+  const args = v.active?.origin === "sent" ? v.sentArgs.get(v.active.id) : undefined;
+  const sent: { -readonly [K in keyof ConnectArgs]: ConnectArgs[K] } | undefined = args ? { ...args } : undefined;
+
+  // A database picked on it since it was sent (dbs.ts) is where it's sent again.
+  if (sent && v.active?.database !== undefined) sent.database = v.active.database;
+
+  keepSpacePlace(v.space, sent ? { ...placeNow(v), sent } : placeNow(v));
+
   if (!v.slot) return;
 
   try {
@@ -102,7 +114,8 @@ export function keepCopy(v: DbView): void {
   }
 }
 
-/** Where to start: the handover note (fresh, this folder), else a pane's own place; then a sent connection. */
+/** Where to start: the handover note (fresh, this folder), else a pane's own place, else where the
+ *  view was last left in this space; then a sent connection. */
 export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> {
   cx = v.held(cx);
 
@@ -125,6 +138,8 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
     kept = text ? parseJson(text, isKeptCopy) ?? null : null;
   }
 
+  kept ??= spacePlace(v.space);
+
   if (pr.connect) {
     receive(v, pr.connect, cx);
 
@@ -134,24 +149,50 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
   restore(v, kept, cx);
 }
 
-/** Back where a copy was: its connection (connected again: reads only), its panel and table. */
-function restore(v: DbView, kept: KeptCopy | null, cx: Context): void {
+/** Back where a copy was: its connection (connected again: reads only; a sent one sent again), its
+ *  panel and table. A connection that doesn't come up leaves the list shown with why. One found in
+ *  the folder (discover.ts) isn't listed yet: tried again once it may be (restoreFound). */
+function restore(v: DbView, kept: KeptCopy | SpacePlace | null, cx: Context): void {
   cx = v.held(cx);
 
-  const c = kept?.conn ? connList(v).find((x) => x.id === kept.conn) : undefined;
+  const sent = kept && "sent" in kept ? kept.sent : undefined;
+  const c = (kept?.conn ? connList(v).find((x) => x.id === kept.conn) : undefined) ?? (sent ? receive(v, sent, cx, false) ?? undefined : undefined);
+
+  if (kept?.conn && !c) v.lateKept = kept;
 
   if (!kept || !c) return;
 
   const table = kept.table;
 
   void connect(v, c, cx).then(() => {
-    if (table && v.active === c) openNamed(v, table, cx);
+    const failed = v.active?.id !== c.id ? "" : v.catalog.error;
+
+    if (failed !== null) {
+      v.panel = "conns";
+
+      if (failed) v.say(`couldn't connect to ${c.name} again: ${failed}`, "failed");
+      cx.notify();
+
+      return;
+    }
+
+    if (table) openNamed(v, table, cx);
 
     v.panel = kept.panel ?? "tables";
     v.mainTab = kept.query ?? 0;
+    keepCopy(v);
     cx.notify();
   });
   v.connAt = Math.max(0, connList(v).indexOf(c));
+}
+
+/** The kept place whose connection the folder's discovery may have listed since. */
+export function restoreFound(v: DbView, cx: Context): void {
+  const kept = v.lateKept;
+
+  v.lateKept = null;
+
+  if (kept && v.active === null) restore(v, kept, cx);
 }
 
 /** A command from keys.json, `herdr-app do`, nocturne or another mod. */
@@ -243,8 +284,18 @@ function openNamed(v: DbView, name: string, cx: Context): void {
     return;
   }
 
+  // The cursor on its row in [2] as drawn (its tab; a schema or a find that hides it goes), so
+  // enter opens the table that's open, not the one at its index in the whole catalog.
   v.panel = "tables";
-  v.tableAt = Math.max(0, v.catalog.tables.filter((x) => x.type === t.type).indexOf(t));
+  v.tablesTab = t.type === "view" ? "views" : "tables";
+
+  if (!shownTables(v).includes(t)) {
+    v.schema = null;
+    v.tableFind = null;
+    v.findTyping = false;
+  }
+
+  v.tableAt = Math.max(0, shownTables(v).indexOf(t));
   openTable(v, t, cx);
 }
 

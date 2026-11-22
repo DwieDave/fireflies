@@ -372,7 +372,7 @@ test("feedback: opens on the title; tab walks title → message → cancel → o
 
 // ---- add a machine
 
-test("machine-add: tab reaches Add, each Copy shown and Esc, wrapping; enter presses the focused one", () => {
+test("machine-add: tab reaches Add, each Run in a tab and Copy shown and Esc, wrapping; enter presses the focused one", () => {
   state.props = { overlay: "ma" };
   const m: any = new MachineAdd();
   const c = cx();
@@ -382,12 +382,14 @@ test("machine-add: tab reaches Add, each Copy shown and Esc, wrapping; enter pre
   m.add = (target: string) => added.push(target);
   m.pending.add("box"); m.state.box = "needs a password";
   let r = m.render();
-  expect(m.stops().map((s: any) => s.id)).toEqual(["input", "add", "copy:box", "close"]);
+  expect(m.stops().map((s: any) => s.id)).toEqual(["input", "add", "tab:box", "copy:box", "close"]);
   m.typed = "me@box";
   press(r, "tab", c);
   expect(m.stop).toBe("add");
   press(r, "enter", c);
   expect(added).toEqual(["me@box"]);
+  press(r, "tab", c);
+  expect(m.stop).toBe("tab:box");
   press(r, "tab", c);
   expect(m.stop).toBe("copy:box");
   r = m.render();

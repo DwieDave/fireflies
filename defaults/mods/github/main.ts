@@ -19,7 +19,10 @@
 // Live: a tick every second redraws what's running (timers, sweeps) and
 // reads GitHub again when the shown tab wants it: every few seconds while a
 // run, job or check is moving, every minute when all is still, never while
-// the window is closed. Reads carry ETags, so unchanged answers are free.
+// the window is closed. Something GitHub took and doesn't show yet (a
+// dispatched run: dispatchForm.ts; a re-run or cancel: run-actions.ts) is
+// read again with a backoff (model.ts soon) within a bound. Reads carry
+// ETags, so unchanged answers are free.
 //
 // Stale while revalidate: what the window last read of a repo (PRs, their
 // views, runs, jobs, workflow needs, and the ETags) is kept in
@@ -121,6 +124,12 @@ function here(): Place {
 
   // A space attached to a folder (space.folder) uses it over where its panes are.
   return { folder: (space?.attached && space.folder) || cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
+}
+
+/** The same repo described the same way, its branch aside (that one may move). */
+function sameRepo(a: Repo, b: Repo): boolean {
+  return a.owner === b.owner && a.name === b.name && a.full === b.full && a.host === b.host && a.root === b.root && a.on === b.on
+    && a.url === b.url && a.base === b.base && a.parent === b.parent && a.child === b.child;
 }
 
 export default class GitHub extends View implements Host {
@@ -302,8 +311,14 @@ export default class GitHub extends View implements Host {
 
         if (onParent && r) r.branch = now.branch;
         else if (now && r && repoKey(now) === repoKey(r)) {
-          // The same repo: its branch may have moved.
-          this.repo = { ...r, ...now };
+          // The same repo: its branch may have moved. The tabs drop a read whose repo isn't the shown
+          // one (by identity), so the object stays and the opening read under way counts; a repo
+          // GitHub now describes otherwise is replaced and read again.
+          if (sameRepo(r, now)) r.branch = now.branch;
+          else {
+            this.repo = { ...r, ...now };
+            this.refresh(cx, { all: true });
+          }
         } else this.show(now, cx);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
@@ -414,6 +429,7 @@ export default class GitHub extends View implements Host {
     if (this.wantForm) this.openForm(cx);
 
     if (Date.now() - this.beatAt >= BEAT) this.beat();
+    this.save(false);
 
     let redraw = false;
 
@@ -471,11 +487,12 @@ export default class GitHub extends View implements Host {
     });
   }
 
-  /** Background work for a tab (with the cx of whatever asked for it). */
-  spawn(cx: Context, fn: () => Promise<void>): void {
+  /** Background work for a tab, started with the cx of whatever asked for it; `fn` gets the
+   *  task's own, which stays good across its awaits (the asker's is refused once its call returned). */
+  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void {
     cx.spawn(async (cx) => {
       try {
-        await fn();
+        await fn(cx);
       } catch {
         /* shown by the caller */
       }
@@ -484,11 +501,11 @@ export default class GitHub extends View implements Host {
     });
   }
 
-  save(): void {
+  save(all = true): void {
     const kept = { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() };
 
-    writeShared(setShared, STATE, kept);
-    saveCopy(this, kept);
+    if (all) writeShared(setShared, STATE, kept);
+    saveCopy(this, kept, all); // all false: the tick's, written where it changed (place.ts)
   }
 
   focusSelf(): void {
@@ -585,7 +602,8 @@ export default class GitHub extends View implements Host {
     return this.resizing?.key === key;
   }
 
-  ask(text: string, go: () => void): void {
+  /** A yes / no in the bar; `go` runs on yes with that key's or click's cx. */
+  ask(text: string, go: (cx: Context) => void): void {
     this.confirm = { text, go };
   }
 

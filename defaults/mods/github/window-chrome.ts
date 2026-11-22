@@ -3,7 +3,7 @@
 // menu) and the yes / no asked in the bar.
 
 import { div, svg } from "gpui-kit";
-import type { Color, Element } from "gpui-kit";
+import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { placeMenu } from "@fireflies/menu-place";
@@ -34,7 +34,8 @@ export const TAB_NAME = { prs: "pull requests", actions: "actions", projects: "p
 /** A yes / no asked in the bar. */
 export interface Confirm {
   readonly text: string;
-  readonly go: () => void;
+  /** Runs on yes, with the cx of the key or click that said it. */
+  readonly go: (cx: Context) => void;
 }
 
 /** The window's top bar: the moon, the repo (a fork's way across), the branch, the tabs, how fresh it is, ↻ and ✕. */
@@ -171,9 +172,9 @@ export function confirmBar(v: GitHub, t: Theme, c: Confirm): Element {
   return h_flex().id("gh-confirm").relative().h(30).flex_none().px(12).gap(12).items_center().text_size(12)
     .child(dither(`${t.ansi3}44`, 1))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(c.text))
-    .child(chip(t, "gh-yes", "y  yes", false, () => {
+    .child(chip(t, "gh-yes", "y  yes", false, (cx) => {
       v.confirm = null;
-      c.go();
+      c.go(cx);
     }, t.ansi3))
     .child(chip(t, "gh-no", "esc  no", false, () => {
       v.confirm = null;

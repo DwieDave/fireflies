@@ -743,3 +743,60 @@ test("item 8: a short answer near the foot opens above at once, as a long one do
   expect(frame(p)).toEqual(first);
   expect(first.top).toBe(null);
 });
+
+// ---- cmd+click: go to definition, or open the link under the pointer
+const click = (mods: any = {}) => ({ button: "left", click_count: 1, position: { x: 0, y: 0 }, modifiers: { shift: false, control: false, alt: false, platform: false, function: false, ...mods } });
+/** The pane's press around the editor (the editor has put the caret at `at` already, as gpui-base does). */
+function pressAt(p: any, at: { line: number; col: number }, mods: any) {
+  const [button, fn] = byId(p.render(cx()), "editor-body").calls.on_mouse_down[0];
+  expect(button).toBe("left");
+  ed.caret = at;
+  const c = cx();
+  fn(click(mods), c);
+  return c;
+}
+
+test("cmd+click on a symbol goes to its definition, as cmd-k d does; a plain click, or cmd+alt, does nothing more", async () => {
+  const p = await pane(false);
+  answer = (m) => (m === "textDocument/definition" ? { uri: "file:///p/src/a.rs", range: { start: { line: 2, character: 0 } } } : null);
+  pressAt(p, { line: 1, col: 8 }, {});
+  pressAt(p, { line: 1, col: 8 }, { platform: true, alt: true });
+  await flush();
+  expect(requests.filter(([m]) => m === "textDocument/definition")).toEqual([]);
+  const c = pressAt(p, { line: 1, col: 8 }, { platform: true });
+  expect(c.stopped).toBe(1);
+  await tickAll();
+  expect(requests.find(([m]) => m === "textDocument/definition")?.[1].position).toEqual({ line: 1, character: 8 });
+  expect(ed.caret).toEqual({ line: 2, col: 0 });
+});
+
+test("cmd+click with no definition says so, as cmd-k d does", async () => {
+  const p = await pane(false);
+  pressAt(p, { line: 1, col: 8 }, { platform: true });
+  await tickAll();
+  expect(texts(p.bar(theme)).join(" ")).toContain("no definition found");
+});
+
+test("cmd+click on a web address or a path opens it as the card's links do, not the definition", async () => {
+  const was = onDisk;
+  onDisk = "// see https://example.com/doc. or [the notes](notes/plan.md)\nfn main() {}\n";
+  try {
+    const p = await pane(false);
+    ran.length = 0;
+    pressAt(p, { line: 0, col: 12 }, { platform: true });
+    await tickAll();
+    expect(ran).toContainEqual(["app.open_url", { url: "https://example.com/doc", in: "app" }]);
+    expect(requests.filter(([m]) => m === "textDocument/definition")).toEqual([]);
+  } finally {
+    onDisk = was;
+  }
+  const { linkAt } = await import("../defaults/mods/editor/cmd-click.ts");
+  const line = "see [the notes](notes/plan.md) and ~/x/y.md, src/a.rs:12:5, ./b, a.b, x/y";
+  expect(linkAt(line, 6)).toBe("notes/plan.md");
+  expect(linkAt(line, 38)).toBe("~/x/y.md");
+  expect(linkAt(line, 48)).toBe("src/a.rs:12:5");
+  expect(linkAt(line, 61)).toBe("./b");
+  expect(linkAt(line, 66)).toBe(null); // a.b: a symbol
+  expect(linkAt(line, 71)).toBe(null); // x/y: no extension, no ./
+  expect(linkAt(line, 1)).toBe(null);
+});

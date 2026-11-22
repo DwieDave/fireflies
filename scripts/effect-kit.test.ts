@@ -6,8 +6,8 @@ import { test, expect, afterAll } from "bun:test";
 import { Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { DecodeError, Exec, curlClient, decodeJson, execJson, execOk, modRuntime, policy, readShared, retryAfter, sharedKey, Shared, writeShared } from "@fireflies/kit";
-import { execTest, httpTest, sharedTest } from "@fireflies/kit/testing";
+import { DecodeError, Exec, Files, Hc, Workspace, curlClient, decodeJson, decodeJsonOption, execJson, execOk, filesService, hcJson, hcOk, here, hereOf, listOf, localStamp, localTime, mapOf, modRuntime, policy, readShared, retryAfter, sharedKey, Shared, writeShared } from "@fireflies/kit";
+import { execTest, filesTest, hcTest, httpTest, sharedTest, workspaceTest } from "@fireflies/kit/testing";
 
 const Answer = Schema.Struct({ used: Schema.Finite, plan: Schema.NullOr(Schema.String) });
 
@@ -60,6 +60,113 @@ test("a shared key reads its value, and absent or another shape as none / the fa
   expect(raw.get("t.k")).toEqual({ n: 6 });
   raw.set("t.k", "junk");
   expect(readShared((k) => raw.get(k), KEY, { n: 0 })).toEqual({ n: 0 });
+});
+
+test("listOf / mapOf: a list or map read entry by entry, an entry of another shape left out, not the whole value", async () => {
+  const Row = Schema.Struct({ id: Schema.String, n: Schema.Finite });
+  const ROWS = sharedKey("t.rows", listOf(Row));
+  const TOLD = sharedKey("t.told", mapOf(Schema.Finite));
+  const raw = new Map<string, unknown>();
+  const read = (k: string) => raw.get(k);
+  const write = (k: string, v: unknown) => { raw.set(k, v); return null; };
+  // guard.ts readSharedList: absent, not a list, and mixed entries.
+  expect(readShared(read, ROWS, [])).toEqual([]);
+  raw.set("t.rows", { id: "a" });
+  expect(readShared(read, ROWS, [])).toEqual([]);
+  raw.set("t.rows", [{ id: "a", n: 1 }, "junk", { id: "b" }, { id: "c", n: 3 }]);
+  expect(readShared(read, ROWS, [])).toEqual([{ id: "a", n: 1 }, { id: "c", n: 3 }]);
+  // guard.ts readSharedMap / writeSharedMap: an object keyed by data, as a Map.
+  raw.set("t.told", { "/a": 1, "/b": "two", "/c": 3 });
+  const told = readShared(read, TOLD, new Map());
+  expect(told).toEqual(new Map([["/a", 1], ["/c", 3]]));
+  expect(readShared(read, TOLD, new Map([["x", 0]]))).toEqual(new Map([["/a", 1], ["/c", 3]]));
+  raw.set("t.told", [1, 2]);
+  expect(readShared(read, TOLD, new Map())).toEqual(new Map());
+  expect(writeShared(write, TOLD, new Map(told).set("/d", 4))).toBe(true);
+  expect(raw.get("t.told")).toEqual({ "/a": 1, "/c": 3, "/d": 4 });
+  // An entry its own schema can't encode isn't written: the whole write is refused, as for any key.
+  expect(writeShared(write, TOLD, new Map([["/x", Number.NaN]]))).toBe(false);
+  expect(raw.get("t.told")).toEqual({ "/a": 1, "/c": 3, "/d": 4 });
+  // A key whose data holds what an object's prototype has is just an entry.
+  raw.set("t.told", JSON.parse('{"__proto__": 7, "constructor": 8}'));
+  expect(readShared(read, TOLD, new Map())).toEqual(new Map([["__proto__", 7], ["constructor", 8]]));
+  // The Shared service and the test store, and guard.ts parseJsonMap.
+  const s = sharedTest();
+  await Effect.runPromise(Effect.provide(Shared.use((x) => x.set(ROWS, [{ id: "z", n: 9 }])), s.layer));
+  expect(s.store.get("t.rows")).toEqual([{ id: "z", n: 9 }]);
+  s.store.set("t.rows", [{ id: "z", n: 9 }, null]);
+  expect(await Effect.runPromise(Effect.provide(Shared.use((x) => x.get(ROWS)), s.layer))).toEqual(Option.some([{ id: "z", n: 9 }]));
+  expect(decodeJsonOption(mapOf(Row))('{"k": {"id": "k", "n": 1}, "j": 2}')).toEqual(Option.some(new Map([["k", { id: "k", n: 1 }]])));
+  expect(Option.isNone(decodeJsonOption(mapOf(Row))("[]"))).toBe(true);
+});
+
+// ---- herdr-core, files, the window
+
+test("hc: hcOk / hcJson ask exit 0 and decode; a failure names the hc subcommand", async () => {
+  const core = hcTest((args) => (args[0] === "get" ? { code: 0, stdout: '{"used":1,"plan":null}', stderr: "" } : args[0] === "label" ? { code: 0, stdout: "ok\n", stderr: "" } : { code: 1, stdout: "", stderr: "hc: no terminal t9" }));
+  const run = <A, E>(e: Effect.Effect<A, E, Hc>) => Effect.runPromise(Effect.result(Effect.provide(e, core.layer)));
+  expect((await run(hcJson(Answer, "hc get")(["get", "t1", "--json"]))).success).toEqual({ used: 1, plan: null });
+  expect((await run(hcOk(["label", "t1", "a=b"]))).success).toBe("ok\n");
+  const failed = (await run(hcOk(["read", "t9"]))).failure;
+  expect(failed?._tag).toBe("ExitError");
+  expect(failed?._tag === "ExitError" ? [failed.command, failed.message] : []).toEqual(["hc read", "hc: no terminal t9"]);
+  expect(core.calls).toEqual([["get", "t1", "--json"], ["label", "t1", "a=b"], ["read", "t9"]]);
+  const down = hcTest(() => Promise.reject(new Error("core not running")));
+  const e = await Effect.runPromise(Effect.flip(Effect.provide(hcOk(["ls"]), down.layer)));
+  expect([e._tag, e.message]).toEqual(["ExecError", "core not running"]);
+});
+
+test("Files.list: a folder's names sorted, none when it isn't there, a FileError for a file", async () => {
+  const fs = filesTest(new Map([["/m/b/main.ts", ""], ["/m/a/main.ts", ""], ["/m/a/mod.json", ""], ["/m/readme", ""]]), new Set(["/m/empty"]));
+  const list = (dir: string) => Effect.runPromise(Effect.result(Effect.provide(Files.use((f) => f.list(dir)), fs.layer)));
+  expect((await list("/m")).success).toEqual(Option.some(["a", "b", "empty", "readme"]));
+  expect((await list("/m/a/")).success).toEqual(Option.some(["main.ts", "mod.json"]));
+  expect((await list("/m/empty")).success).toEqual(Option.some([]));
+  expect((await list("/gone")).success).toEqual(Option.none());
+  expect((await list("/m/readme")).failure?._tag).toBe("FileError");
+  // The live shape: filesService over exists + readdir (fs/promises in the app).
+  const live = filesService(() => Promise.resolve(null), () => Promise.resolve(), {
+    exists: (dir) => Promise.resolve(dir === "/x"),
+    names: () => Promise.resolve(["z", "a"]),
+  });
+  expect(await Effect.runPromise(live.list("/x"))).toEqual(Option.some(["a", "z"]));
+  expect(await Effect.runPromise(live.list("/y"))).toEqual(Option.none());
+  const denied = filesService(() => Promise.resolve(null), () => Promise.resolve(), { exists: () => Promise.reject(new Error("outside the mod's roots")), names: () => Promise.resolve([]) });
+  expect((await Effect.runPromise(Effect.flip(denied.list("/etc")))).message).toBe("outside the mod's roots");
+  // A library handed only read and write: list fails saying so.
+  expect((await Effect.runPromise(Effect.flip(filesService(() => Promise.resolve(null), () => Promise.resolve()).list("/x"))))._tag).toBe("FileError");
+});
+
+const space = (over: Record<string, unknown>) => ({ id: "s1", active: true, machine: null, attached: false, folder: "", tabs: [{ id: "tb1", active: true }], ...over });
+const pane = (id: string, cwd: string | null, terminal: string | null = `t${id}`) => ({ pane: id, tab: "tb1", terminal, cwd });
+
+test("here: the shown space's own folder, else the focused terminal's, else one in the shown tab, else the space's", async () => {
+  type Shown = Parameters<typeof hereOf>[0];
+  const at = (spaces: unknown[], panes: unknown[], focused: unknown) => hereOf({ spaces, panes, focused } as unknown as Shown);
+  expect(at([space({ attached: true, folder: "/repo", machine: "vps" })], [pane("p1", "/elsewhere")], { pane: "p1", cwd: "/elsewhere" })).toEqual({ folder: Option.some("/repo"), on: "vps" });
+  expect(at([space({ folder: "/home" })], [pane("p1", "/one"), pane("p2", "/two")], { pane: "p2", cwd: "/two" }).folder).toEqual(Option.some("/two"));
+  // A focused mod pane: the first terminal's folder in the tab.
+  expect(at([space({ folder: "/home" })], [pane("p3", null, null), pane("p1", "/one")], { pane: "p3", cwd: null }).folder).toEqual(Option.some("/one"));
+  expect(at([space({ folder: "/home" })], [], null).folder).toEqual(Option.some("/home"));
+  expect(at([space({})], [], null).folder).toEqual(Option.none());
+  expect(at([], [], { cwd: "/f" })).toEqual({ folder: Option.some("/f"), on: null });
+  // The effect reads the same through the Workspace.
+  const ws = workspaceTest({ spaces: () => [space({ folder: "/home" })] as never, panes: () => [pane("p1", "/one")] as never, focused: () => ({ pane: "p1", cwd: "/one" }) as never, agents: () => [] });
+  expect((await Effect.runPromise(Effect.provide(here, ws.layer))).folder).toEqual(Option.some("/one"));
+  expect(await Effect.runPromise(Effect.provide(Workspace.use((w) => w.focused), workspaceTest().layer))).toEqual(Option.none());
+  expect(await Effect.runPromise(Effect.provide(Workspace.use((w) => w.agents), workspaceTest().layer))).toEqual([]);
+});
+
+test("localTime / localStamp: the local date and time, a plain stamp", () => {
+  // The system zone, read back from the fields: the stamp prints exactly those.
+  const ms = Date.UTC(2026, 10, 16, 13, 5, 9);
+  const t = localTime(ms);
+  expect(t.month).toBeGreaterThanOrEqual(1);
+  expect(Date.UTC(t.year, t.month - 1, t.day, t.hours, t.minutes, t.seconds) - t.offset * 60_000).toBe(ms);
+  const two = (n: number) => String(n).padStart(2, "0");
+  expect(localStamp(ms)).toBe(`${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hours)}:${two(t.minutes)}`);
+  expect(localStamp(ms, { seconds: true })).toEndWith(`:${two(t.minutes)}:09`);
+  expect(localStamp(ms, { zone: true })).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d [+-]\d{4}$/);
 });
 
 // ---- HTTP: the policy
@@ -216,6 +323,49 @@ test("a copy's runs: failures reported in its words, interruptions silent, close
 });
 
 // ---- the tests' mod loader
+
+// The look library re-exports others (`export * from "@fireflies/tones"`): the
+// test loaders follow re-exports and import() as they do imports.
+const gpui = () => {
+  const el: any = new Proxy(() => el, { get: () => el, apply: () => el });
+  return { div: () => el, svg: () => el, PathBuilder: class {}, Background: {} };
+};
+const app = { settings: () => ({}), window: () => ({ platform: "macos" }), shared: () => undefined, setShared: () => null };
+
+test("a library re-exporting another loads through importLibrary and importMod", async () => {
+  const { importLibrary, importMod } = await import("./mod-source.ts");
+  const look = await importLibrary("@fireflies/look", { herdr: app, "gpui-kit": gpui(), "gpui-base": { h_flex: () => ({}) } });
+  expect(typeof look.edge).toBe("function");       // @fireflies/tones, through export *
+  expect(typeof look.dithered).toBe("function");   // @fireflies/layout-look, through export *
+  expect(typeof look.titleShown).toBe("function"); // look's own
+  const place = await importMod("scripts/place.ts", { herdr: { ...app, panes: () => [], focused: () => null, run: () => {}, openOverlay: () => {}, closeOverlay: () => {} }, "gpui-kit": gpui(), "gpui-base": { h_flex: () => ({}) } });
+  expect(place.DECK_W).toBe(420);
+});
+
+test("the copier points every form at its target: export * (as), export { } from, import()", async () => {
+  const { copier } = await import("./mod-source.ts");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const src = mkdtempSync(join(tmpdir(), "copier-src-"));
+  writeFileSync(join(src, "forms.ts"), [
+    'export * from "@fireflies/tones";',
+    'export * as kit from "@fireflies/kit";',
+    'export { platform } from "herdr";',
+    'export type { Theme } from "herdr";',
+    'export const later = () => import("herdr").then((h) => h.platform());',
+    "export const lazyTones = () => import('@fireflies/tones');",
+  ].join("\n"));
+  const copy = copier("copier-", { herdr: { platform: () => "macos" } });
+  copy.write(join(src, "forms.ts"), join(copy.dir, "forms.ts"));
+  copy.standins();
+  const m = await import(join(copy.dir, "forms.ts"));
+  expect(typeof m.edge).toBe("function");
+  expect(typeof m.kit.sharedKey).toBe("function");
+  expect(m.platform()).toBe("macos");
+  expect(await m.later()).toBe("macos");
+  expect(typeof (await m.lazyTones()).edge).toBe("function");
+});
 
 test("importLibrary loads a library and what it imports (effect, @fireflies/kit) for real, standing in only for the app", async () => {
   const { importLibrary } = await import("./mod-source.ts");

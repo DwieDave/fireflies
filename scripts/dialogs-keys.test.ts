@@ -8,7 +8,7 @@ const Settings = (await import("../defaults/frame/settings/main.js")).default;
 
 beforeEach(() => {
   state.props = { overlay: "ov" };
-  state.runs = []; state.closed = []; state.opened = []; state.shared = {}; state.keys = [];
+  state.runs = []; state.closed = []; state.opened = []; state.shared = {}; state.keys = []; state.exec = null;
 });
 
 function settings(section?: string) {
@@ -171,6 +171,27 @@ test("settings: a machine's rename takes the keyboard to its field, then cancel,
   press(root, "escape");
   expect(s.machineEdit).toBe(null);
   expect(state.closed).toEqual([]);
+});
+
+// Developer, 2026-11-18: "it told me to run this but it didnt find hc". The
+// login line names the hc the app runs by its path: his shell has none on PATH.
+test("settings: a machine that needs a login gives the login command with the app's hc path", async () => {
+  state.exec = async (cmd, args) => cmd === "sh" && args[1] === "command -v hc" ? { code: 0, stdout: "/Users/me/.local/bin/hc\n", stderr: "" } : { code: 1, stdout: "", stderr: "" };
+  const s = settings("machines");
+  await s.corePath();
+  s.machineList = [{ name: "box", target: "me@box", state: "needs_login", version: "1.0" }];
+  const c = cx();
+  const root = s.render(c);
+  expect(texts(root)).toContain("/Users/me/.local/bin/hc machine login box");
+  find(root, "st-m-login-copy-box")!.calls["on_click"]![0]({}, c);
+  expect(c.clipboard).toBe("/Users/me/.local/bin/hc machine login box");
+});
+
+test("settings: without sh to ask, the login command names plain hc", async () => {
+  const s = settings("machines");
+  await s.corePath();
+  s.machineList = [{ name: "box", target: "me@box", state: "needs_login", version: "1.0" }];
+  expect(texts(s.render(cx()))).toContain("hc machine login box");
 });
 
 test("settings: updates keeps what's new before the check button", () => {

@@ -310,6 +310,44 @@ test("the shipped section's chords run commands that act on the page, in the bar
   }
 });
 
+test("item 28: the bar has the keyboard: arrows, page up / down, home / end and space scroll the page; the address keeps them", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example/x" });
+  view.render();
+  native.length = 0;
+  const keys: [string, any][] = [["up", {}], ["down", {}], ["left", {}], ["right", {}], ["pageup", {}], ["pagedown", {}], ["home", {}], ["end", {}],
+    ["space", { key_char: " " }], ["space", { key_char: " ", modifiers: { shift: true } }]];
+  for (const [k, extra] of keys) expect(press(view, cx, k, extra)).toBe(true);
+  expect(native.map(([, a, args]) => [a, args.by, args.dir, args.axis])).toEqual([
+    ["browser.scroll", "line", -1, "y"], ["browser.scroll", "line", 1, "y"], ["browser.scroll", "line", -1, "x"], ["browser.scroll", "line", 1, "x"],
+    ["browser.scroll", "page", -1, "y"], ["browser.scroll", "page", 1, "y"], ["browser.scroll", "end", -1, "y"], ["browser.scroll", "end", 1, "y"],
+    ["browser.scroll", "page", 1, "y"], ["browser.scroll", "page", -1, "y"],
+  ]);
+  expect(native.every(([id]) => id === "web")).toBe(true);
+  // In the address field the keys are the field's: no scroll, not taken.
+  press(view, cx, "o", char("o"));
+  expect(view.editing).toBe(true);
+  native.length = 0;
+  for (const k of ["down", "pagedown", "home", "end"]) expect(press(view, cx, k)).toBe(false);
+  expect(press(view, cx, "space", { key_char: " " })).toBe(false);
+  expect(native).toEqual([]);
+  // With modifiers (cmd-down and the like) they're keys.json's, not a scroll.
+  view.editing = false;
+  expect(press(view, cx, "down", { modifiers: { platform: true } })).toBe(false);
+  expect(native).toEqual([]);
+  // The ? list names them.
+  expect((await load("browser/main.ts")).mod.KEYS.some(([k]: any) => k.includes("pgdn"))).toBe(true);
+});
+
+test("item 28: a blank pane (nothing loaded) scrolls nothing", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b2" });
+  view.editing = false;
+  native.length = 0;
+  press(view, cx, "pagedown");
+  expect(native.filter(([, a]) => a === "browser.scroll")).toEqual([]);
+});
+
 test("typing in the address: esc goes back into the page, enter goes there, and both leave the mod GPUI's keyboard", async () => {
   reset();
   const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example/x" });

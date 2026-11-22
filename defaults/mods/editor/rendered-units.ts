@@ -155,8 +155,19 @@ function imagesView(v: Rendered, u: Extract<Unit, { kind: "image" }>, id: string
     );
 }
 
+/** The gutter left of the text where a unit's "+" sits: the column's own left padding (rendered-column.ts). */
+const GUTTER = 28;
+
 /** A drawn unit: its body, measured as drawn (its height kept by its key), the "+" beside it
- *  while the pointer is over it; a click lights it up. */
+ *  while the pointer is over it or its gutter; a click lights it up.
+ *
+ *  The hover is the row's, gutter included (Developer, 2026-11-19: "make the + icon on the
+ *  left of blocks clickable because currently it fades out before i can reach it with my
+ *  cursor"): gpui ends a hover once the pointer leaves the bounds of the element that asked,
+ *  and the "+" drawn outside the unit's box (at a negative left) didn't widen them. So the row
+ *  reaches over the gutter (a negative margin, the same padding back: the text stays put) and
+ *  holds the "+"; the unit's own box keeps the press and the click, so a press puts the caret
+ *  where it was pressed in the text as before. */
 export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
   const { t } = o;
   const u = r.u;
@@ -168,24 +179,15 @@ export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
 
   const hovered = v.hover === r.key;
 
-  return div()
+  const unit = div()
     .id(id)
     .relative()
-    .flex_none()
     .on_size_change((box, cx) => {
       const h = o.unzoom(box.height);
       const was = v.heights.get(r.key);
 
       if (was === undefined || Math.abs(was - h) > 1) {
         v.heights.set(r.key, h);
-        v.host.notify(cx);
-      }
-    })
-    .on_hover((on, cx) => {
-      const next = on ? r.key : v.hover === r.key ? null : v.hover;
-
-      if (next !== v.hover) {
-        v.hover = next;
         v.host.notify(cx);
       }
     })
@@ -198,14 +200,30 @@ export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
       v.press = at && b ? { key: r.key, x: o.unzoom(at.x), y: o.unzoom(at.y), w: o.unzoom(b.width) } : null;
     })
     .on_click((_e, cx) => v.clickUnit(u, cx, false))
-    .child(body)
-    // Its "+": an empty paragraph after it (shown while the pointer is over it).
+    .child(body);
+
+  return div()
+    .id(`${id}-row`)
+    .relative()
+    .flex_none()
+    .ml(-GUTTER)
+    .pl(GUTTER)
+    .on_hover((on, cx) => {
+      const next = on ? r.key : v.hover === r.key ? null : v.hover;
+
+      if (next !== v.hover) {
+        v.hover = next;
+        v.host.notify(cx);
+      }
+    })
+    .child(unit)
+    // Its "+": an empty paragraph after it (shown while the pointer is over the row).
     .when(hovered, (el) =>
       el.child(
         div()
           .id(`${id}-add`)
           .absolute()
-          .left(-24)
+          .left(GUTTER - 24)
           .top(1)
           .size(16)
           .flex()

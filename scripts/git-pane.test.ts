@@ -35,6 +35,7 @@ mock.module("herdr", () => ({
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   props: () => propsNow,
   spaces: () => [], panes: () => panesNow, focused: () => focusedNow, agents: () => [], home: () => "/home/u",
+  appHome: () => "/app-home", readTextFile: async () => null,
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   nextCommand: () => new Promise(() => {}),
   watchFolder: () => new Promise(() => {}),

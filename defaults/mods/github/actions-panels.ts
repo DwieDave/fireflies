@@ -258,7 +258,7 @@ export function logPanel(v: Actions, t: Theme): Element {
   } else if (!got) body = empty(t, "Reading the log…", null, { small: true });
   else if ("error" in got) body = empty(t, "The log didn't come", got.error, { small: true });
   else {
-    const lines = v.logLines();
+    const { lines } = v.logView();
     const code = settings().font_family || "JetBrains Mono";
 
     const color = { group: t.accent, error: t.blocked, warning: t.ansi3, notice: t.ansi4, debug: t.dim, plain: t.muted } satisfies { readonly [K in LogLine["kind"]]: Color };
@@ -278,13 +278,26 @@ export function logPanel(v: Actions, t: Theme): Element {
           v.app.focusSelf();
           cx.stop_propagation();
         })
-        .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(i),
-          (range) => lines.slice(range.start, range.end).map((l, n) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)
+        // A row's key is its line number (GitHub's); no handlers inside the renderer (gpui-kit: they throw).
+        .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(lines[i]?.n ?? i),
+          (range) => lines.slice(range.start, range.end).map((l) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)
             .when(l.kind === "error", (el) => el.bg(`${t.blocked}1c`))
-            .child(div().w(38).flex_none().text_right().text_color(edge(t)).child(String(range.start + n + 1)))
-            .child(div().flex_1().min_w(0).truncate().text_color(color[l.kind]).child(l.kind === "group" ? `▸ ${l.text}` : l.text || " "))))
+            .when(!!l.group?.size, (el) => el.cursor_pointer())
+            .child(div().w(38).flex_none().text_right().text_color(edge(t)).child(String(l.n)))
+            .child(div().min_w(0).truncate().text_color(color[l.kind]).child(l.group ? `${l.group.open && l.group.size ? "▾" : "▸"} ${l.text}` : l.text || " "))
+            .when(!!l.group?.size && !l.group.open, (el) => el.child(div().flex_none().text_color(t.dim).child(`${l.group?.size ?? 0} lines`)))
+            .child(div().flex_1())))
+          // A click on a group's title opens or folds it (enter / space / z by keys).
+          .on_item_click((key, cx) => {
+            v.focus = "log";
+            v.app.focusSelf();
+
+            if (lines.some((l) => String(l.n) === key && l.group?.size)) v.toggleGroup(Number(key));
+
+            cx.notify();
+          })
           .size_full().track_scroll(v.logScroll));
   }
 
-  return panel(t, "log", title, active, body, { right: got && !("error" in got) ? `${v.logLines().length} lines` : "" });
+  return panel(t, "log", title, active, body, { right: got && !("error" in got) ? `${v.logView().total} lines` : "" });
 }

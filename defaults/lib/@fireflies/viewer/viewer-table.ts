@@ -16,12 +16,12 @@ import { hexBytes } from "./image.ts";
 import type { Column, Table } from "./table.ts";
 import { parse as parseTable, table, oneLine, SQLITE_ARGS, TABLES_SQL, rowsSql, countSql, tablesOf, sqliteError } from "./table.ts";
 import { nextFile } from "./diff.ts";
-import { held, sh, blank, STAMP, unzoom, CH, ROW, GUTTER_MIN, CELL, checker, code } from "./viewer-state.ts";
+import { held, sh, waiting, blank, STAMP, unzoom, CH, ROW, GUTTER_MIN, CELL, checker, code } from "./viewer-state.ts";
 import { failWith, failed, runRead, tools } from "./viewer-load.ts";
 import type { default as Viewer } from "./viewer.ts";
 
 /** Whether the Databases mod is installed (its folder in the app's mods). */
-export const databasesInstalled = Effect.map(Files.use((f) => f.read(`${herdr.appHome()}/mods/databases/mod.json`)), Option.isSome);
+export const databasesInstalled = Effect.map(waiting(Files.use((f) => f.read(`${herdr.appHome()}/mods/databases/mod.json`))), Option.isSome);
 
 /**
  * `databasesInstalled` for a caller not on Effect yet (the files pane's
@@ -118,7 +118,7 @@ export const loadDb = Effect.fnUntraced(function* (v: Viewer, gen: number) {
 });
 
 /** One query on the database, as CSV. */
-export const sqlite = (v: Viewer, sql: string) => Exec.use((x) => x.run("sqlite3", [...SQLITE_ARGS, v.path, sql], v.on === null ? undefined : { on: v.on }));
+export const sqlite = (v: Viewer, sql: string) => waiting(Exec.use((x) => x.run("sqlite3", [...SQLITE_ARGS, v.path, sql], v.on === null ? undefined : { on: v.on })));
 
 export const loadTable = Effect.fnUntraced(function* (v: Viewer, gen: number) {
   const db = v.db;

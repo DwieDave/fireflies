@@ -53,12 +53,14 @@ export interface Host {
   /** When to read GitHub again (ms since the epoch). */
   next: number;
   focusSelf(): void;
-  spawn(cx: Context, fn: () => Promise<void>): void;
+  /** Work in the background: `fn` gets the task's own cx, good across its awaits (the one a
+   *  handler was given is refused once that handler has returned). */
+  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
   openUrl(url: string, cx: Context): void;
   openDiff(number: number): void;
   showRun(runId: number, jobId: number | null, cx: Context): void;
   showRuns(filter: RunFilter, cx: Context): void;
-  ask(text: string, go: () => void): void;
+  ask(text: string, go: (cx: Context) => void): void;
   act(promise: Promise<Ran>, ok: string, cx: Context, after?: () => void): void;
   kick(cx: Context): void;
   refresh(cx: Context, force?: boolean | ReadOptions): void;

@@ -119,6 +119,12 @@ export function pollEvery(items: readonly Timed[] | null | undefined): number {
   return (items ?? []).some((x) => LIVE.has((x.status ?? "").toLowerCase())) ? FAST : SLOW;
 }
 
+/** Waiting for GitHub to show something it took (a dispatched run, a re-run, a cancel): the wait
+ *  before the read after `n` reads that didn't show it yet. 1, 2, 3, 5, 8 s, then every 10 s. */
+const BACKOFF = [1000, 2000, 3000, 5000, 8000];
+
+export const soon = (n: number): number => BACKOFF[Math.max(0, n)] ?? 10000;
+
 /** What `gh api -i` printed: the status (0: none), the ETag and the body. */
 export interface Answer {
   readonly status: number;
@@ -358,6 +364,9 @@ const ANSI = new RegExp(`(?:${ESC}|\\^\\[)\\[[0-9;?]*[A-Za-z]`, "g");
 const STAMP = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z ?/;
 const sec = (v: string | null | undefined) => (v ? Math.floor(Date.parse(v) / 1000) : NaN);
 
+/** The runner's lines before a step that uses actions: they belong to the step after them. */
+const PRELUDE = /^(?:Prepare all required actions|Getting action download info|Download action repository '|Download immutable action package ')/;
+
 /**
  * A job's log split into its steps: step number -> lines (no timestamps).
  * `gh run view --job <id> --log` prefixes every line "job\tstep\t" (often
@@ -365,9 +374,13 @@ const sec = (v: string | null | undefined) => (v ? Math.floor(Date.parse(v) / 10
  * `##[group]<name>` naming a later step starts it (an action's step is
  * named "Run owner/action@ref", as its group is); a `##[group]Run ...` starts
  * the next step when that one has a name of its own (a `run:` with `name:`)
- * and has begun; a line later than its step's end moves on to the step
- * running then; the runner's "Post job cleanup." and "Cleaning up orphan
- * processes" open the post steps and "Complete job". Skipped steps get nothing.
+ * and has begun, and the current step has had its own group already; a line
+ * later than its step's end moves on to the step running then; the runner's
+ * "Post job cleanup." and "Cleaning up orphan processes" open the post steps
+ * and "Complete job". A composite action's inner steps sit between
+ * `##[start-action …]` and `##[end-action …]`: their groups start nothing.
+ * The runner's "Prepare all required actions" lines go to the step they
+ * precede when one starts right after them. Skipped steps get nothing.
  */
 export function splitLog(text: string | null | undefined, steps: readonly Step[] | null | undefined): Map<number, string[]> {
   const out = new Map<number, string[]>();
@@ -378,6 +391,12 @@ export function splitLog(text: string | null | undefined, steps: readonly Step[]
   for (const s of live) out.set(s.number, []);
 
   let cur = 0;
+  // The current step has had its opening group (or has none: set up, post, complete).
+  let opened = true;
+  // Inside a composite action's inner step (##[start-action] .. ##[end-action]).
+  let depth = 0;
+  // The runner's prelude lines, held until it's known which step they precede.
+  let held: string[] = [];
 
   for (const whole of (text ?? "").split("\n")) {
     const raw = whole.replace(/\r$/, "");
@@ -392,28 +411,52 @@ export function splitLog(text: string | null | undefined, steps: readonly Step[]
     line = (m ? line.slice(m[0].length) : line).replace(/^\uFEFF/, "").replace(ANSI, "");
 
     const shown = line;
-    const strong = shown.startsWith("##[group]") ? live.findIndex((s, i) => i > cur && `##[group]${s.name}` === shown) : -1;
+
+    if (PRELUDE.test(shown)) {
+      held.push(shown);
+      continue;
+    }
+
+    const top = depth === 0;
+
+    if (shown.startsWith("##[start-action ")) depth++;
+    else if (shown.startsWith("##[end-action ")) depth = Math.max(0, depth - 1);
+
+    const strong = top && shown.startsWith("##[group]") ? live.findIndex((s, i) => i > cur && `##[group]${s.name}` === shown) : -1;
 
     // The runner's own lines that open its post steps and the last one.
     const runner = shown === "Post job cleanup." ? (s: Step) => s.name.startsWith("Post ")
       : shown === "Cleaning up orphan processes" ? (s: Step) => s.name === "Complete job" : null;
 
-    const opens = runner ? live.findIndex((s, i) => i > cur && runner(s)) : -1;
+    const opens = top && runner ? live.findIndex((s, i) => i > cur && runner(s)) : -1;
 
-    if (strong >= 0) cur = strong;
-    else if (opens >= 0) cur = opens;
-    else if (shown.startsWith("##[group]Run ")) {
+    if (strong >= 0 || opens >= 0) {
+      cur = strong >= 0 ? strong : opens;
+      opened = true;
+    } else if (top && shown.startsWith("##[group]Run ")) {
       const next = live[cur + 1];
 
-      if (next && !next.name.startsWith("Run ") && !(ts < sec(next.started_at))) cur++;
+      if (!opened) opened = true;
+      else if (next && !next.name.startsWith("Run ") && !(ts < sec(next.started_at))) cur++;
     } else if (Number.isFinite(ts)) {
+      const was = cur;
+
       for (let next = live[cur + 1]; next && ts > sec(live[cur]?.completed_at) && ts >= sec(next.started_at); next = live[cur + 1]) cur++;
+
+      if (cur !== was) opened = false;
     }
 
+    // Prelude lines go with the step this line starts, else stay with the one running.
     const step = live[cur];
 
-    if (step) out.get(step.number)?.push(shown);
+    if (step) out.get(step.number)?.push(...held, shown);
+
+    held = [];
   }
+
+  const last = live[cur];
+
+  if (last) out.get(last.number)?.push(...held);
 
   return out;
 }
@@ -428,7 +471,7 @@ export interface LogLine {
 export function logLine(line: string): LogLine | null {
   if (line.startsWith("##[group]")) return { kind: "group", text: line.slice(9) };
 
-  if (line.startsWith("##[endgroup]")) return null;
+  if (line.startsWith("##[endgroup]") || line.startsWith("##[start-action ") || line.startsWith("##[end-action ")) return null;
 
   if (line.startsWith("##[error]")) return { kind: "error", text: line.slice(9) };
 

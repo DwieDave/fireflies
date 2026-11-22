@@ -463,6 +463,8 @@ test("a key a field types is left unclaimed (a claimed one never reaches it); th
   v.rows = { ...v.rows, filtering: true };
   v.filterInput = { value: () => "", focus() {} };
   expect([claims(v, "q"), claims(v, "escape")]).toEqual([false, true]);
+  // An edited cell is in the main view (startEdit gives it the keyboard there).
   v.cellEdit = { row: 0, col: 0, column: "name", input: { value: () => "", set_value() {}, focus() {} }, isNull: false };
+  v.panel = "main";
   expect([claims(v, "q"), claims(v, "escape")]).toEqual([false, true]);
 });

@@ -32,7 +32,7 @@ import type { EditorPosition } from "gpui-base";
 import type { Range, Unit } from "./live.ts";
 import { leadAt, leadOf, neighbor, rowAt, rowStarts, unitFor } from "./live.ts";
 import { enter } from "./mdedit.ts";
-import { editBetween } from "./md-text.ts";
+import { caretTo, editBetween } from "./md-text.ts";
 import type { Rendered } from "./rendered.ts";
 
 type Pos = EditorPosition;
@@ -117,7 +117,7 @@ const eolOf = (v: Rendered): string => (/\r\n/.test(v.text ?? "") ? "\r\n" : "\n
 
 /** Lights the unit at file line `line`, the caret at `col`. */
 function goTo(v: Rendered, line: number, col: number, cx: Context): void {
-  v.doc.editor.set_cursor(line, col);
+  caretTo(v.doc.editor, line, col);
   v.light(unitFor(v.all, line));
   v.mirror();
   v.measureSoon(cx);
@@ -396,7 +396,7 @@ function endList(v: Rendered, c: Pos, cx: Context): void {
 
   const made = glue ? line + 1 : line;
 
-  v.doc.editor.set_cursor(made, 0);
+  caretTo(v.doc.editor, made, 0);
   v.made = made;
   v.pull(cx);
   v.madeSpan = { from: line, to: made };
@@ -415,7 +415,7 @@ function openAbove(v: Rendered, cx: Context): void {
 
   const made = glue ? at + 1 : at;
 
-  v.doc.editor.set_cursor(made, 0);
+  caretTo(v.doc.editor, made, 0);
   v.made = made;
   v.pull(cx);
   v.madeSpan = { from: at, to: at + (glue ? 2 : 1) };
@@ -450,7 +450,7 @@ export function splitAt(v: Rendered, line: number, col: number, cx: Context, glu
   const end = !glue && !rest ? { line: line + 1, col: 0 } : { line, col: (ls[line] ?? "").length };
 
   v.doc.editor.edit([{ start: { line, col }, end, text: nl + nl + rest + tail }]);
-  v.doc.editor.set_cursor(line + 2, 0);
+  caretTo(v.doc.editor, line + 2, 0);
   v.made = line + 2;
   v.pull(cx);
 
@@ -466,7 +466,7 @@ export function addAfter(v: Rendered, u: Unit | null, cx: Context): void {
 
   if (!u) {
     // An empty document: its first line.
-    v.doc.editor.set_cursor(0, 0);
+    caretTo(v.doc.editor, 0, 0);
     v.made = 0;
     v.pull(cx);
     v.block.focus();
@@ -524,7 +524,7 @@ function backKey(v: Rendered, cx: Context): boolean {
 
   // Its text joins on, its mark off (as delete at the end of the block before does).
   v.doc.editor.edit([{ start: end, end: { line: v.range.from, col: lead }, text: "" }]);
-  v.doc.editor.set_cursor(end.line, end.col);
+  caretTo(v.doc.editor, end.line, end.col);
   v.pull(cx);
 
   return true;
@@ -557,7 +557,7 @@ function deleteKey(v: Rendered, cx: Context): boolean {
   const at = { line: v.range.to, col: (ls[v.range.to] ?? "").length };
 
   v.doc.editor.edit([{ start: at, end: { line, col: leadAt(next, line, ls[line]) }, text: "" }]);
-  v.doc.editor.set_cursor(at.line, at.col);
+  caretTo(v.doc.editor, at.line, at.col);
   v.pull(cx);
 
   return true;
@@ -613,7 +613,7 @@ export function clickUnit(v: Rendered, clicked: Unit, cx: Context, end = false):
   const ls = v.lines();
   const at = press && !end ? pressedAt(v, u, ls, press) : { line: end ? u.to : u.from, col: end ? (ls[u.to] ?? "").length : 0 };
 
-  v.doc.editor.set_cursor(at.line, at.col);
+  caretTo(v.doc.editor, at.line, at.col);
   v.light(u);
   v.mirror();
   v.measureSoon(cx);

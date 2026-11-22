@@ -50,13 +50,17 @@ export async function readScreen(address: string): Promise<string | null> {
   return r?.code === 0 ? r.stdout : null;
 }
 
-// Hook records live where bin/claude-hook writes them, on the agent's machine.
+// Hook records live where bin/claude-hook writes them, on the agent's machine;
+// a machine whose hook is still Herdr's copy writes them under herdr-app.
 const RECORDS = [
-  'd="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-app/notify"',
+  'd="${XDG_STATE_HOME:-$HOME/.local/state}"',
   'for id in "$@"; do',
-  '  f="$d/$id.claude.json"',
+  '  f="$d/fireflies/notify/$id.claude.json"',
+  '  [ -f "$f" ] || f="$d/herdr-app/notify/$id.claude.json"',
   '  [ -f "$f" ] || continue',
-  '  printf \'\\n@@record %s %s\\n\' "$id" "$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)"',
+  // GNU stat first: its -f is file-system status, printed over several lines (exit 1), which
+  // would land in the header; BSD stat refuses -c with nothing on stdout.
+  '  printf \'\\n@@record %s %s\\n\' "$id" "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)"',
   '  cat "$f"',
   'done',
 ].join("\n");

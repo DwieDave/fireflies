@@ -22,6 +22,8 @@ let sharedState: Record<string, unknown> = {};
 let zoomNow = 1;
 let propsNow: any = null;
 let spacesNow: any[] = [], panesNow: any[] = [], agentsNow: any[] = [], homeNow = "/home/u";
+// settings.json as the app home holds it (null: none).
+let settingsText: string | null = null;
 const commands: [string, any][] = [];
 mock.module("herdr", () => ({
   settings: () => ({ zoom: zoomNow, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
@@ -29,6 +31,8 @@ mock.module("herdr", () => ({
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   props: () => propsNow,
   spaces: () => spacesNow, panes: () => panesNow, focused: () => null, agents: () => agentsNow, home: () => homeNow,
+  appHome: () => "/app-home",
+  readTextFile: async (path: string) => (path === "/app-home/settings.json" ? settingsText : null),
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   nextCommand: () => new Promise(() => {}),
   watchFolder: () => new Promise(() => {}),
@@ -105,6 +109,23 @@ test("opens on the repo: every panel reads, renders without throwing", async () 
   expect(v.data.commits[0].subject).toBe("Merge side");
   expect(v.graph.width).toBe(2);
   for (const mode of ["normal", "half", "full"]) { v.mode = mode; for (const p of ["status", "files", "branches", "commits", "stash"]) { v.setPanel(p); await settle(v); v.render(); } }
+});
+
+test("opening starts in the Files panel's files tab, whatever the folder's window showed last; keys act on the files", async () => {
+  sharedState = { "git.state": { [repo]: { panel: "commits", tabOf: { files: "review", branches: "tags", commits: "reflog" }, mode: "half" } } };
+  const v = new GitView();
+  v.init({ folder: repo }, cx);
+  await settle(v);
+  v.render();
+  expect(v.panel).toBe("files");
+  expect(v.tabOf).toEqual({ files: "files", branches: "tags", commits: "reflog" });
+  expect(v.focus).toBe("side");
+  expect(v.ctx()).toBe("files");
+  expect(v.mode).toBe("half");
+  v.tree = false; v.render();
+  expect(v.item().path).toBe("f.txt");
+  await press(v, "j");
+  expect(v.item().path).toBe("new.txt");
 });
 
 test("narrow: one thing at a time, enter into the main view and esc back", async () => {
@@ -602,6 +623,66 @@ test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as 
   expect(sh("git branch --list feat/wt").trim()).toBe("");
   expect(commands.some(([n, a]) => n === "space.close" && a.id === "s9")).toBe(true);
   spacesNow = [];
+});
+
+// Upstream's worktree dialog fixes (Herdr 0.1.16), ported to the git window's Worktrees tab.
+test("worktrees: settings.json's worktrees.directory says where n checks out (~ is the repo machine's home); a bad one says why", async () => {
+  homeNow = join(dir, "home");
+  settingsText = JSON.stringify({ worktrees: { directory: "~/elsewhere/wt/" } });
+  commands.length = 0;
+  const v = await open();
+  v.setPanel("files"); v.setTab("worktrees"); await settle(v);
+  await press(v, "n");
+  expect(v.popups.top.note).toContain("~/elsewhere/wt/repo/");
+  v.popups.top.input.set_value("dir/one");
+  await press(v, "enter");
+  const path = join(homeNow, "elsewhere/wt/repo/dir-one");
+  expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
+  sh(`git worktree remove --force ${path} && git branch -D dir/one`);
+  settingsText = JSON.stringify({ worktrees: { directory: "relative/wt" } });
+  const WT = await import("../defaults/mods/git/worktrees.ts");
+  expect(await WT.create(v.git, "dir/two")).toEqual({ error: "worktrees.directory must be an absolute path or start with ~/." });
+  settingsText = JSON.stringify({ worktrees: { directory: "/abs/wt" } });
+  expect(await WT.rootFor("/home/u")).toBe("/abs/wt");
+  settingsText = null;
+  expect(await WT.rootFor("/home/u")).toBe("/home/u/.herdr/worktrees");
+  v.popups.close();
+});
+
+test("worktrees: a branch named in another script, with combining marks or with symbols only gets a folder of its own", async () => {
+  const { slug } = await import("../defaults/mods/git/worktrees.ts");
+  expect(slug("feat/wt")).toBe("feat-wt");
+  expect(slug("功能/登录")).toBe("功能-登录");
+  expect(slug("ве́тка")).toBe("ве́тка".normalize("NFC"));
+  expect(slug("cafe\u0301")).toBe("café");
+  expect(slug("@@@")).toMatch(/^branch-[0-9a-f]{8}$/);
+  expect(slug("@@@")).not.toBe(slug("###"));
+});
+
+test("worktrees: a bare repo kept in <project>/.bare puts its checkouts under the project's name", async () => {
+  const { repoName } = await import("../defaults/mods/git/worktrees.ts");
+  expect(repoName("/home/u/project/.bare")).toBe("project");
+  expect(repoName("/home/u/src/repo")).toBe("repo");
+});
+
+test("worktrees: a removal git refuses (a locked checkout) keeps the spaces on it", async () => {
+  homeNow = join(dir, "home");
+  settingsText = null;
+  const path = join(homeNow, "wt-locked");
+  sh(`git worktree add -q -b locked-one ${path} HEAD && git worktree lock --reason "on a usb disk" ${path}`);
+  const v = await open();
+  const WT = await import("../defaults/mods/git/worktrees.ts");
+  const closed: string[] = [];
+  const space = { id: "s7", name: "locked", machine: null, attached: true, folder: path, tabs: [] };
+  const error = await WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any] }, { closeSpace: (s) => closed.push(s.id) });
+  expect(error).toBe("This worktree is locked: on a usb disk");
+  expect(closed).toEqual([]);
+  expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
+  sh(`git worktree unlock ${path}`);
+  expect(await WT.removeOne(v.git, { path, branch: "locked-one" }, { spaces: [space as any], branch: true }, { closeSpace: (s) => closed.push(s.id) })).toBe("");
+  // Closed once git took the checkout away, not before.
+  expect(closed).toEqual(["s7"]);
+  expect(sh("git worktree list --porcelain")).not.toContain(path);
 });
 
 // The Agents line named every agent "agent": it read a.name, which herdr's agent listing doesn't have.

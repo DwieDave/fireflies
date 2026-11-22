@@ -5,16 +5,25 @@
 // called: a test that stands in for `herdr` with only the functions it needs
 // (most of the bun tests) still loads a mod built on this file.
 
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpClient } from "effect/http";
+// The folder listing Files.list reads: the engine's fs/promises, which herdr has no call for.
+// oxlint-disable-next-line effecttsgo/node-builtin-import
+import * as fs from "fs/promises";
 import * as herdr from "herdr";
 import { fetchClient } from "./http.ts";
 import { readSharedOption, writeShared } from "./schema.ts";
-import { Commands, Exec, Files, Notify, Shared, Workspace, execService, filesService } from "./services.ts";
+import { Commands, Exec, Files, Hc, Notify, Shared, Workspace, execService, filesService, hcService } from "./services.ts";
 
 export const ExecLive = Layer.succeed(Exec, execService((command, args, options) => herdr.exec(command, args, options)));
 
-export const FilesLive = Layer.succeed(Files, filesService((path) => herdr.readTextFile(path), (path, text, expected) => herdr.writeTextFile(path, text, expected)));
+export const HcLive = Layer.succeed(Hc, hcService((args) => herdr.hc(args)));
+
+export const FilesLive = Layer.succeed(Files, filesService(
+  (path) => herdr.readTextFile(path),
+  (path, text, expected) => herdr.writeTextFile(path, text, expected),
+  { exists: (dir) => fs.exists(dir), names: (dir) => fs.readdir(dir) },
+));
 
 export const SharedLive = Layer.succeed(Shared, Shared.of({
   get: (key) => Effect.sync(() => readSharedOption(herdr.shared, key)),
@@ -32,6 +41,8 @@ export const WorkspaceLive = Layer.succeed(Workspace, Workspace.of({
   panes: Effect.sync(() => herdr.panes()),
   terminals: Effect.sync(() => herdr.terminals()),
   settings: Effect.sync(() => herdr.settings()),
+  agents: Effect.sync(() => herdr.agents()),
+  focused: Effect.sync(() => Option.fromNullOr(herdr.focused())),
 }));
 
 export const NotifyLive = Layer.succeed(Notify, Notify.of({
@@ -44,7 +55,7 @@ export const NotifyLive = Layer.succeed(Notify, Notify.of({
 export const HttpLive = Layer.succeed(HttpClient.HttpClient, fetchClient((url, init) => fetch(url, init)));
 
 /** Everything the app gives a mod. */
-export const Live = Layer.mergeAll(ExecLive, FilesLive, SharedLive, CommandsLive, WorkspaceLive, NotifyLive, HttpLive);
+export const Live = Layer.mergeAll(ExecLive, HcLive, FilesLive, SharedLive, CommandsLive, WorkspaceLive, NotifyLive, HttpLive);
 
 /** A copy's failures as toasts titled by the mod (when it has no line of its own to say them on). */
 export const toast = (title: string) => (message: string) => { herdr.notify({ title, body: message, level: "error" }); };

@@ -17,7 +17,7 @@
 // process's arguments and never in this mod's memory.
 //
 // Off in a scratch app (HERDR_APP_HOME set to another home than the default
-// ~/.config/herdr-app): its login is still this machine's, so every scratch
+// ~/.config/fireflies/app, or Herdr's ~/.config/herdr-app): its login is still this machine's, so every scratch
 // app would ask the same account's endpoint on top of the real app's.
 // HERDR_APP_USAGE=1 turns it on there. Checked before the login is read: no
 // request leaves a scratch app, and a check that can't run counts as one
@@ -29,7 +29,8 @@
 //
 // One reading per machine, not per copy, window or app: every copy draws the
 // shared() answer, and before asking reads a small file all apps on this
-// machine share (~/.cache/herdr-app/usage-<provider>.json: the last good
+// machine share (~/.cache/fireflies/usage-<provider>.json, ~/.cache/herdr-app
+// while that is a folder the app hasn't moved yet: the last good
 // answer, the last problem, when it was last tried, the back-off). A lock
 // beside it (a directory, made atomically) lets one copy of one app ask at a
 // time; the others adopt what it wrote.
@@ -288,7 +289,11 @@ export function after(rec: MachineRecord | null, r: Reading, now: number): Machi
 
 const FILE = String.raw`
 dir=$HERDR_USAGE_DIR
-if [ -z "$dir" ]; then dir=$XDG_CACHE_HOME; [ -n "$dir" ] || dir=$HOME/.cache; dir=$dir/herdr-app; fi
+if [ -z "$dir" ]; then
+  b=$XDG_CACHE_HOME; [ -n "$b" ] || b=$HOME/.cache; dir=$b/fireflies
+  # Herdr's folder while the app hasn't moved it (it leaves a link there once it has).
+  if [ -d "$b/herdr-app" ] && { [ ! -L "$b/herdr-app" ] || [ ! -d "$dir" ]; }; then dir=$b/herdr-app; fi
+fi
 mkdir -p "$dir" 2>/dev/null
 f=$dir/usage-$2.json
 case $1 in
@@ -323,9 +328,9 @@ const readRecord = (p: ProviderId): Effect.Effect<MachineRecord | null, ExecErro
 
 // Exit 5: a scratch app (see the top), nothing read, nothing asked.
 const OFF = String.raw`
-def=$XDG_CONFIG_HOME; [ -n "$def" ] || def=$HOME/.config; def=$def/herdr-app
+def=$XDG_CONFIG_HOME; [ -n "$def" ] || def=$HOME/.config
 here=$(printf %s "$HERDR_APP_HOME" | sed 's:/*$::')
-if [ -n "$here" ] && [ "$here" != "$def" ] && [ "$HERDR_APP_USAGE" != 1 ]; then exit 5; fi
+if [ -n "$here" ] && [ "$here" != "$def/fireflies/app" ] && [ "$here" != "$def/herdr-app" ] && [ "$HERDR_APP_USAGE" != 1 ]; then exit 5; fi
 `;
 
 /** Whether this is a scratch app. A check that can't run counts as one: nothing is asked then. */

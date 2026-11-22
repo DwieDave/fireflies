@@ -14,15 +14,29 @@ mod. Nothing in the default interface is special: the spaces sidebar, the
 agents list, the tab bar, menus, dialogs and notifications are built
 from the same parts you have.
 
-## Two programs
+This folder is `~/.config/fireflies/app` (`$HERDR_APP_HOME` when that is
+set). Herdr kept it in `~/.config/herdr-app`: Fireflies moves it here on its
+first start and leaves a link at the old name, so scripts, older tools and
+the Herdr iOS app that name the old folder reach the same files. Write new
+paths with the new name.
 
-- **`herdr-app`**, the window: spaces, tabs, layouts, panels.
-- **herdr-core (`hc`)**, which runs every terminal and agent. They keep
-  running when the window closes or updates. You can use `hc` yourself:
-  start a terminal, read its screen, send it text, wait for an agent
-  (`hc --help`). The Fireflies app is one client of it.
+## Two programs, one command
 
-`herdr-app` controls this app; `hc` controls herdr-core.
+- **The window**: spaces, tabs, layouts, panels.
+- **herdr-core**, which runs every terminal and agent. They keep
+  running when the window closes or updates. You can use it yourself:
+  start a terminal, read its screen, send it text, wait for an agent.
+  The Fireflies app is one client of it.
+
+`fireflies` (or `ff`) drives both. The window's commands (`do`, `status`,
+`commands`, `feedback`, `shot`, `check`, `types`, `--skill`, `--version`)
+answer at the top; every other command goes to herdr-core exactly as `hc`
+would run it (`fireflies run …`, `fireflies send …`, `fireflies ls` lists the
+core's terminals). `fireflies app <command>` is the window's side alone
+(`fireflies app ls` lists its spaces and tabs), `fireflies core <args>` the
+core's (`fireflies core --skill`). `fireflies --help` lists both.
+`herdr-app`, `hc` and `herdr-core` still work as before, kept for older
+scripts and the Herdr iOS app, which runs `hc` over ssh; write `fireflies`.
 
 ## What you can and can't do
 
@@ -54,7 +68,7 @@ commands. They're rewritten on every start to match this version.
 - Edits apply at once. If a file is invalid, the app keeps the last good
   version and writes why to `<name>.error` (`layout.error`, `keys.error`,
   `settings.error`, `programs.error`). Check after every edit.
-- `herdr-app check <mod folder>` loads a mod once and checks its initial
+- `fireflies check <mod folder>` loads a mod once and checks its initial
   description and eager native elements, including virtual lists and motion.
   It does not lay out the mod or run deferred rows, nested renders, or later
   async states. Never call a mod done without a passing check; also try it
@@ -65,7 +79,7 @@ commands. They're rewritten on every start to match this version.
 
 ## Seeing the window
 
-`herdr-app shot [file.png]` saves the last rendered window frame as a PNG
+`fireflies shot [file.png]` saves the current window frame as a PNG
 and prints its absolute path (default: `herdr-shot.png` in your current
 folder). Use it when debugging mod UIs: inspect spacing, colors, terminal
 images, overlays, popups and floats. It captures the app, not the desktop,
@@ -80,7 +94,7 @@ first frame or during GPU recovery it reports an error instead of a PNG.
 |---|---|---|
 | `layouts/<name>.json` | the window and its whole look: blocks, theme, fonts, backgrounds, pane frames; one file per layout (`main`, `terminals`, `win98`, any you add) | live |
 | `keys.json` | what every key does | live |
-| `settings.json` | the person: zoom, sounds, fonts for every layout | live |
+| `settings.json` | the person: zoom, sounds, fonts for every layout, worktree directory | live |
 | `mods/<name>/` | panels: small JavaScript programs | live (hot reload) |
 | `programs.json` | how programs show (name, icon, tile), on top of the built-in table | live |
 | `icons/` | the shipped program icons | written by Fireflies (put your own elsewhere) |
@@ -91,17 +105,34 @@ first frame or during GPU recovery it reports an error instead of a PNG.
 Shared state is saved atomically in the background, with the latest change winning.
 If `shared.json` is invalid, Fireflies logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
-`herdr-app check` uses empty shared state in memory and leaves this file untouched.
+`fireflies check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
 runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
-`data/github/cache.json`: it shows that at once when opened and reads
-GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
+`data/github/cache.json`: it shows that at once when opened (from the
+keys, the palette, + new, another mod's `nocturne.github*` command, or back
+from a pull request's review) and reads GitHub behind it, every time; the
+bar says "updating…", then "updated 2m ago". Where it was left in each space
+(its tab, each tab's selection and filter, for its folder) is kept in shared
+`github.spaces` under the space's id, written as it changes: opened in that
+space on the same folder (also after a restart), it comes back there; a space
+with nothing kept opens on what the window kept last. While open it reads the shown
+tab again every 3 s while a run, job or check moves and every minute when all
+is still; closed, it reads nothing. A workflow run by hand, a re-run (`R`,
+`A`, `e`) or a cancel (`X`) is read again after 1, 2, 3, 5 and 8 s, then
+every 10 s, until GitHub shows it (2 minutes at most for a new run, 1 for a
+re-run or cancel). Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
 `L` lists the links in the shown pull request or open card (j/k, enter opens
 one); `tab` / `shift-tab` walk the panels; `?` lists every key.
+On Actions, a finished job's log is split into its steps (`gh run view --job
+<id> --log`, placed by the runner's markers and the steps' times) and each
+`##[group]` is folded as on GitHub: a step's command shows as one title line
+with its output under it. In the log, enter / space opens or folds the first
+group from the top of the view, `z` every group of the step, and a click on
+a title that one; line numbers count the folded lines, as GitHub's do.
 The window also lives in a normal pane, beside terminals: props `{slot,
 folder, on?}` (`slot` unique: the pane finds itself and keeps its tab and
 each tab's selection across restarts). In a pane it has no frame or ✕, esc
@@ -144,7 +175,7 @@ pointer, "GitHub: run a workflow…",
 declares (text, number, a list for `choice` and `environment`, a toggle for
 `boolean`; defaults filled, required ones checked). It runs
 `gh workflow run <file> --ref <ref> -f name=value…`, then waits for the run
-and selects it. Both forms take keys like every form (below): tab /
+(GitHub lists it a few seconds later) and selects it. Both forms take keys like every form (below): tab /
 shift-tab walk the fields, then Review and Cancel; ← → change a choice
 (base, head, a workflow, a ref, a choice input), space flips a toggle or
 opens a list (typing filters it), enter reviews (cmd-enter from the body or
@@ -257,7 +288,11 @@ goes in quoted at its caret; a table dropped on the Rows tab opens there;
 query tabs and saved connections (`J` / `K` too) drag to another place; a
 SQLite file dropped on the window opens as a connection (not saved), a
 `.sql` file as a query tab (not run): nothing that writes starts from a
-drop. A double click is enter everywhere; a cut cell, a header, a
+drop. `/` finds a table in [2] by its name: enter opens the cursor's match
+and leaves the list filtered (↓ goes to the list without opening), enter there
+opens the cursor's table, esc ends the find. A double click is enter everywhere
+(a dialog closed by a click gives the keyboard back, a cell being edited is
+kept when another panel takes it); a cut cell, a header, a
 connection and a table say more on hover; the wheel scrolls (shift: a grid
 sideways). Nothing runs on open. A statement that writes asks first (`y`);
 DROP, TRUNCATE, ALTER … DROP and a DELETE or UPDATE without WHERE ask twice,
@@ -288,10 +323,15 @@ memory ("ask each time", found ones); they reach the client through its
 environment or a 0600 file in the window's private temp folder, never a
 command line, shared state, settings, the log or the history. It keeps
 `data/databases/connections.json` (no secrets), `history/<id>.json` (a
-password literal blanked) and `queries/<id>.json` (each tab's text). Commands
+password literal blanked) and `queries/<id>.json` (each tab's text). Where it
+was left in each space (its connection, panel, open table and query tab; a
+sent connection as its `databases.connect` request, never a secret) is kept in
+shared `databases.spaces` under the space's id: a window opened in that space
+(also after a restart) connects again and goes back there; a connection that
+doesn't come up leaves the list shown with why. Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
-rows and structure), `databases.cancel`, `databases.stop` (what esc does to a
+rows and structure, the cursor in [2] on its row), `databases.cancel`, `databases.stop` (what esc does to a
 read going on), `databases.forward-start` / `databases.forward-anyway` /
 `databases.forward-k8s` (the forward ask's enter, c and k), and any key's action by name
 (`databases.export`, `databases.refresh`, `databases.save`…);
@@ -395,6 +435,9 @@ Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
 Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
 graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
+It opens with the keyboard in Files (a move between window and pane, and a
+pane's restart, bring back what that copy showed). In the Files tree a range
+(`v`) over every file of a folder highlights the folder's row too.
 Its keys are lazygit's defaults (`?` lists them in the window; `+` / `_`
 widen the focused panel: half gives Commits a wide graph column, then full).
 History comes in pages, as in lazygit: Commits (and a branch's commits)
@@ -459,7 +502,7 @@ In the expanded Spaces sidebar, drag a space to reorder it within its machine;
 the highlighted line shows where it will land.
 
 - A **space** is a place to work, on one machine: this one, or another
-  from `hc machine ls` (`spaces()[i].machine`). Fireflies leaves out machines
+  from `fireflies machine ls` (`spaces()[i].machine`). Fireflies leaves out machines
   added with `--temp` (an agent's short-lived sandbox): no spaces, not in
   `machines()`, and mods listing machines skip `temporary`. Names work as in Fireflies:
   a space nobody named is called after where its first terminal is now
@@ -524,7 +567,7 @@ the highlighted line shows where it will land.
 - Every terminal is a core terminal. Fireflies labels the ones it starts with
   `herdr.space=<id>` and `herdr.tab=<id>`. **A terminal with those
   labels shows up there**, even one you start yourself:
-  `hc run --keep --label herdr.space=<id> --label herdr.tab=<id> -- claude`.
+  `fireflies run --keep --label herdr.space=<id> --label herdr.tab=<id> -- claude`.
   Labels use ids local to that machine; remote ids shown by the app have a
   `<machine>/` prefix (strip it when writing labels on that machine). Adoption
   also enables core keep; `terminal.park` removes the pane and disables keep.
@@ -539,12 +582,15 @@ the highlighted line shows where it will land.
   `working`, `blocked`, `idle`, or `done` = finished while the user wasn't
   looking (it becomes `idle` once they look). A space's and a tab's
   status is the most urgent of its agents: blocked > done > working > idle.
-- **Sub-agents** are terminals an agent started with `hc run`: the core
+- **Sub-agents** are terminals an agent started with `fireflies run` (`hc run`): the core
   records the starter as `parent` (see `terminals()`). Parent addresses use
   the app's machine names, or a bare ID for this computer, when they can be
   mapped; otherwise they stay as the core reported them. They belong to their
   parent's tab without a pane; the `agents` mod shows them,
   `terminal.peek` opens one, `terminal.keep` gives one a pane.
+  When the shown space is on another machine, the peek's Keep button uses the
+  nearest ancestor's space on the terminal's machine, or the first space there
+  if no ancestor has a pane there. Keep is hidden if that machine has no space.
 - **Scripts** (Nocturne's script runner, the `scripts` mod): the
   tab strip's ▶ (its deck hangs under it, like "+ new"'s menu; a second click
   closes either, and it stays closed; the button is lit while its view is open;
@@ -584,7 +630,7 @@ the highlighted line shows where it will land.
   restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns; a right-click on a run opens the same actions as a menu at the pointer, `m` under the cursor's run), and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
-  that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
+  that way shows there too: `fireflies run --bg --no-parent --cwd ~/app --label
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Processes and ports** (Nocturne's manager, the `procs` mod): the
   tab strip's tree mark beside ▶, with `:n` in teal when processes in this
@@ -696,9 +742,10 @@ the highlighted line shows where it will land.
   agents run on; elsewhere, copy the script there):
   ```json
   { "hooks": { "PermissionRequest": [ { "hooks": [ { "type": "command",
-    "command": "~/.config/herdr-app/mods/notifications/bin/claude-hook", "timeout": 5 } ] } ] } }
+    "command": "~/.config/fireflies/app/mods/notifications/bin/claude-hook", "timeout": 5 } ] } ] } }
   ```
-  It writes `${XDG_STATE_HOME:-~/.local/state}/herdr-app/notify/<terminal>.claude.json`.
+  It writes `${XDG_STATE_HOME:-~/.local/state}/fireflies/notify/<terminal>.claude.json`
+  (Herdr's copy of the hook wrote `.../herdr-app/notify/`; the app reads both).
   Without it, and for other agents (Codex, pi, opencode, ...), a request shows
   herdr-core's words for it and the end of the agent's screen, with peek and
   go to; an agent family gets exact answers by an adapter in the mod's
@@ -725,7 +772,10 @@ the highlighted line shows where it will land.
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
   inspector, `O` the system's browser, `t` a new tab, `x` close the tab, `J` / `K`
   the tab left / right, `1`–`9` a tab (9 the last), Tab / Shift-Tab its buttons
-  and tabs (Enter presses), `?` the keys. Its keys.json section (`mod:browser`:
+  and tabs (Enter presses), the arrows / PgUp / PgDn / Home / End / Space /
+  Shift-Space scroll the page (the native view's `browser.scroll {by: "line" |
+  "page" | "end", dir: 1 | -1, axis?: "y" | "x"}`, either engine; in the page they
+  are the page's own, a field in it keeps them), `?` the keys. Its keys.json section (`mod:browser`:
   Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
   Cmd-Alt-I the inspector) applies in the bar, the address field, the page
   (after a click into it, or Enter from the bar) and its inspector pane, over
@@ -914,7 +964,8 @@ the highlighted line shows where it will land.
   the pane it stays); the order is kept. A right-click on a tab opens its menu at
   the pointer (space b m, `editor.tab-menu`, under the shown tab; under the bar
   with one file): pop out into its own pane, pop
-  out into a new tab, move into the editor beside, move left / right, close,
+  out into a new tab, move into the editor beside, move left / right, copy its
+  path (y; on another machine `machine:path`), close,
   close the others (those with unsaved changes stay); j k / ↑ ↓, enter, the
   entries' letters, esc. **Popping a tab out** (the menu, the drag, space b o,
   `:popout`, `editor.pop-out` beside or `.pop-out-tab` in a new tab
@@ -979,7 +1030,10 @@ the highlighted line shows where it will land.
   `mod:editor`, macOS; no function keys): cmd-s save, cmd-f find
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
-  the problems drawer, cmd-k d definition (another file opens as a tab),
+  the problems drawer, cmd-k d definition (another file opens as a tab;
+  cmd-click on a symbol does the same, and on a web address, a Markdown link
+  or a path (`./a.md`, `src/a.rs:12:5`) opens it as the hover card's links do,
+  in the rendered view's block too; typing there keeps the caret in view),
   cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-k z word wrap
   on / off (vim: space u w, `:set wrap` / `nowrap` / `wrap!`; the bar's `wrap`
@@ -1055,8 +1109,9 @@ the highlighted line shows where it will land.
   normal mode, enter makes the new block under the lit one and types into it
   (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
-  the block under the pointer, and the "add a block" line under the last
-  block, put an empty paragraph there. An empty block made so offers the
+  the block under the pointer (it stays while the pointer is on the block's
+  row, its gutter and the "+" included), and the "add a block" line under the
+  last block, put an empty paragraph there. An empty block made so offers the
   kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
   height kept, edited in place, never shorter than its text's rows), and a
@@ -1182,9 +1237,20 @@ the highlighted line shows where it will land.
   Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
   `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
   `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.more` and
-  `.copy-path` (a scratchpad's more menu, its path to the clipboard), `.next-tab`, `.prev-tab`,
+  `.copy-path` (a scratchpad's more menu; the shown file's path to the clipboard), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
+- **Paths for every mod** (Nocturne's, nocturne/files.ts; they work
+  whichever mod runs them, the files pane's menu among them):
+  `nocturne.copy-path:{"path"}` puts the path on the clipboard as given (a
+  toast says what); `nocturne.reveal:{"path"}` shows it in the system's file
+  manager, selected (macOS `open -R`, Windows `explorer /select,`, Linux
+  `xdg-open` on its folder; the path is one argument, no shell). The value may
+  be the bare path (`nocturne.reveal:/abs/x`, a key's `"name:value"`), `~/`
+  is the home; a relative path is refused with a toast. This computer's paths
+  only: offer reveal for another machine's files nowhere, and copy those as
+  `machine:/path` yourself. From a mod: ``run(`nocturne.reveal:${JSON.stringify({ path })}`)``
+  while `shared("layout") === "nocturne"`.
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
   "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
   `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
@@ -1198,7 +1264,7 @@ the highlighted line shows where it will land.
   and says so). One note per repository, found by git's common dir
   (`git rev-parse --git-common-dir`), so every worktree of a repository opens
   the same note; a folder outside git gets its own. It lives at
-  `~/.config/herdr-app/scratchpad/<repo>-<hash>.md` (the app's folder;
+  `~/.config/fireflies/app/scratchpad/<repo>-<hash>.md` (the app's folder;
   `scratchpad/index.json` maps each file to its repository: `{ name, dir,
   repo, machine? }`). It saves itself: 600 ms after the last key, and at once
   when its pane or tab closes; it never shows unsaved or asks on close, and
@@ -1207,10 +1273,17 @@ the highlighted line shows where it will land.
   "format" (the Markdown commands, cmd-. / space .) and "more" (a click or
   `editor.more`: copy its path y, rendered r, text e, split with the preview
   s, word wrap w, vim v; a letter or a click runs one); no language, indent,
-  server or line:col, and the header names the note. Only the focused pane
+  server or line:col, and the header names the note. A right-click anywhere
+  on it (the bar, a drawn block, the margins) opens the more menu at the
+  pointer; in the block being typed into a right-click is its editor's own
+  (cut, copy, paste). Its path to the clipboard: more's y, the right-click
+  menu's y, the tab menu's "Copy its path" (space b m), `editor.copy-path`,
+  or the palette's "Scratchpad: copy its path" (`nocturne.scratchpad-copy-path`,
+  the note needn't be open). Only the focused pane
   takes the keyboard: an editor that starts out of sight (a pane pinned to
-  the shelf, loaded parked) or another editor on the same note leaves it
-  where it is. The
+  the shelf, loaded parked) or another editor on the same note (reloading
+  what this one saved) leaves it where it is, and the save keeps insert mode
+  and the caret where they were. The
   pane's tab reads "scratchpad" and its repository; other files (a picker's,
   a link's) open in an editor beside it, never as its tabs. Agents may read
   and write the note like any file (`writeTextFile` semantics: an open pane
@@ -1276,8 +1349,16 @@ the highlighted line shows where it will land.
   a database has the same "open in Databases"), edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
-  (`y`), the file operations below, close; on the empty space below the rows:
-  new file / folder and paste in the root. File operations, one row at a time:
+  (`y`: absolute; another machine's as `machine:/path`), Copy relative path
+  (`Y`: relative to the shown space's folder when the row is in it, a space at
+  home aside, else to the tree's root; the root itself in the space's folder is
+  `.`), the row in the system's file manager, selected (`f`: "Reveal in Finder"
+  on macOS, "Reveal in Explorer" on Windows, "Show in the file manager"
+  elsewhere, which opens its folder; it runs `nocturne.reveal`, and under
+  another layout `files.open {in: "system"}` opens the file's folder or the
+  folder itself; never for another machine's files), the file operations
+  below, close; on the empty space below the rows: new file / folder, paste,
+  copy paths and reveal for the root. File operations, one row at a time:
   `a` new file, `A` new folder (also the filter line's `+ file` / `+ folder`
   chips, `+ folder` only where it fits, and an empty folder's `+ new file`: a
   name row in the selected folder or beside the selected file, the root with
@@ -1297,7 +1378,7 @@ the highlighted line shows where it will land.
   marks / unmarks and steps down, `V` marks a range while moving (`V` again ends
   it), shift-↑↓ mark while moving, esc clears the marks before anything else;
   the hint line counts them. With marks, `d` (one question: the count and the
-  first names), `x` / `P`, `y` (every path, one a line) and the menu on a marked
+  first names), `x` / `P`, `y` / `Y` (every path, one a line) and the menu on a marked
   row ("Delete 3 items…") act on all of them; a marked folder covers what's in
   it; rename, open, edit and the viewers act on the keyboard's row. Each row is
   tried; what failed is listed afterwards with its reason. Drag a row, or the
@@ -1400,8 +1481,8 @@ look. The theme picker overrides any layout. To change a shipped layout's
 look beyond that, or its structure/code, clone it and edit the clone:
 
 ```sh
-herdr-app do layout.clone '{"name":"main","as":"my-layout"}'
-herdr-app do mod.clone '{"name":"files","as":"my-files"}'
+fireflies do layout.clone '{"name":"main","as":"my-layout"}'
+fireflies do mod.clone '{"name":"files","as":"my-files"}'
 ```
 
 The default clone name is `<name>-copy`; an existing name is refused.
@@ -1467,6 +1548,11 @@ Properties any node can have:
   Windows), the bar draws them with `window.minimize`, `window.maximize`, `window.close`.
   Windows' shipped tab bar and system strip use vector window icons, with a
   restore icon when maximized, rather than font glyphs.
+- Root only: `"window_blur": true` blurs what's behind the window where the
+  system can (macOS, Windows, some Wayland compositors). Colors with alpha
+  then show the desktop through frosted glass: make `background` and
+  `canvas` transparent and give the sidebar a translucent `chrome`
+  (`"#0b102466"`). Nodes with solid colors stay solid.
 - Root only: `"preview": "layouts/<name>.svg"` (or png): the picture the
   settings screen shows for this layout. Draw one when you make a layout;
   without it the person sees a plain frame. New layouts and `themes/*.json`
@@ -1475,11 +1561,17 @@ Properties any node can have:
   right-clicks (including Shift+right-click). Omit it for the shipped `menu`;
   an unknown mod logs a warning and falls back to `menu`. Clone a shipped
   layout before changing this field. Other menus are unchanged.
+- Root only: `"link_handlers": ["my-browser", "my-viewer"]` chooses which mods
+  handle Ctrl-clicks (Cmd-clicks on macOS) in terminals, in order. Clone a
+  shipped layout before adding link handlers.
 - Root only: `"toast": "my-toast"` chooses the mod that shows notifications
   (Fireflies' own and every `notify()`), in place of the shipped `toast`; an
   unknown mod logs a warning and falls back to `toast`. It gets the same
   `props()`: `{title, body, level, icon, action, timeout, overlay}` (`timeout`
-  is optional). A mod that hands them to the system instead
+  is optional). The shipped `toast` and Nocturne's also get `fitHeight: true`
+  when the notification sets no `height`: the window sizes the card to its
+  text (340 wide, at least 72 high, up to most of the window, scrolling
+  past that), so they wrap rather than cut lines off. A mod that hands them to the system instead
   (`exec("notify-send", ...)`) closes itself at once
   with `closeOverlay(props().overlay)`. The older name `"toast_mod"` (this fork) still works.
 - Root only: `"prompt_mod"`, `"confirm_mod"`, `"palette_mod"` (this fork) choose
@@ -1570,7 +1662,7 @@ layout's look and a block can differ:
   "terminal_padding": [10, 6], "terminal_opacity": 1, ... }
 ```
 
-- `theme`: `moonfly` (Nocturne's), `graphite` (herdr-app's default look),
+- `theme`: `moonfly` (Nocturne's), `graphite` (Herdr's default look),
   `paper` (light), or the name of a file in `themes/`; `ink`, `moss` and
   `atom-one-dark` still load when named but the pickers (Settings, the
   palette, the menu) no longer offer them; or one for each appearance:
@@ -1606,16 +1698,24 @@ layout's look and a block can differ:
 - The look beyond colors follows the layout too (this fork): where the
   layout's `scrim` is dithered (`"scrim": {"dither": true}`, as nocturne's)
   the mods draw Nocturne's 1-bit checker fills; anywhere else (`main`,
-  herdr-app's default look, or your own layout) the same fills are flat.
+  Herdr's default look, or your own layout) the same fills are flat.
   `"corners": "square"` squares every corner. Writing a mod: import
   `@fireflies/layout-look` (`flat(color, cell)` first in a dither
   function, `dithered()`, `radius(n)`). The windows open in any layout with
   `mod.open {name}` (the palette's Window rows: Git, GitHub, Databases,
   Processes, Scripts; a second run closes): each mod's `mod.json` `overlay`
   says how; Nocturne's own commands (`nocturne.git`, …) exist only there.
-- `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
-  (their text sizes are their own, in px, and follow zoom). Optional: without
-  them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).
+- `terminal_line_height`: row height multiplier (default 1, clamped to 0.8..2).
+  Text stays centred; joining characters, cursors and images follow the rows.
+- `terminal_cell_width`: column width multiplier (default 1, clamped to 0.8..2),
+  like Ghostty's `adjust-cell-width` as a percentage (`-5%` is 0.95). Glyphs
+  are placed in their cells as Ghostty places them.
+- `terminal_scroll_speed`: wheel and trackpad multiplier (default 1, clamped
+  to 0.1..5), including mouse reports to programs. Small moves accumulate.
+- `font` / `font_size`: the terminals', the Files preview's and the Changes
+  diff's (px at zoom 1); `ui_font`: the mods' (their text sizes are their own,
+  in px, and follow zoom). Optional: without them a layout uses settings.json's,
+  else Fireflies' (JetBrains Mono 14, Geist).
   Fireflies (main) leaves these unset; Terminals sets text size 15, and Fireflies 98
   brings its own fonts.
   JetBrains Mono, Geist Mono and Geist ship with Fireflies; any installed font
@@ -1624,6 +1724,9 @@ layout's look and a block can differ:
   folder (or the home's `fonts/`) load at start and on the next look change,
   so a layout and its mod folder travel together (Fireflies 98's do: its pixel
   fonts are in `mods/win98/fonts/`).
+- `font_weight` (100..900): the terminals' text weight. Default 500
+  (Medium); 400 is Regular, 300 Light, using the family's nearest face.
+  Bold text stays at 700.
 - `pane_scrollbars` in settings.json (default `true`): show terminal scrollback
   with a slim thumb and track. Drag the thumb or click the track to jump there.
   With little or no terminal padding, the hit lane overlays the last 8px;
@@ -1650,9 +1753,14 @@ The tab block says how each pane of the shown tab is wrapped:
   pane has the keyboard; `gap` is the space between panes.
 - `header`: a mod drawn on each pane, one copy per pane, with
   `props().pane` and `props().terminal`. It reads its live facts from
-  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom, parked; a mod pane's `props`) and its
-  buttons run pane commands with that pane (`pane.split`, `pane.zoom`,
-  `pane.close`). `position`: `top` or `bottom`; `reveal: "hover"` shows it
+  `panes()` (title, name, folder, branch, agent status, focused, zoomed, font_zoom, parked, scroll;
+  a mod pane's `props`) and its buttons run pane commands with that pane (`pane.split`, `pane.zoom`,
+  `pane.close`). `scroll` is `{ total, offset, len, from_bottom }` for a
+  terminal pane's history viewport (`from_bottom` is 0 at the end; `scroll`
+  is null on the alternate screen). Reads get current numbers. Mods refresh
+  only on transitions between the end, history, and the alternate screen;
+  scrolling and output within one of those states do not refresh them just
+  because the numbers changed. `position`: `top` or `bottom`; `reveal: "hover"` shows it
   only while the pointer is on the pane, drawn over the terminal so the
   terminal never resizes. The shipped `pane` mod keeps its divider on the
   terminal-facing edge and reads the frame position from `layout()`.
@@ -1724,7 +1832,16 @@ needs you, working, running a command, done, resting; the done and resting ones
 sit on the ground above the hills (the rail pairs them up when crowded). A row
 takes a press anywhere on it (its full width and half the gap to its
 neighbours; on the rail the cell and its padding): click focuses the agent,
-right-click its menu, double-click renames it. Pinned agents
+right-click its menu, double-click renames it. With more than one machine
+(`machines()`), a row of chips under the fireflies' heading filters them by
+machine: "all", "this mac" (or "this machine") and one per machine; a chosen
+one shows only that machine's fireflies, in the sky, the jar and on the rail
+(and `agent.next` walks only those), kept in shared `nocturne.machine`
+(`{ "machine": name | null }`; null this one; unset all; a machine that's
+gone shows all and keeps the choice). In "all" each firefly's name wears a
+small square tag: `~` for this machine, else the shortest start of its name
+no other machine shares. With one machine the row isn't drawn. The chips are
+in the sidebar's keyboard walk (enter chooses). Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
 a sheen down its glass, never shorter than a jar with room under one firefly,
@@ -1814,7 +1931,7 @@ pane at ~ (`nocturne.dock-files`), each pinned; the palette has the same rows. T
 toast on show Nocturne's update note ("Updated to …", bottom right), which
 `nocturne.update-close` closes too. The note keeps a press on it to itself (a
 terminal under it doesn't start a selection) and its × closes it on the press. Scripts:
-`herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
+`fireflies do terminal.pin '{"terminal":"t7","pinned":true}'`.
 While the pointer is over the sky (open or folded) it carries a firefly's
 light: a small dithered diamond in the theme's ansi11 around a pixel + that
 trails it and lights the stars, haze and grass near it. Every 2.8 s it
@@ -1878,14 +1995,14 @@ runner's filter) cmd-k ? does it instead, shown as the bar's last entry.
 `<mod>.keys` shows or hides a pane's list by command (the palette's "… keys":
 file-tree, -markdown, -preview, -browser, -agents, -usage, -pip,
 -github, -scripts, and the editor's `editor.keys`). To show someone
-a key: `herdr-app do app.help`, then `herdr-app do nocturne.keys-filter.focus-sidebar`
+a key: `fireflies do app.help`, then `fireflies do nocturne.keys-filter.focus-sidebar`
 (the filter, `-` for spaces) or `nocturne.keys-open.sidebar` (unfolds that block:
 sidebar, tabstrip, header, parked, toasts, menus, panes).
 
 Nocturne's usage (the sidebar's USAGE section and the usage pane)
 reads Claude's or Codex's limits with this machine's login: one reading per
 machine, whatever number of panes, windows or apps show it. The answer, its
-time and any back-off are kept in `~/.cache/herdr-app/usage-<provider>.json`
+time and any back-off are kept in `~/.cache/fireflies/usage-<provider>.json`
 (`$XDG_CACHE_HOME`, or `HERDR_USAGE_DIR`), and one app at a time asks. Only
 the picked provider is asked: every 3 min while a usage pane is shown in the
 active window, every 10 min while an agent works or the window is active,
@@ -1903,8 +2020,10 @@ wings (`winged.ts`, one helper for the sidebar, the tabs and the headers; a
 12 px mark there), in the colour the sidebar gives its status (working, needs
 you, done; idle muted). While it works its wings beat a little and slowly
 (only while the window is in front and more motion is fine); it blinks while
-it needs you; done and resting hold still. A plain terminal's tab and header
-keep its plain mark, without wings.
+it needs you; done and resting hold still, and done wears the sidebar's check
+on the mark's corner, as its firefly does. A tab with several agents wears the
+mark of the one its status comes from (the most urgent). A plain terminal's
+tab and header keep its plain mark, without wings.
 Nocturne's pane header by mouse: a click focuses the pane, a right-click opens
 its menu, a middle click on the bar (its mark, name, folder or band; not its
 buttons) closes the pane as its close button does (`pane.close` without
@@ -1917,7 +2036,16 @@ Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
 last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
-drops nothing. A tab's right-click menu (or `m` on it in the strip): Rename,
+drops nothing. More tabs than fit scroll sideways: the wheel or the trackpad
+over them scrolls the strip while it overflows (while every tab fits, or over
+the toolbar, the wheel steps tabs: `tab.prev` / `tab.next`). The shown tab is
+always brought into view, clear of the fades: after a switch (key, click,
+wheel, command), a new tab, a closed or moved one, and when the strip changes
+width; scrolling by hand stays put. A cut-off end fades the tabs into the
+night (the left one only while the strip is scrolled) and counts those
+beyond it, `‹ n` / `n ›`; a click on a count brings in the next tab that
+way. A dragged tab held on a cut-off end scrolls the strip a tab at a time,
+its stake by each tab brought in. A tab's right-click menu (or `m` on it in the strip): Rename,
 New tab, Pin tab to the jar (pinned: Unpin from the jar, Move left / right on
 the shelf), Move to space… and Close. "Move to space…" lists the other spaces
 on the tab's machine in the sidebar's order, a worktree's space indented under
@@ -1981,7 +2109,7 @@ folder on GitHub):
    recipe instead.
 4. A mod's `keys.json`: merge it into the person's. Add its sections and
    keys, and ask before replacing a key they already use.
-5. `herdr-app check` each mod; for a layout, then `layout.switch {name}`.
+5. `fireflies check` each mod; for a layout, then `layout.switch {name}`.
    The person's own layout stays as it was; `ctrl-shift-l` switches back,
    and deleting the files removes it.
 
@@ -2054,6 +2182,8 @@ shortcuts must then be added by hand.
 - On macOS, shifted punctuation shortcuts accept both spellings from the
   current layout: `cmd-shift-]` and `cmd-}` match the same US-layout keypress.
   Existing `keys.json` files don't need to change.
+- The macOS menu bar runs the same commands and shows the key that keys.json
+  binds to each (string actions only). Rebinding updates the menus live.
 - Terminal keys honor the program's negotiated Kitty mode, including on Windows.
 - Windows terminal Escape stays separate from the following key.
 - Search: `ctrl-shift-f` (Cmd-F on macOS) opens a find bar inside the focused terminal;
@@ -2065,48 +2195,57 @@ shortcuts must then be added by hand.
 ## Commands
 
 The one way to change anything; keys, mods (`run(name, args)`), menus and
-you use the same list. `herdr-app commands` prints every one with its arguments
+you use the same list. `fireflies commands` prints every one with its arguments
 (which are required) and what it does. Unknown argument names are errors and list
 valid names; they never fall back to the current target. For example, closing a
-space uses `herdr-app do space.close --id <id> --confirmed true`, not `--space`.
+space uses `fireflies do space.close --id <id> --confirmed true`, not `--space`.
 Target IDs (`id`, `pane`, `space`, `terminal`) must be strings. Other non-null
 types are rejected before a current-target default applies; null means omitted.
 The main ones:
 
-- Spaces: `space.new {name?, folder?, tab?, argv?, task?, machine?}`
-  (machine: another machine from `hc machine ls`; omitted: the focused space's
+- Spaces: `space.new {name?, folder?, tab?, argv?, task?, machine?, focus?}`
+  (machine: another machine from `fireflies machine ls`; omitted: the focused space's
   machine for keys and clicks, this computer for scripts; `""`: this computer.
-  The space lives there, its
-  terminals start in that machine's home unless folder, and its tabs and
-  splits stay there; `spaces()` gives each space's `machine`, null here),
+  The space lives there, its tabs and splits stay there, and `spaces()` gives
+  each space's `machine`, null here. Without folder, its terminals start in
+  the focused terminal's folder when that terminal is on the same machine,
+  else in that machine's home),
   `space.close {id?, confirmed?}`, `space.rename {id?, name}` ("": Fireflies' name again),
   `space.folder {folder, id?}` (attach a space to a folder; its open terminals stay where they are),
   `space.move {id, index}`, `space.select {index | id}`, `space.next`, `space.prev`.
   With no `argv`, the target core chooses that machine's default shell (PowerShell 7 when available on Windows).
-- Tabs: `tab.new {name?, space?, folder?, argv?, task?}` (argv: an
+- Tabs: `tab.new {name?, space?, folder?, argv?, task?, focus?}` (argv: an
   agent to run, task: its first message). Agents run in your interactive
   shell (including fish), which stays open after the agent exits. A terminal
   that exits with a nonzero code within two seconds of launch shows an error
   toast with its exit code and last output lines. Or `tab.new {name?, space?, mod,
-  props?}` for a tab whose only pane is a mod (a file, a board; split a shell
+  props?, focus?}` for a tab whose only pane is a mod (a file, a board; split a shell
   in beside it like any tab), `tab.close {id?, confirmed?}` (closing the last tab
   closes its space and asks first unless confirmed; a tab holding an agent, whatever
   its status (idle too, or one a terminal there started), a program other than the
   shell in front or unsaved work asks the person first however it is closed (keys,
   menus, middle-click, a mod's `run`), naming the agents and counting them, and from a
   script fails unless confirmed; a tab of shells at their prompts just closes),
-  `tab.rename {id?, name}` ("": its number again), `tab.move {id, index?, space?}`
-  (index alone: its place in its space, 1 = first; with `space`, another space on
+  `tab.rename {id?, name}` ("": its number again), `tab.move {id?, index | by, space?}`
+  (id: default the active tab; index: its place in its space, 1 = first; by: places left (-)
+  or right (+), skipping settled tabs as `tab.next` does, wrapping; with `space`, another space on
   its machine: the whole tab goes there, every pane with its arrangement, sizes,
   parked panes and focus, terminals running on, at `index` (default: last), and
   is shown there; the space it leaves closes when that was its last tab),
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
   skip settled tabs).
+- New spaces and tabs are shown at once. `focus: false` on `space.new` or
+  `tab.new` keeps the shown space and the target space's selected tab (with no
+  space shown, the new space is shown), for work the person looks at later;
+  such tabs go last in their space, in the order made. `focus` is a boolean.
 - Panes: `pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}` (a new
   terminal, or a mod pane; left/up put it before the pane, left of or above it; "auto"
   alternates: below a pane whose parent split is side by side, right of one whose parent is
   stacked, right of a lone pane; keys too: `"pane.split:auto"`),
+  (`argv` starts in your interactive shell, for its PATH, and the pane ends with it, keeping its
+  exit code; that needs sh, bash, zsh, dash, ksh or fish: with other shells (nushell) and on
+  Windows `argv` runs directly),
   `pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}`
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
@@ -2114,7 +2253,7 @@ The main ones:
   (a pane holding an agent, whatever its status, or a mod pane holding unsaved work, an
   editor's, asks the person first, parked ones too; a script passes `confirmed`; a shell
   or another program closes without a word, so tool panes toggle quietly),
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`, `pane.resize {direction, step?, pane?}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`, `pane.resize {direction, step?, px?, pane?}` (step: a share of the tab, default 0.05; or px), `pane.rename {pane?, name}` ("": unnamed again; `panes()[i].name`, kept with its tab; Nocturne's pane header and tab strip show it, after a name given to the pane's terminal),
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
@@ -2137,6 +2276,8 @@ The main ones:
   `pane.unpark` cmd-alt-shift-m / ctrl-alt-shift-m; the pane menu has "Park pane", and Nocturne's pane header a park
   button before zoom (hidden on the tab's last pane in place).
   `terminal.park` is different: it takes a terminal out of every tab (no chip).
+  `pane.zoom` also makes the pane its tab's focused one (the tab isn't
+  selected); on the zoomed pane it unzooms and focus stays.
   `pane.go` prefers the most recently focused pane along the nearest edge in that
   direction; unvisited panes fall back to overlap, then top/left layout order.
   `pane.go` also reaches visible mods whose `mod.json` says `"focusable": true`, and
@@ -2191,7 +2332,10 @@ The main ones:
 - Terminals: `terminal.open {argv?, folder?, place?, name?, pane?}` (place: "tab" (default),
   "right" | "down" | "left" | "up" | "auto" of `pane` (default: the focused one; directions as
   `pane.split`), or "float"; `folder` sets the starting directory for tabs and splits, with or
-  without `argv`), `terminal.kill {terminal}`,
+  without `argv`; `argv` starts in your interactive shell wherever it goes: a tab's shell stays
+  after it, a split ends with it; only with sh, bash, zsh, dash, ksh or fish: other shells
+  (nushell) and Windows don't give `argv` that shell's PATH, and a split there runs `argv` directly),
+  `terminal.kill {terminal}`,
   `terminal.keep {terminal, place?, pane?}` (the same places, but no "float"), `terminal.park {terminal}`,
   `terminal.peek {terminal, float?}` (peek over the tab, with keep-as-tab, dock and close;
   `float: true` shows it as a floating terminal),
@@ -2216,7 +2360,9 @@ The main ones:
   terminal has null for both. The bar's props get `views` (the same names, or null), and the
   shipped bar shows a switch between them.
   `terminal.show {terminal?, pane?}`, `terminal.search` (screen and scrollback;
-  find bar state stays with that terminal), `terminal.copy`, `terminal.paste` (copied
+  find bar state stays with that terminal), `terminal.select_all {terminal?}` (selects the whole
+  screen and scrollback for copying; only the alternate screen in vim and similar apps;
+  Cmd+A on macOS, no default on Linux/Windows), `terminal.copy`, `terminal.paste` (copied
   files, such as Finder's or a clipboard manager's image, as if dropped; an image
   alone as `terminal.paste_image` pastes it), `terminal.paste_image` (Ctrl+V: an
   image, into a terminal on another machine: copied there, its path pasted; on
@@ -2230,6 +2376,19 @@ The main ones:
   history, not the program: negative lines or pages go up, toward history; pages may be
   fractional, one page is the terminal's rows; on the alternate screen, such as vim or less,
   there is no history, so nothing moves),
+  `terminal.select {terminal?, at?: {row, col} | "cursor", mode?: "cell" | "word" | "line"}`
+  (replaces the selection, at the program's cursor by default; word/line act like double/triple click),
+  `terminal.adjust_selection {terminal?, direction}` (left, right, up, down, page_up, page_down,
+  home, end, line_start, line_end; moves the selection's end and follows it in the view;
+  fails with no selection), `terminal.clear_selection {terminal?}`.
+  These default to the focused terminal, like scroll, and add no default keys or copy mode.
+  `terminal.copy` copies the focused terminal's selection. `terminals()` and `focused()` expose
+  `selection: {start: {row, col}, end: {row, col}} | null` when the selection changes.
+  Start at the cursor with `terminal.select`; use `selection.end` as a copy-mode cursor.
+  Cells are zero-based; rows count from the oldest retained history through the active screen,
+  so output doesn't move an existing position unless history is pruned or reflowed.
+  Selection endpoints are inclusive: start is the anchor, end is the moving end, even when reversed.
+  Selection is null when absent or when no terminal view is attached.
   `terminal.pin {terminal, pinned}` (pins an agent to the top of the agent lists;
   kept on the terminal as `herdr.pinned`, so every herdr-core client shows it, and
   gone when the terminal ends; read it as `agents()` `pinned`). Copy, paste, paste-image and implicit
@@ -2406,10 +2565,19 @@ The main ones:
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).
   Add machine lists all named ssh-config hosts in a scrollable list. Machines
-  that need a password, a new host key or herdr-core installed show what to run
-  in your own terminal; the picker updates once it is added. Other machines are
-  added quietly. Login guidance includes Copy. A machine that needs a login shows
-  `hc machine login <name>` with Copy in Settings > Machines, its sidebar group,
+  that need a password, a new host key or herdr-core installed offer Run in a
+  tab (the add in a terminal tab on this computer, where you answer it; the
+  dialog closes) and the command to copy; the picker updates once it is added.
+  Other machines are added quietly. The command names the hc the app runs by its
+  full path (`command -v hc` through `exec`, whose PATH has the core's folder
+  first), since a shell's PATH may have none; Settings > Machines' login line
+  If a Linux server reports that programs stop at logout, its
+  added card warns that agents stop when you disconnect and offers the administrator's
+  `sudo loginctl enable-linger -- <user>` command with Copy. A warning mark in
+  Settings > Machines and the sidebar opens that card; it clears automatically
+  after the administrator enables lingering. Older cores show no warning.
+  does the same. A machine that needs a login shows
+  `fireflies machine login <name>` with Copy in Settings > Machines, its sidebar group,
   the welcome screen and the failed New space toast. If a remote machine was rebuilt
   or replaced and a different core answers there, its sidebar offers Connect:
   explicitly forget the old identity and pair again with the same name and target.
@@ -2424,14 +2592,14 @@ command says what's missing.
 From a shell:
 
 ```sh
-herdr-app do tab.new --name "fix login" --argv '["claude"]' --task "look at the login bug"
-herdr-app do pane.split:right
-herdr-app ls          # spaces, their tabs and terminals (sub-agents under their parent)
-herdr-app status      # what's on screen: layout, focus, overlays, zoom, errors from files and mods
-herdr-app commands    # every command and its arguments
+fireflies do tab.new --name "fix login" --argv '["claude"]' --task "look at the login bug"
+fireflies do pane.split:right
+fireflies app ls      # spaces, their tabs and terminals (sub-agents under their parent)
+fireflies status      # what's on screen: layout, focus, overlays, zoom, errors from files and mods
+fireflies commands    # every command and its arguments
 ```
 
-`herdr-app do` prints what the command made (`{ "space", "tab",
+`fireflies do` prints what the command made (`{ "space", "tab",
 "terminal" }`, `{ "pane", "terminal" }`) or `{ "error": "..." }` and exits 1.
 
 ## The person: `settings.json`
@@ -2454,12 +2622,25 @@ list or a machine's rename first.
   When an agent needs the person, or finishes while they aren't looking at
   it, Fireflies plays a sound and (unless they're looking) posts a toast that
   goes there when clicked. `done` / `blocked` replace the bundled MP3s
-  (path absolute or relative to `~/.config/herdr-app`). Changes apply live,
+  (path absolute or relative to `~/.config/fireflies/app`). Changes apply live,
   including the Play buttons in Settings > Alerts.
 - `core`: the herdr-core binary to use, when it isn't where Fireflies looks
   (PATH, the login shell's PATH, `~/.local/bin`, Homebrew, mise, Nix,
   cargo). Read at start.
-- `font`, `font_size`, `ui_font`: used where the layout doesn't set its
+- `worktrees`: `{ "directory": "~/Developer/worktrees" }` sets where the git
+  window's Worktrees tab (New worktree) creates checkouts: `<directory>/<repo>/<branch>` (branch
+  slashes become dashes). Default: `~/.herdr/worktrees`. Use an absolute path or
+  `~` / `~/...`; Windows paths work too. The setting lives in this app's
+  settings.json; the path and `~` refer to the space's machine, including remote
+  spaces. Read when New worktree opens; existing checkouts are not moved, and
+  Open / Remove worktree still use Git's checkout list. No mod clones needed.
+  The app does not read the TUI's config.toml; set its `[worktrees] directory`
+  to the same place if both should create checkouts together.
+- `terminal_line_height` (default 1, 0.8..2), `terminal_cell_width`
+  (default 1, 0.8..2) and `terminal_scroll_speed` (default 1, 0.1..5):
+  terminal row height, column width and wheel/trackpad speed, used where the
+  layout leaves them unset.
+- `font`, `font_size`, `font_weight`, `ui_font`: used where the layout doesn't set its
   own. Fireflies (main) leaves these unset. Bigger panels: `zoom`.
 - `font_ligatures`: programming ligatures are off by default; set `true` to
   enable them in terminal fonts such as JetBrains Mono and Fira Code. The cursor
@@ -2475,6 +2656,9 @@ list or a machine's rename first.
   waiting, the next launch installs it before opening a window. The first
   start after an app update also updates herdr-core
   to the latest release of the same generation, keeping terminals running.
+  Package-managed cores stay with their package manager; Settings shows available releases.
+  A core update error can be dismissed with its × or `overlay.close {id:"core-update-error"}`
+  until the error changes or the update recovers.
   Settings → Updates keeps app and core actions together;
   its What's new button opens the waiting update's release range, or this
   version's notes, in the What's new window. Reading never clears the waiting-update dot.
@@ -2500,7 +2684,7 @@ list or a machine's rename first.
   macOS releases require Apple Silicon; Intel Macs must build from source.
   Keep signed macOS bundles unchanged: don't edit their Info.plist or
   re-sign them. On launch, an installed macOS bundle creates or repairs its
-  own `~/.local/bin/herdr-app` symlink, leaving personal files and other
+  own `~/.local/bin/fireflies`, `ff` and `herdr-app` symlinks, leaving personal files and other
   apps' links alone. Disk-image and translocated launches don't create it.
   Finder launches load the login shell's PATH, with the usual install
   folders as a fallback.
@@ -2564,6 +2748,13 @@ list or a machine's rename first.
   panes): `{ "hidden": true }` lists dotfiles, `{ "ignored": true }` files
   git ignores; both are left out when unset (the eye switches count what is
   left out). A pane's `H` / `I` switch overrides it for that pane.
+- `copy_on_select`: copy a mouse selection to the clipboard on release (default
+  `true`). Set `false` to leave the clipboard untouched while keeping the selection
+  visible; `terminal.copy` (Cmd+C/Ctrl+Shift+C) still copies it. On Linux, terminal
+  selections always set PRIMARY, independently of this setting. Middle-click
+  pastes PRIMARY on Linux, does nothing on macOS, and pastes the clipboard on
+  Windows. Programs that capture the mouse still receive middle-clicks.
+  Hold Shift while dragging in programs that capture the mouse.
 - `pane_scrollbars`: `false` hides the scroll position thumb at a terminal
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and
@@ -2585,7 +2776,7 @@ from one table, so every mod shows the same, and the app's own toasts
 else the program the terminal runs (an interpreter shows what it runs:
 `node .../vite` is Vite, `npx vitest` is Vitest); shells are `shell`,
 anything unlisted is `program` with a color of its own. The built-in table
-has 120 programs (agents, editors, runtimes, tools, databases, infra);
+has 124 programs (agents, editors, runtimes, tools, databases, infra);
 `programs.json` here adds to it or changes entries field by field:
 
 ```json
@@ -2599,7 +2790,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `icon`: a path in the home folder. `tint: true` for a one-color glyph
   (drawn in `color` on a tile, or the text color), false for a picture.
 - `match`: other process names (or agents' `app` names) for the entry.
-- `run`: how to start it (`["cursor-agent"]`), for agents people start
+- `run`: how to start it (`["agent"]` for Cursor), for agents people start
   from a menu: `knownAgents()` lists the entries with one, and whether this
   machine (or another) has them installed. For example, override
   `"claude": { "run": ["my-claude"] }` or add
@@ -2609,6 +2800,9 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   running the agent and leaves an interactive login shell when it ends.
   Codex starts as `codex --no-daemon`: a shared Codex daemon would make later
   sessions use the first terminal's identity and stop with it.
+  An explicit key still wins over another entry's `match`, so a personal
+  `"python3": { "name": "…" }` keeps its name; only the generic `agent`
+  fallback yields to a `match` (Cursor's process is `agent`).
   On remote Unix machines, both the installed-agent check and launcher load
   that user's login/interactive shell for sh, bash, zsh, dash, ksh and fish, so
   its PATH includes shell-configured tools. Other shells keep the sh launcher.
@@ -2622,9 +2816,10 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 ## Mods: `mods/<name>/`
 
 ```
-~/.config/herdr-app/mods/<name>/
-  main.js       the mod (required; or main.ts, TypeScript: see below; main.js wins if both)
-  mod.json    where it first appears: { "place": "right" | "left" | "top" | "bottom" | "none", "size": 320 }
+~/.config/fireflies/app/mods/<name>/
+  main.js       the mod's view, if it has one (or main.ts, TypeScript: see below; main.js wins if both)
+  link.js       the terminal link handler, if it has one
+  mod.json      where it first appears: { "place": "right" | "left" | "top" | "bottom" | "none", "size": 320 }
   *.js, *.ts, *.svg   more modules ("./ui.js", "./kit.ts"), its own icons
   bin/          programs its terminals run (a shipped mod's are installed executable;
                 start one as `${appHome()}/mods/<name>/bin/<program>`)
@@ -2693,7 +2888,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   (not files the app writes: `jsconfig.json`, `tsconfig.json`, `.d.ts`, hidden ones,
   `node_modules`). The old build's tasks and timers stop: a loop ends at its
   next `cx` use. A broken save keeps the old version running and shows in
-  `herdr-app status`; its top-level code has already run, so keep side effects
+  `fireflies status`; its top-level code has already run, so keep side effects
   on `globalThis` out of the module's top level.
 - A copy starts the first time it shows, then stays alive while its block is in
   the layout, shown or not (a hidden column, the other child of a stack, a pane
@@ -2701,7 +2896,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   timers keep running while hidden, so poll gently. Another layout starts its
   mods fresh (pane mods belong to their tab and stay); a block removed or given
   another mod or props starts over. `<mod>.<command>` reaches shown copies only.
-- Images and SVGs are referenced from `~/.config/herdr-app`:
+- Images and SVGs are referenced from `~/.config/fireflies/app`:
   `image("mods/<name>/logo.svg")` (full color), `svg("mods/<name>/icon.svg")`
   (tinted with the text color). Saving an asset under `mods/` updates every
   mod showing it, including images that were missing or invalid on first load.
@@ -2713,19 +2908,54 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   the + menu's New worktree, Open worktree and Remove worktree open it; the
   `worktree` mod is left as a stub that turns `openOverlay({mod: "worktree",
   props: {space, folder?, action, branch?, tab?, argv?}})` into the git
-  window with the same request. The `spaces` sidebar nests worktree spaces
+  window with the same request; checkouts go to `<worktrees.directory>/<repo>/<branch>`
+  on the space's machine (default `~/.herdr/worktrees`; see settings.json above). The `spaces` sidebar nests worktree spaces
   under their repo's and shows each space's repo, branch, ahead/behind and
   uncommitted changes. Shipped mods are Fireflies'; duplicate with `mod.clone`
   before editing.
 
+### Terminal link handlers
+
+In `mod.json`, declare what the mod can open:
+
+```json
+{"place":"none","link_handlers":[{"kind":"file","pattern":"(?i)\\.png$"}]}
+```
+
+Herdr offers the same URLs and paths it detects for native clicks, including
+recognized paths that are missing or remote. Rules use Rust regex search.
+File rules match decoded `file:` paths, and URL rules match the full URI.
+Each mod gets the link kind from its first matching rule. Plain paths use the
+native diagnostic suffix fallback. Bare filenames and backslash paths are skipped.
+The first time a mod has link rules on a personal layout, Herdr adds it to
+that layout. Edit `link_handlers` to reorder or remove it.
+
+Export `handleLink(click)` from `link.js` (it can be async). It receives
+`{link, source}` and can import the usual functions from `"herdr"`. The source
+names the clicked terminal and its machine, cwd, pane, tab and space.
+`link.raw` keeps the original text or the OSC 8 destination. `link.path` is
+null for remote, unresolved or non-UTF-8 paths. For a file URI, Herdr can verify
+a local path when the host is empty or `localhost`. A link handler starts without opening
+a view and shares `localStorage` with views of the same mod with null props.
+Return `"handled"` when done or `"pass"` to try the next matching mod.
+If all pass, a local terminal uses the usual opener target. A matched file
+from a remote terminal has no opener target. A load or handler error stops
+the click, shows a toast and appears in `fireflies status`.
+
 ### Check before you finish
 
 ```sh
-herdr-app check ~/.config/herdr-app/mods/<name>
+fireflies check ~/.config/fireflies/app/mods/<name>
 ```
 
-Loads the mod, renders it once, exits nonzero with the exact error. Run it
-after every change. Never call a mod done without a passing check.
+Loads and renders the mod's view if it has one. It checks link rules and
+verifies that `link.js` exports `handleLink` without running the module or
+its imports. It exits nonzero with the exact error. Run it after every change.
+
+`init()` runs for real during a check. Import `checking` from `"herdr"` and
+use `if (checking()) return;` before starting helpers or writing files.
+`checking()` is true throughout a check and false in a live window.
+`exec`, `hc` and `writeTextFile` still run during checks and warn when called.
 
 ### A mod
 
@@ -2771,7 +3001,8 @@ Rules:
   theme, shared state). Don't poll those.
 - Module code runs once per source version and is shared by copies, even after all
   copies close. Keep instance state and host calls in constructor/init, not module
-  scope. Each copy still gets its own instance, tasks and localStorage.
+  scope. Each copy gets its own instance and tasks. Views with the same mod
+  and props share live `localStorage` values.
 - **Never keep a `cx` and use it later.** Every callback gets its own:
   `on_click((event, cx) => …)`, `cx.spawn(async (cx) => …)`,
   `cx.timer.every(ms, (cx) => …)`.
@@ -2796,7 +3027,7 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   `.js` file imports a `.ts` one the same way. Import types with
   `import type` (or `import { type X }`): a plain import of a type stays in
   the code and fails at load.
-- Nothing checks types at run time. Check them: `herdr-app types <mod folder>`
+- Nothing checks types at run time. Check them: `fireflies types <mod folder>`
   writes `gpui-kit.d.ts` there (every module, `herdr` included) and the app
   writes a strict `tsconfig.json` into a `main.ts` mod's folder (never over
   yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod folder
@@ -2804,7 +3035,7 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   `tsconfig.json` next to this file, rewritten on every start, covers those
   mods against `gpui-kit.d.ts` and `herdr.d.ts` here, so an editor's
   language server finds their modules too (yours in its place is kept). A
-  mod in a repository of its own does the same: run `herdr-app types .` in
+  mod in a repository of its own does the same: run `fireflies types .` in
   it after each Fireflies update and keep both files out of git.
 - `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
   parsed from `exec` or a file are `unknown`: another mod or an older version
@@ -2871,8 +3102,13 @@ the source); a mod of yours may use it or not.
   `runtime.now(effect)` reads in a render. `Effect.sleep` and schedules run
   on `cx.timer` (there is no `setTimeout`).
 - Its services stand for the app: `Exec` (`execOk`, `execJson(schema)`),
-  `Files`, `Shared` with `sharedKey(name, schema)`, `Commands`, `Workspace`,
-  `Notify`; tests provide `@fireflies/kit/testing`'s layers instead.
+  `Hc` for herdr-core (`hcOk`, `hcJson(schema)`), `Files` (`read`, `write`,
+  `list` a folder), `Shared` with `sharedKey(name, schema)`, `Commands`,
+  `Workspace` (`focused`, `agents`, …), `Notify`; tests provide
+  `@fireflies/kit/testing`'s layers instead. A list or map other mods write
+  to: `sharedKey(name, listOf(item))` / `mapOf(entry)`, read entry by entry.
+  `here` / `hereOf` give the folder for a pane opened without one;
+  `localStamp(ms)` prints a local "2026-11-16 14:05" (the engine has no `Intl`).
 - Decode what comes from outside with Schema: `decodeJson(schema, what)`,
   `decode(schema, what)`; a value of another shape is a `DecodeError` naming
   `what`.
@@ -2891,7 +3127,7 @@ the source); a mod of yours may use it or not.
   `@fireflies/editor-route` (`openInEditor`: a file to the editor as a tab),
   `@fireflies/envrc` (a folder's direnv environment), `@fireflies/scratch`
   (the scratchpad's note), `@fireflies/toolground`, `@fireflies/usage-limits`.
-- A mod in a repository of its own: `herdr-app types <dir>` also writes the
+- A mod in a repository of its own: `fireflies types <dir>` also writes the
   `@fireflies/*` libraries into `<dir>/node_modules/@fireflies/` (types and
   test code); install `effect` from npm at the version the kit's
   package.json names as its peer. Keep the entry (`main.ts`) free of these
@@ -2916,8 +3152,22 @@ in init, `.track_focus(this.h).on_key_down((e, cx) => …)`, `this.h.focus()`.
 in `init`, attach `.track_scroll(this.scroll)`, then call
 `this.scroll.scroll_to_item(index)` to reveal a zero-based direct child with
 only the movement needed. Requests run once after layout; visible children stay put.
+Lazy lists: `list` and `uniform_list` come from `gpui-kit`, where `div` is;
+`v_virtual_list` and `h_virtual_list` come from `gpui-base`. They need a
+definite height from their container: a `flex_1()` chain with no explicit
+`h(n)` anywhere lays out at zero and draws nothing. `track_scroll` works on a
+plain scroll area and the virtual-list pair; `list` and `uniform_list` keep
+their own position, so pair a `Scrollbar` of the same id instead.
 `.on_drop((event, cx) => …)` on a plain layout element receives external files as
 `event.paths` (absolute paths).
+`.id("file-row").drag_paths([absolutePath], { on: machine })` makes a plain layout
+element a file/folder drag source for terminals. Omit `on` (or use null)
+for local paths; remote paths retain their source machine. Ordinary clicks
+still work; dropping outside a terminal cancels without pasting.
+A terminal on the source machine receives quoted paths without Enter.
+Local files dropped onto a remote terminal are copied there like an OS file
+drop; local folders and remote paths dropped onto another machine are refused.
+Paths containing control characters are rejected, including clipboard files.
 `.on_hover((hovered, cx) => …)` reports pointer entry and exit on buttons
 and other interactive controls too.
 `.when(cond, (el) => …)`, `.children([...])`. Controls from `gpui-base`
@@ -3052,6 +3302,12 @@ All of it is in `herdr.d.ts`. In short:
   and trees above 4096 non-ignored directories reject the watch; use a timer fallback.
   macOS and Windows watch recursively, including ignored directories.
   A returned root path means refresh everything (the pending paths are bounded).
+  At most 64 folders can have pending watches at once; further folders reject.
+  Idle watches can be reclaimed to make room, so reload when starting a watch.
+  The returned promise also has `cancel()`: keep it and cancel when you stop
+  showing the folder. Cancellation resolves with `[]` and releases this call
+  without stopping other callers: `const watch = watchFolder(dir); watch.cancel();`.
+  Closing a mod copy cancels its pending calls.
   Files also refreshes on its 10-second timer:
   `cx.spawn(async (cx) => { for (;;) { await watchFolder(dir); this.reload(); cx.notify(); } })`.
 - Code (this machine): `highlight(text, language)` (tree-sitter spans `[start, end, name]`
@@ -3070,28 +3326,35 @@ All of it is in `herdr.d.ts`. In short:
   gets every keystroke first and may take it (`on("key")`, a modal scheme's), shapes its caret
   (`set_cursor_shape`) and sets several selections (`set_selections`).
   `setUnsaved(note)`: closing this copy's pane or tab asks the person first.
+- Window title: `setWindowTitle(title)` sets the OS window's title, which window switchers,
+  taskbars and time trackers read. The last call wins; `null` restores `Fireflies`. Call it when the
+  title changes, not on every render.
+- App icon badge: `setBadge(text)` puts `text` on the app's Dock icon (macOS; other platforms
+  ignore it), e.g. `setBadge(blocked ? String(blocked) : null)`. The last call wins; `null` or `""`
+  clears it.
 - `notify({ ..., action: { name, args } })`: the toast runs the command when clicked.
 - This copy: `props()`, `shared(key)` / `setShared(key, value)` (every mod
   sees it; setting re-renders all), `nextCommand()` (key commands for this
   mod: `cx.spawn(async (cx) => { for (;;) { const c = await nextCommand(); …; cx.notify(); } })`).
 
 Mods are trusted code: commands and network access (including `fetch`) are unrestricted.
-Other built-ins: `localStorage` (per mod and props: a copy opened again with the same
-props, in any key order, after a restart too, finds what it kept), `console.log`, `fetch`,
-`import * as fs from "fs/promises"` (read in home, write under `~/.config/herdr-app`).
+Other built-ins: `localStorage` (per mod and props, shared by its copies with the same props: a copy
+opened again with the same props, in any key order, after a restart too, finds what it kept), `console.log`, `fetch`,
+`import * as fs from "fs/promises"` (read in home, write under `~/.config/fireflies/app`).
 
-## herdr-core (`hc`)
+## herdr-core (`fireflies`, also `hc`)
 
-`herdr-app --skill` prints the manual for driving this window;
-`hc --skill` prints the manual for running and coordinating programs and agents,
+`fireflies --skill` prints the manual for driving this window;
+`fireflies core --skill` (`hc --skill`) prints the manual for running and coordinating programs and agents,
 including a small herdr-core skill you can install with the user's permission.
-`herdr-app commands` lists app commands and arguments without needing an open window.
+`fireflies commands` lists app commands and arguments without needing an open window.
 
-- `hc ls --json`, `hc read t3 --lines 50`, `hc run --json --cwd <dir> --label k=v -- <cmd>`,
-  `hc label t3 k=v`, `hc send t3 "text"`, `hc wait t3`. `hc --help` for all.
-- Other machines: `hc machine ls`; `hc run --on <machine> ...` starts a
-  terminal there (`vps/t7`), `hc exec --on <machine> git status` runs one
-  command there and prints exactly its output.
+- `fireflies ls --json`, `fireflies read t3 --lines 50`, `fireflies run --json --cwd <dir> --label k=v -- <cmd>`,
+  `fireflies label t3 k=v`, `fireflies send t3 "text"`, `fireflies wait t3`. `fireflies --help` for all.
+- Other machines: `fireflies machine ls`; `fireflies run --on <machine> ...` starts a
+  terminal there (`vps/t7`), `fireflies exec --on <machine> git status` runs one
+  command there and prints exactly its output. `fireflies` is this machine's
+  command: on the other machine the core is `hc`.
 
 ## Keep in mind
 

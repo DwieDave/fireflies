@@ -16,8 +16,10 @@ import type { Guard, Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
 import { api, ghRun, fileAt, slimmed } from "./gh.ts";
-import type { Job, LogLine, Needs, NeedsOf, Run, Step } from "./model.ts";
-import { pollEvery, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
+import type { Expected, RunAction } from "./run-actions.ts";
+import { paced, runAction, settled } from "./run-actions.ts";
+import type { Job, Needs, NeedsOf, Run, Step } from "./model.ts";
+import { pollEvery, jobColumns, jobParents, needsFromWorkflow, splitLog, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
 import type { Hint } from "./kit.ts";
 import { splitter, unzoom } from "./kit.ts";
 import type { Parents } from "./graph.ts";
@@ -28,6 +30,8 @@ import { DispatchForm } from "./dispatchForm.ts";
 import type { Host, ReadOptions, RunFilter } from "./host.ts";
 import type { KeyRow } from "@fireflies/keyhelp";
 import { runsPanel, graphPanel, stepsPanel, logPanel } from "./actions-panels.ts";
+import type { FoldedLog } from "./log-fold.ts";
+import { foldLog, groupAt, toggleFold } from "./log-fold.ts";
 
 export const ROW = 38, STEP = 24, LINE = 18;
 
@@ -113,8 +117,7 @@ interface Drag {
   readonly from: { readonly x: number; readonly y: number };
 }
 
-/** A run's re-run or cancel. */
-type RunAction = "failed" | "all" | "cancel" | "job";
+
 
 export default class Actions {
   readonly app: Host;
@@ -149,6 +152,8 @@ export default class Actions {
   needsAt = new Map<string, number>();
   logs = new Map<number, JobLog>();
   logBusy = new Set<number>();
+  /** The log's opened groups, "job:step:line" (log-fold.ts: groups start folded). */
+  opened = new Set<string>();
 
   /** Runs opened from a PR's checks that the list doesn't hold. */
   extra = new Map<number, Run>();
@@ -180,6 +185,9 @@ export default class Actions {
 
   /** A dispatch sent, its run not listed yet. */
   waiting: Waiting | null = null;
+
+  /** A re-run (live) or cancel (not live) GitHub took and the list doesn't show yet: read again soon. */
+  expected: Expected | null = null;
 
   /** The other tab's read behind this one, while it runs. */
   warming: Promise<void> | null = null;
@@ -342,9 +350,10 @@ export default class Actions {
     return r && jobs ? jobParents(jobs, this.needs.get(this.needsKey(r)) ?? null) : null;
   }
 
-  /** Runs and the selected run's jobs: what's moving decides the pace. */
+  /** Runs and the selected run's jobs: what's moving decides the pace; a re-run or cancel GitHub
+   *  doesn't show yet is read again sooner (run-actions.ts). */
   interval(): number {
-    return pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]);
+    return paced(this.expected, pollEvery([...(this.runs ?? []).slice(0, 10), ...this.extra.values(), ...(this.jobsOf(this.run()) ?? [])]));
   }
 
   live(): boolean {
@@ -378,6 +387,7 @@ export default class Actions {
 
     this.runsCache.set(branch, { list: data ?? [], etag, at: Date.now() });
     this.useRuns();
+    this.expected = settled(this.expected, this.list());
 
     if (this.sel === null || !this.list().some((r) => r.id === this.sel)) this.sel = this.list()[0]?.id ?? null;
 
@@ -557,7 +567,7 @@ export default class Actions {
    *  item only moves as far as it takes to show that line, so going down asks
    *  for the line that ends up at the bottom edge. */
   scrollLog(d: number): void {
-    const n = this.logLines().length;
+    const n = this.logView().lines.length;
 
     if (!n) return;
 
@@ -570,35 +580,26 @@ export default class Actions {
     else this.logScroll.scroll_to_item(Math.min(n - 1, top + vis - 1), "top");
   }
 
-  /** The chosen step's log lines, formatted. */
-  logLines(): LogLine[] {
+  /** The chosen step's log as drawn: its groups folded unless opened, and its whole length. */
+  logView(): FoldedLog {
     const j = this.job(), s = this.step(), got = j ? this.logs.get(j.id) : undefined;
 
-    if (!got || "error" in got || !s) return [];
+    if (!j || !got || "error" in got || !s) return { lines: [], total: 0 };
 
-    return (got.get(s.number) ?? []).flatMap((l) => {
-      const line = logLine(l);
-
-      return line ? [line] : [];
-    });
+    return foldLog(got.get(s.number) ?? [], (at) => this.opened.has(`${j.id}:${s.number}:${at}`));
   }
 
-  act(what: RunAction, cx: Context): void {
-    const r = this.run(), repo = this.app.repo;
+  /** Opens or folds a group of the chosen step's log: its title's line number, the first from the view's top down, or every group. */
+  toggleGroup(at: number | "top" | "all"): void {
+    const j = this.job(), s = this.step(), lines = this.logView().lines;
+    const n = at === "top" ? groupAt(lines, this.logTop())?.at : at;
 
-    if (!r || !repo) return;
+    if (j && s && n !== undefined) toggleFold(this.opened, `${j.id}:${s.number}:`, lines, n);
+  }
 
-    const t = `#${r.run_number ?? ""} ${r.name ?? ""}`;
-    const forget = () => this.jobs.delete(r.id);
-
-    if (what === "failed") this.app.ask(`Re-run the failed jobs of ${t}?`, () => this.app.act(ghRun(repo, ["run", "rerun", String(r.id), "--failed"]), `Re-running failed jobs of ${t}.`, cx, forget));
-    else if (what === "all") this.app.ask(`Re-run every job of ${t}?`, () => this.app.act(ghRun(repo, ["run", "rerun", String(r.id)]), `Re-running ${t}.`, cx, forget));
-    else if (what === "cancel") this.app.ask(`Cancel ${t}?`, () => this.app.act(ghRun(repo, ["run", "cancel", String(r.id)]), `Cancelling ${t}.`, cx));
-    else {
-      const j = this.job();
-
-      if (j) this.app.ask(`Re-run the job "${j.name ?? ""}"?`, () => this.app.act(ghRun(repo, ["run", "rerun", "--job", String(j.id)]), `Re-running ${j.name ?? ""}.`, cx, forget));
-    }
+  /** R / A / e / X (run-actions.ts). */
+  act(what: RunAction, _cx: Context): void {
+    runAction(this, what);
   }
 
   key(k: string, e: KeyEvent, cx: Context): boolean | "typing" {
@@ -627,6 +628,8 @@ export default class Actions {
     else if (f === "log" && (k === "h" || k === "left")) this.focus = "steps";
     else if (f === "log" && (k === "g" || k === "home")) this.scrollLog(-1e9);
     else if (f === "log" && (k === "G" || k === "end")) this.scrollLog(1e9);
+    else if (f === "log" && (k === "enter" || k === "space")) this.toggleGroup("top");
+    else if (f === "log" && k === "z") this.toggleGroup("all");
     else if (k === "J" || k === "pagedown") this.scrollLog(20);
     else if (k === "K" || k === "pageup") this.scrollLog(-20);
     else if (k === "w") this.nextRunning(cx);
@@ -671,13 +674,14 @@ export default class Actions {
 
     if (f === "steps") return [["j/k", "step"], ["l", "log"], ["J/K", "scroll log"], ["h", "jobs"], ["?", "keys"]];
 
-    return [["j/k", "scroll"], ["J/K", "page"], ["g/G", "top/end"], ["h", "steps"], ["?", "keys"]];
+    return [["j/k", "scroll"], ["J/K", "page"], ["g/G", "top/end"], ["enter", "fold"], ["z", "all groups"], ["h", "steps"], ["?", "keys"]];
   }
 
   static help(): KeyRow[] {
     return [
       ["j k ↓ ↑", "move: runs, steps; scroll the log"], ["h l ← →", "out / in: runs → jobs → steps → log"], ["hjkl (jobs)", "move through the graph"],
       ["enter tab ⇧tab", "in / next / previous panel"], ["esc", "back out"], ["J K pgdn pgup", "page the log"], ["g G home end", "first / last"],
+      ["enter space (log)", "open / fold the first group in view (a click on its title too)"], ["z (log)", "open / fold every group of the step"],
       ["w", "next running run"], ["n", "run a workflow by hand (workflow_dispatch)"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
       ["X", "cancel the run"], ["o", "in the browser"], ["r", "refresh now"],
       ["drag scroll", "move the graph (double-click: back)"],

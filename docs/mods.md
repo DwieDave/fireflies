@@ -4,6 +4,11 @@ You can change the whole window, not just its colors. Layouts arrange it; mods d
 
 Read the [layout and mod guide](../defaults/AGENTS.md). This is the same guide Fireflies writes into your app home on every start, so people and agents work from one source of truth.
 It covers layouts, settings, keys, overlays, mod code and the app API.
+
+For live folder updates, `watchFolder(path)` returns an awaitable promise with
+`cancel()`. Keep the promise and cancel it when the folder is no longer shown;
+it resolves with `[]` and releases that call without stopping other mods' watches.
+
 The generated `herdr.d.ts` and `gpui-kit.d.ts` beside your installed guide describe the full API for your version.
 
 Start with Settings for fonts, colors and sounds.
@@ -12,7 +17,7 @@ Shipped files update on start; personal copies do not.
 Save to reload. Check for errors, even when the old screen still looks fine.
 
 ```sh
-fireflies check ~/.config/herdr-app/mods/my-panel
+fireflies check ~/.config/fireflies/app/mods/my-panel
 fireflies status
 ```
 

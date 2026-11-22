@@ -100,12 +100,12 @@ name). Three entries:
 | file | what |
 |---|---|
 | `errors.ts` | `ExecError`, `ExitError`, `FileError`, `StaleFile`, `DecodeError`, `HeaderScriptExit`, `CurlFailed`: branded `Schema.TaggedError`s with a `message`; `lastLine`, `causeMessage` |
-| `schema.ts` | `decode(schema, what)`, `decodeJson`, `decodeJsonOption`, `encodeJson`; `sharedKey(name, schema)`, `readShared`, `readSharedOption`, `writeShared` (render-side, over herdr's `shared`) |
-| `services.ts` | `Exec` (+ `execOk`, `execJson`), `Files`, `Shared` (+ `sharedOr`), `Commands`, `Workspace`, `Notify` |
-| `runtime.ts` | `modRuntime(layer)`, `ViewFx` (`run`, `now`, `close`, `running`), `Redraw` / `redraw`, `hostClock`, `describe`, `localTime` |
+| `schema.ts` | `decode(schema, what)`, `decodeJson`, `decodeJsonOption`, `encodeJson`; `listOf(item)`, `mapOf(entry)`; `sharedKey(name, schema)`, `readShared`, `readSharedOption`, `writeShared` (render-side, over herdr's `shared`) |
+| `services.ts` | `Exec` (+ `execOk`, `execJson`), `Hc` (+ `hcOk`, `hcJson`), `Files` (`read`, `write`, `list`), `Shared` (+ `sharedOr`), `Commands`, `Workspace` (+ `agents`, `focused`; `here` / `hereOf`), `Notify` |
+| `runtime.ts` | `modRuntime(layer)`, `ViewFx` (`run`, `now`, `close`, `running`), `Redraw` / `redraw`, `hostClock`, `describe`, `localTime`, `localStamp` |
 | `http.ts` | `fetchClient(fetch)`, `curlClient(run, { headersFrom, seconds })`, `policy({ timeout, retries, base, longest, statuses })`, `retryAfter` |
-| `live.ts` | `ExecLive`, `FilesLive`, `SharedLive`, `CommandsLive`, `WorkspaceLive`, `NotifyLive`, `HttpLive`, `Live`, `toast` |
-| `testing.ts` | `execTest(handler)`, `sharedTest()`, `filesTest()`, `workspaceTest(look)`, `commandsTest(queue)`, `notifyTest()`, `httpTest(answer)` |
+| `live.ts` | `ExecLive`, `HcLive`, `FilesLive`, `SharedLive`, `CommandsLive`, `WorkspaceLive`, `NotifyLive`, `HttpLive`, `Live`, `toast` |
+| `testing.ts` | `execTest(handler)`, `hcTest(handler)`, `sharedTest()`, `filesTest(files, folders)`, `workspaceTest(look)`, `commandsTest(queue)`, `notifyTest()`, `httpTest(answer)` |
 | `engine-globals.d.ts` | the web types Effect's declarations name (types only; the engine has none of them) |
 
 ### Running effects from a view
@@ -223,10 +223,47 @@ HttpClientResponse.schemaBodyJson(ClaudeAnswer)(response)  // a SchemaError sayi
 | `oneOf(a, b)` | `Schema.Union([a, b])` (first match wins: a member with more fields first) |
 | `parseJson(text, g)` | `decodeJson(schema, what)` (an Effect), `decodeJsonOption(schema)` (a render) |
 | `sharedKey(name, g)` / `readShared` | `sharedKey(name, schema)` / `readShared`, or `Shared.get(key)` in an effect |
+| `sharedListKey(name, g)` / `readSharedList` | `sharedKey(name, listOf(x))` / `readShared(shared, key, [])` |
+| `sharedMapKey(name, g)` / `readSharedMap` / `writeSharedMap` | `sharedKey(name, mapOf(x))` / `readShared(shared, key, new Map())` / `writeShared` |
+| `parseJsonMap(text, g)` | `decodeJsonOption(mapOf(x))(text)` |
 
 A `Schema.Struct` keeps only its fields (others are dropped, where a guard
 kept the object as it was): a value written back whole must carry every
 field its schema names. A key's value encodes through its schema on write.
+
+**Lists and maps other mods write to** (pinned panes, a folder's last
+state, slots' titles): `listOf(item)` and `mapOf(entry)` are schemas that
+read such a value entry by entry, leaving out an entry of another shape
+instead of the whole value. `mapOf` reads an object keyed by data as a
+`ReadonlyMap` and writes it as an object again. Being schemas, they work
+wherever one does: a plain `sharedKey`, `Shared.get` in an effect,
+`decodeJson` for a file. A value that isn't a list or an object at all, or
+an entry its own schema can't encode on write, fails as any schema does.
+
+### The app beyond programs and files
+
+- **herdr-core**: `Hc` runs `hc` (herdr's `hc(args)`: the app finds the
+  binary, which isn't on every PATH), its own service so an effect's type
+  says it talks to the core. `hcOk(args)` asks exit 0 (an `ExitError`
+  names the subcommand: `hc read`), `hcJson(schema, what)(args)` decodes
+  (pass `--json`). Tests: `hcTest((args) => result)`, `calls` records each.
+- **Folders**: `Files.list(dir)`, a folder's names sorted, `Option.none()`
+  when it isn't there, a `FileError` for a file or a path the mod may not
+  read (the engine's fs/promises behind it, so a mod imports no node
+  builtin). `filesTest(files, folders)` answers from its paths.
+- **What has the keyboard**: `Workspace.focused` (none before the window
+  has a space) and `Workspace.agents`, each in `workspaceTest(look)`.
+- **The folder for a pane opened without one** (`mod.open`, `pane.split
+  {mod}`): `here` (an effect over `Workspace`) and `hereOf({ spaces, panes,
+  focused })` (a render) give `{ folder: Option<string>, on }` by one rule:
+  the shown space's own folder (one chosen for it), else the focused
+  terminal's, else a terminal's in the shown tab, else the space's folder.
+  scripts/here.ts was its first copy; scripts, finder, file-tree, git,
+  github and databases use this one.
+- **Local dates**: `localTime(ms)` gives year, month (1 to 12), day, hours,
+  minutes, seconds, weekday and the zone's offset; `localStamp(ms, {
+  seconds, zone })` prints "2026-11-16 14:05" (`… 14:05:09 +0100`). The
+  engine has no `Intl`, so no mod prints with `Date` itself.
 
 ### HTTP
 
@@ -319,7 +356,7 @@ mod's tsconfig naming the plugin for its options:
 ```
 
 Its severities in the editor follow the plugin options; the lint is the
-gate. For an installed mod (no node_modules), `herdr-app types` would have
+gate. For an installed mod (no node_modules), `fireflies types` would have
 to write `effect`'s .d.ts and the kit beside gpui-kit.d.ts: mod-types' to
 settle with this contract.
 
@@ -330,13 +367,13 @@ runs in the same engine: the app serves it `effect`, `effect/http` and the
 `@fireflies/*` libraries by name, as it serves the shipped mods. What the
 repository needs around that:
 
-- **Typings and test code for the libraries.** `herdr-app types <dir>` (what
+- **Typings and test code for the libraries.** `fireflies types <dir>` (what
   such a repository already runs after each Fireflies update) also writes
   every `@fireflies/*` library, as that build serves it, into
   `<dir>/node_modules/@fireflies/<name>/` (sources, package.json, .d.ts; src/mods.rs
   `write_library_types`). They are TypeScript, so the same files are the
   types tsc and oxlint read and the code bun tests run. fireflies-k8s runs
-  `herdr-app types types`, so its tsconfig maps them:
+  `fireflies types types`, so its tsconfig maps them:
 
   ```jsonc
   "paths": { "@fireflies/*": ["./types/node_modules/@fireflies/*"] },
@@ -378,8 +415,8 @@ repository needs around that:
   }
   ```
 
-  Not a top-level `await import(…)`: `herdr-app check` hangs on one. Seen:
-  with this entry `herdr-app check` passes on an app from before the
+  Not a top-level `await import(…)`: `fireflies check` hangs on one. Seen:
+  with this entry `fireflies check` passes on an app from before the
   libraries (integrate's build of 2026-11-16 18:15) and on this branch's;
   the sentence itself wasn't seen in a window. The engine allows `import()`
   on purpose (gpui-shell's sandbox, §18.2).
@@ -630,6 +667,7 @@ What a read of them showed, and what closed each:
 | A turned picture's wrapper SVG, the same: a failed write left `src` naming a file that isn't there (a blank picture) | viewer-load `drawCopy` | as above (`writeOnce`) |
 | A program's answer in another form (no size and count lines) surfaced only as a thrown `TypeError` | viewer-text `loadText` / `loadLook` | `headLines` fails with a `DecodeError` naming what came back (test: "a file whose reading breaks says so") |
 | A bug's throw in a read was reported whatever file it was for | viewer-load | `runRead` catches defects with the same `gen` check |
+| A picture's head (256 KB, 800 KB of `od` text) was joined, split and parsed in one turn: under load the engine's turn budget (500 ms a task) cut it off, uncatchably, and the pane said "Reading…" for ever (seen by wave 1's panes firefly) | viewer-load `loadCopy` | a kind reads only the first bytes it needs (a PDF or a font 16, a PNG, ICO or SVG 4 KB, a BMP or WebP 64; a JPEG, GIF, TIFF or HEIF the most: image.ts `headBytes`); the text is parsed 64 KB a turn (`hexBytesIn`, a timer between slices); each read has a watchdog that knows its waits on the app (`ReadProgress`), and a read neither waiting nor moving for three seconds says it was cut off (tests: preview-turns.test.ts) |
 | The native views' answers and events, the props a host passes, the titles and paths in `shared()`: guards from each mod's own guard.ts | viewer-state | `PdfFactsSchema`, `MediaFactsSchema`, `NativeEventSchema`, `ViewerPropsSchema`; the slot maps read entry by entry (`readSharedMap`), one in another shape left out, not the map |
 | The commands loop, the native events loop, the remote file's 4 s poll and the folder watch were `cx.spawn` / `cx.timer.every`: nothing stopped them when the preview pane closed | viewer.ts `init` | runs on the view's runtime; `close()` interrupts them (the poll's sleeps are cancelled with it) |
 | The PDF view's re-ask counted its own asks (`pdfAsk`); the player's length polled itself through 20 nested timers | viewer-native | a keyed run (`pdf-later`, latest wins) and one fiber that asks, then every 250 ms, 21 times at most |

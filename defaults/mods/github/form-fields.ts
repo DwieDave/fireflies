@@ -133,7 +133,7 @@ export interface FormSpec<R> {
 /** What a form asks of the window: the keyboard back, and work in the background. */
 export interface FormHost {
   focusSelf(): void;
-  spawn(cx: Context, fn: () => Promise<void>): void;
+  spawn(cx: Context, fn: (cx: Context) => Promise<void>): void;
 }
 
 export const isText = (f: Field): f is TextField | AreaField => f.kind === "text" || f.kind === "number" || f.kind === "area";

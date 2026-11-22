@@ -2,25 +2,85 @@
 // what the worktree dialog and Nocturne's worktrees pane did, here. Every
 // checkout of the repo, the main one first, then by their branch's last
 // commit; which spaces show each one and which agents work in it; new ones
-// go to <home>/.herdr/worktrees/<repo>/<branch> on the repo's machine and
-// open as a space; removing closes the spaces in it first, says what would
+// go to <worktrees.directory>/<repo>/<branch> on the repo's machine (settings.json,
+// default ~/.herdr/worktrees) and open as a space; removing closes the spaces in it first, says what would
 // be lost (uncommitted changes, submodules, commits in them pushed nowhere)
 // and can take the branch along.
 
 import { Array as Arr, Effect, Option, Order, Schema, String as Str } from "effect";
-import { home, spaces, panes, agents } from "herdr";
+import { home, spaces, panes, agents, appHome, window } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo } from "herdr";
-import { Exec, ExitError } from "@fireflies/kit";
+import { Exec, ExitError, Files, decodeJsonOption } from "@fireflies/kit";
 import type { ExecError } from "@fireflies/kit";
 import type { Git, GitError } from "./git.ts";
 import { nonBlank } from "./git.ts";
 import type { Worktree } from "./parse.ts";
 import { WorktreeFields, baseName, parseWorktrees } from "./parse.ts";
 
-/** Where new checkouts go: <ROOT>/<repo>/<branch, slashes as dashes>. */
+/** Where new checkouts go without a setting: <ROOT>/<repo>/<branch, slashes as dashes>. */
 export const ROOT = (userHome: string): string => `${userHome}/.herdr/worktrees`;
 
-export const slug = (branch: string): string => Str.replace(/^-+|-+$/g, "")(Str.replace(/[^A-Za-z0-9._-]+/g, "-")(branch));
+/** settings.json's `worktrees.directory` isn't a folder new checkouts can go to (or the file can't be read). */
+export class WorktreeSetting extends Schema.TaggedError<WorktreeSetting, { readonly brand: unique symbol }>()("WorktreeSetting", {
+  message: Schema.String,
+}) {}
+
+const settingError = (message: string) => WorktreeSetting.make({ message });
+
+/** settings.json: any object. */
+const anySettings = decodeJsonOption(Schema.Record(Schema.String, Schema.Unknown));
+
+/** What rootFor reads of settings.json: `worktrees.directory`, a string where set. */
+const worktreeSettings = decodeJsonOption(Schema.Struct({
+  worktrees: Schema.optionalKey(Schema.Struct({ directory: Schema.optionalKey(Schema.String) })),
+}));
+
+const slashes = Str.replace(/\\/g, "/");
+
+/** The folder new checkouts go to: settings.json's `worktrees.directory`
+ *  (absolute, or `~` / `~/…` on the repo's machine: `userHome`), else ROOT.
+ *  A setting that isn't a usable path, or a settings.json that can't be
+ *  read, fails with what to fix. */
+export function rootFor(userHome: string): Effect.Effect<string, WorktreeSetting, Files> {
+  return Effect.gen(function* () {
+    const raw = Option.getOrElse(yield* Files.use((f) => f.read(`${appHome()}/settings.json`)), () => "{}");
+
+    if (Option.isNone(anySettings(raw))) return yield* settingError("settings.json has errors: fix it first.");
+
+    const settings = worktreeSettings(raw);
+
+    if (Option.isNone(settings)) return yield* settingError("worktrees.directory must be a non-empty path.");
+
+    const directory = settings.value.worktrees?.directory;
+
+    if (directory === undefined) return ROOT(userHome);
+
+    if (Str.isEmpty(Str.trim(directory))) return yield* settingError("worktrees.directory must be a non-empty path.");
+
+    const path = slashes(directory);
+    const absolute = path === "~" || Str.startsWith("~/")(path) ? Str.replace(/\/$/, "")(slashes(userHome)) + Str.slice(1)(path) : path;
+
+    if (!Str.startsWith("/")(absolute) && !/^[A-Za-z]:\//.test(absolute)) return yield* settingError("worktrees.directory must be an absolute path or start with ~/.");
+
+    return Str.replace(/\/+$/, "")(absolute);
+  }).pipe(Effect.catchTag("FileError", (e) => settingError(`settings.json can't be read: ${e.message}`)));
+}
+
+/** A branch's folder name: letters (any script, with their combining marks),
+ *  digits, `.`, `_` and `-`, the rest as dashes; a name of symbols only gets
+ *  a hash of itself, so two such branches never share a folder. */
+export const slug = (branch: string): string => {
+  const normalized = Str.normalize("NFC")(branch);
+  const name = Str.replace(/^-+|-+$/g, "")(Str.replace(/[^\p{L}\p{M}\p{N}._-]+/gu, "-")(normalized));
+
+  if (Str.isNonEmpty(name)) return name;
+
+  let hash = 2166136261;
+
+  for (const char of normalized) hash = Math.imul(hash ^ (char.codePointAt(0) ?? 0), 16777619);
+
+  return `branch-${Str.padStart(8, "0")((hash >>> 0).toString(16))}`;
+};
 
 /** `p` is `dir` or under it. */
 export const inside = (p: string | null | undefined, dir: string | null | undefined): boolean => {
@@ -245,13 +305,22 @@ export function mainOf(g: Git): Effect.Effect<string, GitError, Exec> {
 }
 
 /** Where a new checkout of `branch` goes. */
-export function pathFor(g: Git, branch: string): Effect.Effect<string, GitError, Exec> {
+export function pathFor(g: Git, branch: string): Effect.Effect<string, GitError | WorktreeSetting, Exec | Files> {
   return Effect.gen(function* () {
     const main = yield* mainOf(g);
-    const userHome = yield* userHomeOn(g.on);
+    const root = yield* rootFor(yield* userHomeOn(g.on));
 
-    return `${ROOT(userHome)}/${baseName(main)}/${slug(branch)}`;
+    return `${root}/${repoName(main)}/${slug(branch)}`;
   });
+}
+
+/** A repo's name from its main checkout's folder: that folder's, or, for a
+ *  bare repo hidden beside its worktrees (<project>/.bare), its project's. */
+export function repoName(main: string): string {
+  const parts = Str.split(Str.replace(/\/+$/, "")(main), "/");
+  const last = baseName(Str.replace(/\/+$/, "")(main));
+
+  return last === ".bare" ? Option.getOrElse(Arr.get(parts, parts.length - 2), () => last) : last;
 }
 
 /** Where `create` checks a branch out from (HEAD by default). */
@@ -264,7 +333,7 @@ export type Created = { readonly path: string; readonly created: boolean } | { r
 
 /** Checks out `branch` (an existing one; else a new one from `base`, HEAD
  *  by default) in a new worktree; { path } or { error }. */
-export function create(g: Git, branch: string | null, options: CreateOptions = {}): Effect.Effect<Created, GitError, Exec> {
+export function create(g: Git, branch: string | null, options: CreateOptions = {}): Effect.Effect<Created, GitError, Exec | Files> {
   const { base = null } = options;
   const name = Str.trim(branch ?? "");
 
@@ -277,7 +346,7 @@ export function create(g: Git, branch: string | null, options: CreateOptions = {
     const r = yield* g.run("New worktree", args, { timeout: 600000 });
 
     return r.ok ? { path, created: !exists } : { error: Str.isEmpty(r.err) ? "git worktree add failed." : r.err };
-  });
+  }).pipe(Effect.catchTag("WorktreeSetting", (e): Effect.Effect<Created> => Effect.succeed({ error: e.message })));
 }
 
 /** What a removal takes: what inspect found, the spaces to close, and what was picked. */
@@ -312,16 +381,46 @@ function clearSubmodules(g: Git, w: Pick<Worktree, "path">): Effect.Effect<strin
   });
 }
 
-/** Removes one checkout: closes the spaces showing it (a shell sitting in
- *  the folder keeps it busy), takes its submodules out first when asked
- *  (`clearSubs`), forces past uncommitted changes when `dirty` was shown,
- *  and deletes the branch when `branch`. "" or an error. */
+/** The records of `git worktree list --porcelain`: each one's lines. */
+const records = (out: string): readonly (readonly string[])[] => Arr.map(Arr.filter(Str.split(out, /\n\n+/), Str.isNonEmpty), Str.split("\n"));
+
+/** Why git won't remove the checkout at `path` (it's locked, or git doesn't
+ *  list it), or "". */
+function blocked(g: Git, path: string): Effect.Effect<string, ExecError, Exec> {
+  return Effect.map(g.read(["-c", "core.quotePath=false", "worktree", "list", "--porcelain"]), (list) => {
+    if (list.code !== 0) return Str.isEmpty(Str.trim(list.stderr)) ? "git worktree list failed." : Str.trim(list.stderr);
+
+    const record = Arr.findFirst(records(list.stdout), (r) => r[0] === `worktree ${path}`);
+
+    if (Option.isNone(record)) return "Git could not find this worktree.";
+
+    const lock = Arr.findFirst(record.value, (f) => f === "locked" || Str.startsWith("locked ")(f));
+
+    if (Option.isNone(lock)) return "";
+
+    return lock.value === "locked" ? "This worktree is locked." : `This worktree is locked: ${Str.slice(7)(lock.value)}`;
+  });
+}
+
+/** Removes one checkout: closes the spaces showing it once it's gone (first
+ *  on Windows, where a shell sitting in the folder keeps it busy; a removal
+ *  git refuses, a locked checkout, keeps them), takes its submodules out
+ *  first when asked (`clearSubs`), forces past uncommitted changes when
+ *  `dirty` was shown, and deletes the branch when `branch`. "" or an error. */
 export function removeOne(g: Git, w: Pick<Worktree, "path" | "branch">, opts: Removal, hooks: RemoveHooks = {}): Effect.Effect<string, ExecError, Exec> {
   const { closeSpace, step = () => {} } = hooks;
   const subs = (opts.subs ?? 0) > 0;
 
   return Effect.gen(function* () {
-    for (const s of opts.spaces ?? []) closeSpace?.(s);
+    const why = yield* blocked(g, w.path);
+
+    if (Str.isNonEmpty(why)) return why;
+
+    // Git on a remote Windows machine reports a drive-letter or UNC path.
+    const windows = g.on === null ? window().platform === "windows" : /^(?:[A-Za-z]:\/|\/\/)/.test(w.path);
+    const closeSpaces = () => { for (const s of opts.spaces ?? []) closeSpace?.(s); };
+
+    if (windows) closeSpaces();
 
     if (subs && opts.clearSubs === true) {
       step("removing its submodules");
@@ -337,6 +436,8 @@ export function removeOne(g: Git, w: Pick<Worktree, "path" | "branch">, opts: Re
     const r = yield* g.run("Remove worktree", ["worktree", "remove", ...(force ? ["--force"] : []), w.path], { timeout: 600000 });
 
     if (!r.ok) return Str.isEmpty(r.err) ? "git worktree remove failed." : r.err;
+
+    if (!windows) closeSpaces();
 
     if (opts.branch === true && w.branch !== null) {
       step("deleting the branch");
