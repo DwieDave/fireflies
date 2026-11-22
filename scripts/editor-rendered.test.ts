@@ -386,3 +386,15 @@ test("typing past the view's bottom scrolls the caret's row back into view; in v
   p.renderedView(theme);
   expect(caretIn()).toBe(true);
 });
+
+test("cmd+click on a link in the lit block opens it; a plain click there is the editor's", async () => {
+  const p = await pane("/p/notes.md", "See [docs](https://example.com/d) now\n\n# Two");
+  const box = () => byId(p.renderedView(theme), "rendered-lit-box").calls.on_mouse_down[0];
+  const press = (mods: any) => box()[1]({ button: "left", click_count: 1, position: { x: 0, y: 0 }, modifiers: { shift: false, control: false, alt: false, platform: false, function: false, ...mods } }, cx());
+  block(p).set_cursor(0, 7);
+  ran.length = 0;
+  press({});
+  expect(ran).toEqual([]);
+  press({ platform: true });
+  expect(ran).toContainEqual(["app.open_url", { url: "https://example.com/d" }]);
+});

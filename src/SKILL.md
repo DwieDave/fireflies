@@ -128,7 +128,8 @@ holding that file in one of its tabs shows that tab and goes there instead;
 an editor in that tab takes it as a new tab, but never one the person popped
 a tab out into (it keeps its one file); `--in pane` opens a new editor). It reloads by itself when you change a file it
 shows unedited, keeping the line they were reading at the top and the caret on its text; when the person has unsaved edits it asks them first, so don't
-fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
+fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same; in
+the editor, cmd-click goes to a symbol's definition or opens the link or path under it.
 `editor.open` doesn't save for them: their edits are theirs.
 
 Each repository has a scratchpad: the person's Markdown note for it, kept out

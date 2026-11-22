@@ -1000,7 +1000,10 @@ the highlighted line shows where it will land.
   `mod:editor`, macOS; no function keys): cmd-s save, cmd-f find
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
-  the problems drawer, cmd-k d definition (another file opens as a tab),
+  the problems drawer, cmd-k d definition (another file opens as a tab;
+  cmd-click on a symbol does the same, and on a web address, a Markdown link
+  or a path (`./a.md`, `src/a.rs:12:5`) opens it as the hover card's links do,
+  in the rendered view's block too; typing there keeps the caret in view),
   cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-k z word wrap
   on / off (vim: space u w, `:set wrap` / `nowrap` / `wrap!`; the bar's `wrap`

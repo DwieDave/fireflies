@@ -12,6 +12,7 @@ import { rowStarts } from "./live.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addView, emptyView, kindsView, unitView, ADD_H, KINDS_H } from "./rendered-units.ts";
 import { edge } from "@fireflies/tones";
+import { isGoClick, linkAt } from "./cmd-click.ts";
 
 const PAD_TOP = 18;
 const PAD_BOTTOM = 60;
@@ -326,6 +327,16 @@ function litView(v: Rendered, o: ViewOptions): Element {
             .on_size_change((s, cx) => {
               v.litW = o.unzoom(s.width);
               cx.timer.after(0, (cx) => v.measure(cx));
+            })
+            // cmd+click on a link in the block (the caret is there already) opens it.
+            .on_mouse_down("left", (e, cx) => {
+              const at = v.block.cursor();
+              const url = isGoClick(e) ? linkAt(v.piece.split("\n")[at.line] ?? "", at.col) : null;
+
+              if (!url) return;
+
+              cx.stop_propagation();
+              v.host.link(url, cx);
             })
             .child(Editor.new(v.block).size_full().font_family(v.host.font)),
         )
