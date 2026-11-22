@@ -3,6 +3,7 @@
 
 mod badge;
 mod bench;
+mod cli;
 mod commands;
 mod control;
 mod core_bin;
@@ -51,29 +52,36 @@ mod window;
 
 use gpui::*;
 
+/// The window's commands; `{cmd}` is how the person called them
+/// (`herdr-app`, or `fireflies app`).
 const HELP: &str = "\
-fireflies: the Fireflies desktop app. With no arguments it opens the window.
-`herdr-app` is the same command and keeps working.
+{cmd}: the Fireflies desktop app. With no arguments it opens the window.
 
 Usage:
-  fireflies                        open the window
-  fireflies ls                     spaces, their tabs and terminals, in the open window
-  fireflies do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
-  fireflies feedback <text>        draft a GitHub issue for the person to review and submit
-  fireflies commands               every command, its arguments, what it does
-  fireflies status                 what the window shows, and any errors
-  fireflies shot [file.png]        save the current window frame (default: herdr-shot.png)
-  fireflies check <mod folder>     load a mod once and report what's wrong
-  fireflies types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
-  fireflies --skill                Agent Skill: driving the window, and where hc fits
-  fireflies --version
+  {cmd}                        open the window
+  {cmd} ls                     spaces, their tabs and terminals, in the open window
+  {cmd} do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
+  {cmd} feedback <text>        draft a GitHub issue for the person to review and submit
+  {cmd} commands               every command, its arguments, what it does
+  {cmd} status                 what the window shows, and any errors
+  {cmd} shot [file.png]        save the current window frame (default: herdr-shot.png)
+  {cmd} check <mod folder>     load a mod once and report what's wrong
+  {cmd} types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
+  {cmd} --skill                Agent Skill: driving the window, and where the core fits
+  {cmd} --version
 
-The terminals run in herdr-core (`hc`), which keeps them alive when the
-window closes. `hc --help`: start, read, wait on and talk to terminals and
-agents. The app shows them and arranges them in spaces and tabs.
+The terminals run in herdr-core, which keeps them alive when the window
+closes. `fireflies` (short: `ff`) is this command and hc's in one: the
+window's commands as above (`fireflies app ls` for the window's ls),
+every other one hc's (`fireflies run`, `fireflies send`, `fireflies ls`).
+`fireflies --help` lists both.
 
-Home: ~/.config/herdr-app (HERDR_APP_HOME picks another).
+Home: {home} (HERDR_APP_HOME picks another).
 ";
+
+fn help(cmd: &str) -> String {
+    HELP.replace("{cmd}", cmd).replace("{home}", &mods::app_dir().display().to_string())
+}
 
 /// The folder tests put their scratch data in: `HERDR_TEST_TMPDIR` if set, else /var/tmp.
 #[cfg(test)]
@@ -101,13 +109,19 @@ fn link_check_path(args: &[String]) -> Option<&std::path::Path> {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    #[cfg(target_os = "macos")]
-    macos_check::startup(&args);
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
     #[cfg(windows)]
-    if args.len() > 1 {
+    if raw.len() > 1 {
         attach_console();
     }
+    // `fireflies` / `ff`: hc's commands go to the core as they are.
+    let (name, args) = match cli::route(&raw) {
+        cli::Route::Core(args) => std::process::exit(cli::exec_core(&args)),
+        cli::Route::Help => std::process::exit(cli::help(&help("fireflies app"))),
+        cli::Route::App { name, args } => (name, args),
+    };
+    #[cfg(target_os = "macos")]
+    macos_check::startup(&args);
     // `herdr-app check <mod>` / `herdr-app types <mod>`: gpui-shell's own checker, with Fireflies' module installed.
     if matches!(args.get(1).map(String::as_str), Some("check" | "types")) {
         // HERDR: beside the typings, the mods' libraries (@fireflies/*) as this build serves them.
@@ -143,11 +157,13 @@ fn main() {
         // Already open on this home: that window comes to the front.
         None if control::raise_running() => return,
         None => {}
-        Some("-h" | "--help" | "help") => return print!("{HELP}"),
+        Some("-h" | "--help" | "help") => return print!("{}", help(name)),
         Some("--skill") => return print!("{}", include_str!("SKILL.md")),
-        Some("-V" | "--version" | "version") => return println!("herdr-app {}", env!("CARGO_PKG_VERSION")),
+        Some("-V" | "--version" | "version") => {
+            return println!("{} {}", name.split(' ').next().unwrap_or(name), env!("CARGO_PKG_VERSION"));
+        }
         Some(other) => {
-            eprint!("herdr-app: unknown argument {other:?}\n\n{HELP}");
+            eprint!("{name}: unknown argument {other:?}\n\n{}", help(name));
             std::process::exit(2);
         }
     }
