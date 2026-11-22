@@ -130,7 +130,11 @@ function here(): Place {
 }
 
 /** A tab with a comment being written (the Pull requests tab's composer). */
-const composing = (tab: Tab): boolean => tab.composer !== null && tab.composer !== false;
+const composing = (tab: Tab): boolean => {
+  const c = tab.composer ?? null;
+
+  return c !== null && c !== false;
+};
 
 /** p's way from `r`: to the parent of a fork, or back to the fork from its parent; null when neither. */
 function forkOf(r: Repo | null): Fork | null {

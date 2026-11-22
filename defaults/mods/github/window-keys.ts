@@ -37,7 +37,8 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   }
 
   const tab = v.shown();
-  const form = tab.form;
+  // A tab without a form leaves it out (a stand-in tab, too).
+  const form = tab.form ?? null;
 
   if (form !== null) {
     if (form.key(k, e, cx) === true) {
@@ -48,7 +49,9 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  if (tab.composer !== null && tab.composer !== false) {
+  const composer = tab.composer ?? null;
+
+  if (composer !== null && composer !== false) {
     if (tab.key(k, e, cx) === true) {
       cx.stop_propagation();
       cx.notify();
