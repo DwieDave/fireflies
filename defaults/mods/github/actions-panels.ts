@@ -135,7 +135,7 @@ export function graphPanel(v: Actions, t: Theme): Element {
     v.loadLog(cx);
     v.app.focusSelf();
     cx.notify();
-  }, px, py);
+  }, px, py, Date.now());
 
   const k = tone(r.status, r.conclusion);
 
