@@ -82,6 +82,9 @@ const cx: any = {
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {

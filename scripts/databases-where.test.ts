@@ -87,6 +87,9 @@ const cx: any = {
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -526,7 +529,7 @@ describe.skipIf(!PG_BIN)("a real PostgreSQL 18 on 127.0.0.1:25433", () => {
       expect(v.catalog.tables.map((t: any) => `${t.schema}.${t.name}:${t.type}`)).toEqual(["lanterns.lanterns:table", "moths.moths:table", "moths.bright:view"]);
       // Sizes on demand.
       const { loadDatabases } = await import("../defaults/mods/databases/dbs.ts");
-      await loadDatabases(v, cx, true);
+      await runView(loadDatabases(v, true));
       expect(v.dbs.list.every((d: any) => typeof d.size === "number" && d.size > 0)).toBe(true);
       // The server stops: the next read turns the mark.
       Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", join(base, "data"), "-m", "immediate", "stop"], { stdout: "ignore", stderr: "ignore" });

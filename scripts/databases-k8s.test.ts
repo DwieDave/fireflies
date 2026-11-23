@@ -78,6 +78,9 @@ const cx: any = {
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -266,7 +269,7 @@ test("saved: the source is kept (read again at each connect), never the password
   v.dir = "/tmp/fireflies-db.abc";
   command(v, `databases.connect:${JSON.stringify(ARGS)}`, cx);
   await flush(); await flush();
-  await saveFound(v, v.sent[0], cx);
+  await runView(saveFound(v, v.sent[0]));
   const file = written.find(([p]) => p.endsWith("/data/databases/connections.json"));
   const doc = JSON.parse(file?.[1] ?? "{}");
   expect(doc.connections[0]).toMatchObject({ kind: "postgres", host: "127.0.0.1", port: 15432, user: "lantern", secret: "kubernetes", source: SOURCE });

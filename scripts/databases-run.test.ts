@@ -11,33 +11,15 @@ import { splitStatements, statementAt, blankLiterals, lineCol } from "../default
 import { classify, worst, allowedReadOnly } from "../defaults/mods/databases/safety.ts";
 import { scriptOf, MARK } from "../defaults/mods/databases/script.ts";
 import { run, runnerArgs, privateDir, removeDir, cancel, RUNNER } from "../defaults/mods/databases/runner.ts";
+import { Effect, Fiber } from "effect";
+import type { Exec, Files } from "@fireflies/kit";
+import { runReal, runSeen } from "./databases-host.ts";
 import { parsePsql, parseSqlite, psqlError, resultWords, placeByName, placed, closest, namedIn } from "../defaults/mods/databases/parse-out.ts";
 
 const FIX = new URL("./fixtures/databases/", import.meta.url).pathname;
 
 /** sqlite3 is here (CI's Linux image may lack it: those tests skip, the rest run). */
 const SQLITE = Bun.which("sqlite3") !== null;
-
-/** herdr's exec and writeTextFile, for real, recording every argv. */
-function realIo(seen: string[][] = []) {
-  return {
-    seen,
-    exec: async (cmd: string, args: string[] = [], options: { timeout?: number } = {}) => {
-      seen.push([cmd, ...args]);
-      const p = Bun.spawn([cmd, ...args], { stdout: "pipe", stderr: "pipe", env: { ...process.env } });
-      const timer = setTimeout(() => p.kill(), options.timeout ?? 30000);
-      const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-      const code = await p.exited;
-      clearTimeout(timer);
-      return { code, stdout, stderr };
-    },
-    writeTextFile: async (path: string, text: string, expected: string | null) => {
-      if (expected === null && existsSync(path)) throw new Error("exists");
-      writeFileSync(path, text);
-      return null;
-    },
-  };
-}
 
 describe("splitting statements", () => {
   test("semicolons inside strings, names, comments and $$ bodies don't split", () => {
@@ -194,20 +176,28 @@ describe("the runner, for real with sqlite3", () => {
   if (SQLITE) Bun.spawnSync(["sqlite3", db, "create table t(id integer primary key, name text, v real); insert into t values (1,'a,b',1.5),(2,null,null),(3,'',2);"]);
   const args = (ro = false) => ["-batch", "-bail", "-csv", "-header", "-nullvalue", "␀", "-cmd", ".changes on", ...(ro ? ["-readonly"] : []), db];
 
-  test("the private folder is 0700 and goes away", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
-    expect(statSync(dir).mode & 0o777).toBe(0o700);
-    await removeDir(io, dir);
-    expect(existsSync(dir)).toBe(false);
-  });
+  /** A private folder for `body`, removed after it (`seen`: every program's argv). */
+  const inDir = <A>(body: (dir: string) => Effect.Effect<A, unknown, Exec | Files>, seen: string[][] = []) =>
+    runSeen(seen, Effect.gen(function* () {
+      const dir = yield* privateDir;
+      const out = yield* body(dir);
 
-  test.skipIf(!SQLITE)("rows, changes, an error placed in its statement, and nothing left behind", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
+      yield* removeDir(dir);
+
+      return out;
+    }));
+
+  test("the private folder is 0700 and goes away", () => runReal(Effect.gen(function* () {
+    const dir = yield* privateDir;
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    yield* removeDir(dir);
+    expect(existsSync(dir)).toBe(false);
+  })));
+
+  test.skipIf(!SQLITE)("rows, changes, an error placed in its statement, and nothing left behind", () => inDir((dir) => Effect.gen(function* () {
     const statements = ["select * from t order by id", "update t set v = 3 where id = 2", "select x from\n  t"];
     const script = scriptOf("sqlite", statements.map((text) => ({ text, risk: classify(text, "sqlite").risk })));
-    const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(), script: script.text });
+    const r = yield* run({ kind: "sqlite", dir, program: "sqlite3", args: args(), script: script.text });
     const o = parseSqlite(r.stdout, r.stderr, r.code, statements, false, [false, true, false]);
     expect(o.results[0]!.affected).toBeNull(); // a read changed nothing: it says its rows
     expect(resultWords(o.results[0], false)).toBe("3 rows");
@@ -216,75 +206,63 @@ describe("the runner, for real with sqlite3", () => {
     expect(o.results[1]!.affected).toBe(1);
     expect(o.error).toEqual({ index: 2, message: "no such column: x", line: 1, col: 8, hint: null });
     expect(readdirSync(dir)).toEqual([]);
-    await removeDir(io, dir);
-  });
+  })));
 
-  test.skipIf(!SQLITE)("read only refuses a write in sqlite3 itself", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
-    const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(true), script: scriptOf("sqlite", [{ text: "delete from t", risk: "destructive" }]).text, readonly: true });
+  test.skipIf(!SQLITE)("read only refuses a write in sqlite3 itself", () => inDir((dir) => Effect.gen(function* () {
+    const r = yield* run({ kind: "sqlite", dir, program: "sqlite3", args: args(true), script: scriptOf("sqlite", [{ text: "delete from t", risk: "destructive" }]).text, readonly: true });
     expect(parseSqlite(r.stdout, r.stderr, r.code, ["delete from t"]).error!.message).toContain("readonly");
-    await removeDir(io, dir);
-  });
+  })));
 
-  test.skipIf(!SQLITE)("output past the limit is cut", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
-    const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(), script: scriptOf("sqlite", [{ text: "with recursive n(i) as (select 1 union all select i + 1 from n limit 100000) select i, 'xxxxxxxxxx' from n", risk: "read" }]).text, limit: 4096 });
+  test.skipIf(!SQLITE)("output past the limit is cut", () => inDir((dir) => Effect.gen(function* () {
+    const r = yield* run({ kind: "sqlite", dir, program: "sqlite3", args: args(), script: scriptOf("sqlite", [{ text: "with recursive n(i) as (select 1 union all select i + 1 from n limit 100000) select i, 'xxxxxxxxxx' from n", risk: "read" }]).text, limit: 4096 });
     expect(r.cut).toBe(true);
     expect(r.code).toBe(0);
     expect(r.stdout.length).toBeLessThanOrEqual(4096);
-    await removeDir(io, dir);
-  });
+  })));
 
-  test("a missing client says so", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
-    const r = await run(io, { kind: "postgres", dir, program: "psql-not-here", args: [], script: "select 1;\n" });
+  test("a missing client says so", () => inDir((dir) => Effect.gen(function* () {
+    const r = yield* run({ kind: "postgres", dir, program: "psql-not-here", args: [], script: "select 1;\n" });
     expect(r.code).toBe(127);
     expect(r.stderr).toContain("psql-not-here isn't installed");
-    await removeDir(io, dir);
-  });
+  })));
 
-  test("a one-shot secret reaches the client's environment, never an argument, and is deleted", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
+  test("a one-shot secret reaches the client's environment, never an argument, and is deleted", () => {
+    const seen: string[][] = [];
     // A stand-in client that prints the environment's password and its own arguments.
     const fake = join(dbDir, "fake-psql");
     writeFileSync(fake, '#!/bin/sh\nprintf "pw=%s ro=%s args=%s\\n" "$PGPASSWORD" "$PGOPTIONS" "$*"\n', { mode: 0o755 });
     const secret = "s3cr3t 'quoted' \"pw\" $HOME";
-    const r = await run(io, { kind: "postgres", dir, program: fake, args: ["-X"], script: "select 1;\n", secret, readonly: true });
-    expect(r.stdout).toContain(`pw=${secret} ro=-c default_transaction_read_only=on args=-X -f ${dir}/q-`);
-    for (const argv of io.seen) expect(argv.join(" ")).not.toContain("s3cr3t");
-    expect(readdirSync(dir)).toEqual([]);
-    await removeDir(io, dir);
+    return inDir((dir) => Effect.gen(function* () {
+      const r = yield* run({ kind: "postgres", dir, program: fake, args: ["-X"], script: "select 1;\n", secret, readonly: true });
+      expect(r.stdout).toContain(`pw=${secret} ro=-c default_transaction_read_only=on args=-X -f ${dir}/q-`);
+      for (const argv of seen) expect(argv.join(" ")).not.toContain("s3cr3t");
+      expect(readdirSync(dir)).toEqual([]);
+    }), seen);
   });
 
-  test("mysql gets its password in a 0600 option file that's gone afterwards", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
+  test("mysql gets its password in a 0600 option file that's gone afterwards", () => {
     const fake = join(dbDir, "fake-mysql");
     writeFileSync(fake, '#!/bin/sh\nf=${1#--defaults-extra-file=}; perl -e \'printf "%o\\n", (stat shift)[2] & 0777\' "$f"; cat "$f"\n', { mode: 0o755 });
-    const r = await run(io, { kind: "mysql", dir, program: fake, args: ["--xml"], script: "select 1;\n", secret: 'p"a\\ss' });
-    expect(r.stdout).toBe('600\n[client]\npassword="p\\"a\\\\ss"\n');
-    expect(readdirSync(dir)).toEqual([]);
-    await removeDir(io, dir);
+    return inDir((dir) => Effect.gen(function* () {
+      const r = yield* run({ kind: "mysql", dir, program: fake, args: ["--xml"], script: "select 1;\n", secret: 'p"a\\ss' });
+      expect(r.stdout).toBe('600\n[client]\npassword="p\\"a\\\\ss"\n');
+      expect(readdirSync(dir)).toEqual([]);
+    }));
   });
 
-  test("cancel interrupts a running client", async () => {
-    const io = realIo();
-    const dir = (await privateDir(io))!;
+  test("cancel interrupts a running client", () => {
     const fake = join(dbDir, "fake-slow");
     writeFileSync(fake, "#!/bin/sh\nexec sleep 20\n", { mode: 0o755 });
-    let n = "";
-    const at = Date.now();
-    const going = run(io, { kind: "sqlite", dir, program: fake, args: [], script: "select 1;\n" }, (x) => { n = x; });
-    for (let i = 0; i < 50 && !existsSync(`${dir}/pid-${n}`); i++) await Bun.sleep(50);
-    await cancel(io, dir, n);
-    const r = await going;
-    expect(Date.now() - at).toBeLessThan(8000);
-    expect(r.code).not.toBe(0);
-    await removeDir(io, dir);
+    return inDir((dir) => Effect.gen(function* () {
+      let n = "";
+      const at = Date.now();
+      const going = yield* Effect.forkChild(run({ kind: "sqlite", dir, program: fake, args: [], script: "select 1;\n" }, (x) => { n = x; }));
+      for (let i = 0; i < 50 && !existsSync(`${dir}/pid-${n}`); i++) yield* Effect.sleep(50);
+      yield* cancel(dir, n);
+      const r = yield* Fiber.join(going);
+      expect(Date.now() - at).toBeLessThan(8000);
+      expect(r.code).not.toBe(0);
+    }));
   }, 15000);
 
   test("the argv carries no secret by construction", () => {

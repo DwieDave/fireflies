@@ -82,6 +82,9 @@ const cx: any = {
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
 const { command } = await import("../defaults/mods/databases/opening.ts");
 const { runQuery } = await import("../defaults/mods/databases/query.ts");
+const { runtime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(runtime);
 
 function open(p: any) {
   propsNow = p;
@@ -223,7 +226,7 @@ test("the form: a URL pasted into the host fills the fields; a typed password go
   v.form.inputs.get("host").set_value("postgres://ada:pa%24s@db.local:6543/lantern");
   v.form.fromUrl();
   expect(["host", "port", "user", "database", "password"].map((f) => v.form.value(f))).toEqual(["db.local", "6543", "ada", "lantern", "pa$s"]);
-  await v.form.save(cx);
+  await runView(v.form.save());
   const saved = v.saved[0];
   expect(saved).toMatchObject({ kind: "postgres", host: "db.local", port: 6543, secret: "keychain" });
   const kc = written.find(([p]) => p.startsWith("/tmp/fireflies-db.abc/k-"));
@@ -239,7 +242,7 @@ test("the form: a URL pasted into the host fills the fields; a typed password go
   v.form.inputs.get("host").set_value("db.local");
   v.form.inputs.get("password").set_value("pw2");
   written.length = 0;
-  await v.form.save(cx);
+  await runView(v.form.save());
   const second = v.saved.at(-1);
   expect(second).toMatchObject({ host: "db.local", secret: "ask" });
   expect(v.secrets.get(second.id)).toBe("pw2");

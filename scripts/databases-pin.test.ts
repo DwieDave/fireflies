@@ -83,6 +83,9 @@ const cx: any = {
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -243,7 +246,7 @@ test("two windows pin at once from stale lists: both are kept (each change is ma
   receive(a, { kind: "sqlite", path: "/w/moths.db", name: "moths.db" }, cx);
   receive(b, { kind: "sqlite", path: "/w/lanterns.db", name: "lanterns.db" }, cx);
   await flush(); await flush();
-  await Promise.all([saveFound(a, a.sent[0], cx), saveFound(b, b.sent[0], cx)]);
+  await Promise.all([runView(saveFound(a, a.sent[0])), runView(saveFound(b, b.sent[0]))]);
   expect(JSON.parse(files.get(HOME_FILE) ?? "{}").connections.map((x: any) => x.name).sort()).toEqual(["lanterns.db", "moths.db"]);
 });
 
