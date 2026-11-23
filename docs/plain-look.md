@@ -499,7 +499,9 @@ checks each row off in its report.
 | `main.ts:render` | rule ×1, fill ×2, box ×3, glyph ×1 | `rule()`, `fill()`, `boxed()` / `frameBox()` / `button()`, `glyph(text, plain)` |
 | `main.ts:selected` | lit ×1 | `lit()` |
 
-#### preview (109 lines of its own, 0 functions)
+#### preview (109 lines of its own, 0 functions): done
+
+Nothing of its own to draw: the pane is @fireflies/viewer's (defaults/lib), whose look is the library's.
 
 | file: function | draws | becomes |
 | --- | --- | --- |

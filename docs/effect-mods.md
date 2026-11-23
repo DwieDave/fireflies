@@ -803,6 +803,20 @@ Left: the tests still load the mod after `mock.module("herdr")` and
 `await import` at the top (as git's do): the views read the theme, props and
 shared state from herdr directly in a render.
 
+**Wave 1: preview, done (2026-11-23).** Its 108 lines (main.ts) in the
+Effect pass (`effect_sources` names `defaults/mods/preview`) with no findings
+left: what it decodes (`preview.show`, `preview.last`) are `sharedKey`s on
+Schemas, read with `readSharedOption` / `readShared`; no guard.ts. Everything
+it draws, reads and watches is @fireflies/viewer's (defaults/lib, already in
+the pass), as are the tests named preview-*.test.ts: they test the library,
+and their async bodies go with it. Preview's own routing (a `preview.show`
+for its slot, `preview.last` while it has the keyboard) is tested in
+scripts/file-tree-open.test.ts.
+
+| weakness | where | now |
+|---|---|---|
+| none of its own: wave 0's library move left it a subclass of the viewer that reads two shared keys through Schemas | main.ts | |
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings
