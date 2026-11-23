@@ -144,6 +144,8 @@ test:
     bun test scripts/notifications-open.test.ts
     # The agent graph's reads: a session from a scratch ~/.claude by the real snapshot script, a feed, tokens, the poll on the kit's test layers, an ask (herdr and gpui stand-ins).
     bun test scripts/agent-graph.test.ts
+    # The agent graph's look by layout: nocturne's trees as at integrate (hashes recorded there); main's plain cards, no checker (recording gpui stand-ins).
+    bun test scripts/agent-graph-look.test.ts
     # The notifications engine on the kit's test layers: terminals, agents, hook records and screens into shared notifications.items, one read at a time.
     bun test scripts/notifications-engine.test.ts
     # The notifications views by layout: nocturne's checker and square chrome, main's popovers and rounded rows, no checker (recording stand-ins).
