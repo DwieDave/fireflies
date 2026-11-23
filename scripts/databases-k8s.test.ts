@@ -5,95 +5,29 @@
 // kubectl, the client and the keychain are stand-ins: no cluster, no server, no keychain touched.
 // Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { found, standIn } from "./databases-host.ts";
 
-let sharedState: Record<string, unknown> = {};
-let propsNow: any = null;
-let panesNow: any[] = [];
-let focusedNow: any = null;
-const commands: [string, any][] = [];
-const opened: any[] = [];
-const closed: string[] = [];
-const execs: string[][] = [];
-const written: [string, string][] = [];
-/** The default answers: the clients are found (envrc.ts lookup), anything else fails quietly. */
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-let execReply: (cmd: string, args: string[]) => any = found;
-let overlayN = 0;
-let platformNow = "linux";
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; },
-  openOverlay: (spec: any) => { opened.push(spec); return `o${++overlayN}`; },
-  exec: async (cmd: string, args: string[] = []) => { execs.push([cmd, ...args]); return execReply(cmd, args); },
-  focused: () => focusedNow, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => panesNow, props: () => propsNow,
-  readTextFile: async () => null, writeTextFile: async (p: string, t: string) => { written.push([p, t]); return null; },
-  pickFile: async () => null, pickFolder: async () => null,
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: platformNow }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => { drawn.push(["when", []]); return on ? add(el) : el; }
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const handle = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
-class Input { v = ""; masked = false; constructor(o: any = {}) { this.v = o.value ?? ""; } on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; } }
-/** The SQL editor: its text, caret and selection; what the window asks of it. */
-class Editor {
-  text: string; caret = { line: 0, col: 0 }; sel: any = null; diags: any[] = []; keys: any = null; focusedNow = false;
-  constructor(o: any) { this.text = o.value ?? ""; }
-  value() { return this.text; } set_value(v: string) { this.text = v; }
-  on(ev: string, f: any) { if (ev === "key") this.keys = f; return true; }
-  cursor() { return this.caret; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
-  selection() { return this.sel ?? { start: this.caret, end: this.caret, text: "" }; }
-  set_diagnostics(d: any[]) { this.diags = d; } edit(e: any[]) { for (const x of e) this.text = this.text.slice(0, x.start.col) + x.text + this.text.slice(x.end.col); }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; } release() { return true; }
-}
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: handle },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-
-const stores = new Map<string, Map<string, string>>();
-(globalThis as any).localStorage = {
-  getItem: (k: string) => stores.get(JSON.stringify(propsNow))?.get(k) ?? null,
-  setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
-};
-
-let clipboard = "";
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
+const { h, theme, el, cx, until, flush, advance, services } = standIn();
+const { files, commands, opened, closed, execs, written, stores } = h;
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
-  propsNow = p;
+  h.props = p;
   const v: any = new Databases();
   v.init(p, cx);
   return v;
 }
 function render(v: any, width = 1100) {
   v.size = { width, height: 720 };
-  drawn = [];
+  h.drawn = [];
   v.render();
-  return drawn;
+  return h.drawn;
 }
 const framed = (d: [string, any[]][]) => {
   const i = d.findIndex(([m, a]) => m === "id" && a[0] === "databases");
@@ -103,9 +37,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { sharedState = {}; commands.length = 0; opened.length = 0; closed.length = 0; panesNow = []; focusedNow = null; stores.clear(); execs.length = 0; written.length = 0; execReply = found; };
-const flush = () => new Promise((r) => setTimeout(r, 5));
-
+const fresh = () => { h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
 
 const { kubeProblem, kubeReadArgs, kubeTemplate, parseKubeRead, kubeWords } = await import("../defaults/mods/databases/kube.ts");
 const { saveFound } = await import("../defaults/mods/databases/conns.ts");
@@ -127,9 +59,9 @@ const cluster = (cmd: string, args: string[]) => {
   return found(cmd, args);
 };
 const kubectlCalls = () => execs.filter((a) => a[0] === "kubectl" || a[0]!.endsWith("/kubectl"));
-const reset = () => { fresh(); execReply = cluster; secretNow = PASSWORD; kubectlSays = null; serverRefuses = false; };
+const reset = () => { fresh(); h.reply = cluster; secretNow = PASSWORD; kubectlSays = null; serverRefuses = false; };
 /** Everything the window put anywhere but its memory: argv, shared state, files, what it drew, its notes. */
-const outside = (v: any) => [JSON.stringify(execs), JSON.stringify(sharedState), JSON.stringify(written.filter(([p]) => !/\/s-[a-z0-9]+$/.test(p))), JSON.stringify(commands), JSON.stringify(opened), texts(render(v)).join(" "), v.note?.text ?? "", JSON.stringify(v.log), JSON.stringify(v.history), JSON.stringify(v.sent), JSON.stringify(v.saved), JSON.stringify([...v.sourced])].join("\n");
+const outside = (v: any) => [JSON.stringify(execs), JSON.stringify(h.shared), JSON.stringify(written.filter(([p]) => !/\/s-[a-z0-9]+$/.test(p))), JSON.stringify(commands), JSON.stringify(opened), texts(render(v)).join(" "), v.note?.text ?? "", JSON.stringify(v.log), JSON.stringify(v.history), JSON.stringify(v.sent), JSON.stringify(v.saved), JSON.stringify([...v.sourced])].join("\n");
 
 test("the source's rules: only Postgres or MySQL on this machine, names kubernetes allows, kubectl by its name", () => {
   expect(kubeProblem(SOURCE as any, "postgres", "127.0.0.1")).toBeNull();
@@ -176,8 +108,8 @@ test("a sent connection with a secret: read once with kubectl, into memory only,
   expect(v.password).toBeNull();
   // The client got it the way every password goes: a one-shot file in the private folder, never an argument.
   expect(written.some(([p, t]) => /\/s-[a-z0-9]+$/.test(p) && t === PASSWORD)).toBe(true);
-  const drawn = texts(render(v));
-  expect(drawn).toEqual(expect.arrayContaining(["lantern-db-auth", "· password from secret lantern-db-auth · password (nightjar-dev/lantern), read with kubectl"]));
+  const shown = texts(render(v));
+  expect(shown).toEqual(expect.arrayContaining(["lantern-db-auth", "· password from secret lantern-db-auth · password (nightjar-dev/lantern), read with kubectl"]));
   expect(outside(v)).not.toContain(PASSWORD);
   expect(outside(v)).not.toContain(b64(PASSWORD));
   await v.close();
@@ -221,7 +153,7 @@ test("a failed read says why and asks; the typed password connects without readi
   expect(execs.some((a) => a[0] === "sh" && a[3] === "ff-db")).toBe(true);
   // kubectl missing: said so, asked too.
   reset();
-  execReply = (cmd: string, args: string[]) => (cmd === "kubectl" ? { code: 127, stdout: "", stderr: "sh: kubectl: command not found" } : cluster(cmd, args));
+  h.reply = (cmd: string, args: string[]) => (cmd === "kubectl" ? { code: 127, stdout: "", stderr: "sh: kubectl: command not found" } : cluster(cmd, args));
   const w = open({ folder: "/w", overlay: "w2" });
   await flush();
   command(w, `databases.connect:${JSON.stringify(ARGS)}`, cx);
@@ -288,9 +220,9 @@ test("saved: the source is kept (read again at each connect), never the password
   v.key(key("e"), cx);
   expect(v.form.conn(v.saved[0].id)).toMatchObject({ secret: "kubernetes", source: SOURCE });
   v.form.inputs.get("password").set_value("from-now-on-9");
-  platformNow = "macos";
+  h.platform = "macos";
   expect(v.form.conn(v.saved[0].id).secret).toBe("keychain");
-  platformNow = "linux";
+  h.platform = "linux";
   expect(v.form.conn(v.saved[0].id).source).toBeUndefined();
 });
 

@@ -189,6 +189,8 @@ export function standIn(options: StandInOptions = {}) {
     settings: () => ({ zoom: options.zoom?.() ?? 1, font_family: "Mono", ui_font_family: "Departure Mono" }),
     shared: (k: string) => h.shared[k] ?? null, setShared: (k: string, v: unknown) => { h.shared[k] = v; },
     spaces: () => h.spaces, terminals: () => h.terminals, theme: () => theme, window: () => ({ platform: h.platform }),
+    // The window reaches these through its services (useServices): a call here is a test's mistake.
+    ...Object.fromEntries(["exec", "hc", "readTextFile", "writeTextFile", "nextCommand", "pickFile", "pickFolder"].map((name) => [name, () => { throw new Error(`herdr.${name}: the window's services answer this (databases-host.ts)`); }])),
   }));
 
   const el: any = new Proxy(function () {}, {
@@ -289,7 +291,7 @@ export function standIn(options: StandInOptions = {}) {
 
         if (ok()) return;
 
-        return yield* Effect.die(new Error(`still waiting at +${now} ms (the window is idle)`));
+        return yield* Effect.die(new Error(`still waiting at +${now} ms (the window is idle) for ${String(ok)}`));
       }
 
       fire(t);
