@@ -2,8 +2,7 @@
 // pane's shape), how big (a share of the room, clamped), the divider's drag,
 // what's kept per slot, a folder's facts.
 
-import { Array as Arr } from "effect";
-import { isBoolean, isNumber, object } from "./guard.ts";
+import { Array as Arr, Schema } from "effect";
 
 /** How much wider than tall (or taller than wide) a pane is before its
  *  preview moves: near square it stays where it was, so it doesn't flip. */
@@ -89,7 +88,7 @@ export interface LookState {
 }
 
 /** An entry of shared `file-tree.look` (an older one may lack a field: the default fills it). */
-export const isLookEntry = object({}, { on: isBoolean, right: isNumber, bottom: isNumber });
+export const LookEntrySchema = Schema.Struct({ on: Schema.optionalKey(Schema.Boolean), right: Schema.optionalKey(Schema.Finite), bottom: Schema.optionalKey(Schema.Finite) });
 
 /** Each pane's preview, as kept in shared state by slot: { on, right, bottom } (shares). */
 export const newLook = (): LookState => ({ on: false, right: LOOK_SHARE, bottom: LOOK_SHARE });

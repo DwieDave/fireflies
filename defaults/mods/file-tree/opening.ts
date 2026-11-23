@@ -8,7 +8,7 @@ import type { Context } from "gpui-kit";
 import * as herdr from "herdr";
 import { editorProps, openInEditor } from "@fireflies/editor-route";
 import { exec, run, panes, spaces, terminals, focused, home, shared, setShared } from "herdr";
-import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
+import { readShared, writeShared } from "@fireflies/kit";
 import type { Row } from "./logic.ts";
 import { nvimLaunch, parent, relativeTo } from "./logic.ts";
 import type { EditorPlace } from "./state.ts";
@@ -267,10 +267,10 @@ export function publish(v: Files): void {
   const name = v.root === "/" ? "/" : Str.split(v.root, "/").pop() ?? "";
 
   for (const [key, value] of [[TITLES, name], [PATHS, v.root]] as const) {
-    const was = readSharedMap(shared, key);
+    const was = readShared(shared, key, new Map());
 
     if (was.get(slot) === value && Arr.every([...was.keys()], (k) => live.has(k) || k === slot)) continue;
 
-    writeSharedMap(setShared, key, keptFor(v, was, slot, value));
+    writeShared(setShared, key, keptFor(v, was, slot, value));
   }
 }

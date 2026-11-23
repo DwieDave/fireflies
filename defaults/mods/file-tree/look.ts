@@ -4,7 +4,7 @@
 
 import type { Context } from "gpui-kit";
 import { shared, setShared } from "herdr";
-import { readSharedMap, writeSharedMap } from "./guard.ts";
+import { readShared, writeShared } from "@fireflies/kit";
 import Viewer from "@fireflies/viewer";
 import type { LookTarget, Geo } from "./state.ts";
 import { LOOK, directory, byName, messageOf, REST } from "./state.ts";
@@ -44,7 +44,7 @@ export function saveLook(v: Files, next: LookState): void {
 
   if (v.slot === null || v.slot === "") return;
 
-  writeSharedMap(setShared, LOOK, keptFor(v, readSharedMap(shared, LOOK), v.slot, next));
+  writeShared(setShared, LOOK, keptFor(v, readShared(shared, LOOK, new Map()), v.slot, next));
 }
 
 /** New props for the viewer (it applies them on its next render). */

@@ -125,7 +125,7 @@ import * as herdr from "herdr";
 import type { Theme } from "herdr";
 import { v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { props, theme, settings, run, panes, spaces, focused, nextCommand, home, shared, setShared } from "herdr";
-import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
+import { readShared, writeShared } from "@fireflies/kit";
 import type { Filters, HeadRow, HitRow, Nav, Row, TreeRow, Act } from "./logic.ts";
 import { filterDefaults, newNav, navGo, navBack, navForward, rangePaths } from "./logic.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.ts).
@@ -246,7 +246,7 @@ export default class Files extends View {
       cx.notify();
     });
 
-    const kept = slot !== null && slot !== "" ? readSharedMap(shared, FILTERS).get(slot) : undefined;
+    const kept = slot !== null && slot !== "" ? readShared(shared, FILTERS, new Map()).get(slot) : undefined;
 
     this.filters = kept !== undefined ? { hidden: kept.hidden === true, ignored: kept.ignored === true } : filterDefaults(settings());
 
@@ -305,7 +305,7 @@ export default class Files extends View {
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
 
-    const look = slot !== null && slot !== "" ? readSharedMap(shared, LOOK).get(slot) : undefined;
+    const look = slot !== null && slot !== "" ? readShared(shared, LOOK, new Map()).get(slot) : undefined;
 
     this.lookState = { ...newLook(), ...look };
     this.lookProps = { embedded: true, path: null, on: this.on };
@@ -459,7 +459,7 @@ export default class Files extends View {
     this.filters = name === "hidden" ? { ...this.filters, hidden: !this.filters.hidden } : { ...this.filters, ignored: !this.filters.ignored };
 
     // Kept per pane, by slot; panes that are gone drop out.
-    if (this.slot !== null && this.slot !== "") writeSharedMap(setShared, FILTERS, keptFor(this, readSharedMap(shared, FILTERS), this.slot, this.filters));
+    if (this.slot !== null && this.slot !== "") writeShared(setShared, FILTERS, keptFor(this, readShared(shared, FILTERS, new Map()), this.slot, this.filters));
 
     if ((Str.trim(this.query)) !== "") this.search(cx);
 

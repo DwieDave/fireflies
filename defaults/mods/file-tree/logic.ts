@@ -2,10 +2,8 @@
 // keep, git's ignored list, search results grouped under their folders, the
 // right-click menu and how Neovim opens a file or folder. main.ts draws.
 
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Option, Schema, String as Str } from "effect";
 import type { PaneInfo, Settings } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, nullable, object } from "./guard.ts";
 import type { Entry } from "./split-size.ts";
 import type { Listed } from "./ops.ts";
 
@@ -25,7 +23,7 @@ export interface Filters {
 }
 
 /** A pane's filters as kept in shared `file-tree.filters` (an older entry may have one of them). */
-export const isFilters = object({}, { hidden: isBoolean, ignored: isBoolean });
+export const FiltersSchema = Schema.Struct({ hidden: Schema.optionalKey(Schema.Boolean), ignored: Schema.optionalKey(Schema.Boolean) });
 
 /** settings.json `files`: what a new pane lists. Unset, dotfiles and
  *  git-ignored files are left out (H and I show them; the chips count them). */
@@ -314,7 +312,7 @@ export const isHtml = (path: string): boolean => /\.html?$/i.test(path);
 export const fileUrl = (abs: string): string => `file://${Arr.join(Arr.map(Str.split(abs, "/"), encodeURIComponent), "/")}`;
 
 /** A web pane's props: its slot (browser.open's target). */
-const isSlotted = object({ slot: isString });
+const isSlotted = Schema.is(Schema.Struct({ slot: Schema.String }));
 
 /** What `w` runs: browser.open on a web pane, or a new web pane split beside. */
 export type WebRun = readonly [name: string] | readonly [name: "pane.split", args: SplitArgs];
@@ -459,9 +457,11 @@ export function dropRefusal(items: readonly string[], into: string): string | nu
 
 /** One rename, move or delete (`to` null) in shared `nocturne.files.changes`, as the
  *  editors' follow.ts reads it (isFileChange there): the same fields. */
-export const isFileChange = object({ id: isNumber, from: isString, to: nullable(isString) }, { on: nullable(isString), at: isNumber });
+export const FileChangeSchema = Schema.Struct({
+  id: Schema.Finite, from: Schema.String, to: Schema.NullOr(Schema.String), on: Schema.optionalKey(Schema.NullOr(Schema.String)), at: Schema.optionalKey(Schema.Finite),
+});
 
-export type FileChange = Guarded<typeof isFileChange>;
+export type FileChange = typeof FileChangeSchema.Type;
 
 /** A rename or move (`to`), or a delete (`to` null), absolute paths. */
 export interface Moved {
@@ -484,14 +484,17 @@ export function withChanges(list: readonly FileChange[], entries: readonly Moved
 }
 
 /** One item cut for P: where it is, a folder or not, its name. */
-export const isCutItem = object({ abs: isString, dir: isBoolean, name: isString });
+export const CutItemSchema = Schema.Struct({ abs: Schema.String, dir: Schema.Boolean, name: Schema.String });
 
-export type CutItem = Guarded<typeof isCutItem>;
+export type CutItem = typeof CutItemSchema.Type;
 
 /** Shared `file-tree.cut`, what P pastes: { on, items } (a set), or, as written before, one { abs, dir, name, on }. */
-export const isClip = object({}, { on: nullable(isString), items: arrayOf(isCutItem), abs: isString, dir: isBoolean, name: isString });
+export const ClipSchema = Schema.Struct({
+  on: Schema.optionalKey(Schema.NullOr(Schema.String)), items: Schema.optionalKey(Schema.Array(CutItemSchema)),
+  abs: Schema.optionalKey(Schema.String), dir: Schema.optionalKey(Schema.Boolean), name: Schema.optionalKey(Schema.String),
+});
 
-export type Clip = Guarded<typeof isClip>;
+export type Clip = typeof ClipSchema.Type;
 
 /** What's cut, as a list ({ abs, dir, name } each), from shared `file-tree.cut`
  *  (a set now, a single item before). */

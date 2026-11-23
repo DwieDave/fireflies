@@ -15,11 +15,10 @@
 //   (editor-route.ts), beside; the preview pane stays a preview.
 // A pane closed by hand (or moved to another tab) is no longer this pane's.
 
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Option, Schema } from "effect";
 import type { PaneInfo } from "herdr";
 import { panes, run, shared, setShared } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { EditorView } from "@fireflies/editor-route";
 import { EDITOR, editorProps, isScratchpad } from "@fireflies/editor-route";
 import { keptFor } from "./tree.ts";
@@ -28,28 +27,28 @@ import type { default as Files } from "./main.ts";
 export const PREVIEW = "preview";
 
 /** One of this pane's own: its slot once known, else the file it opened with. */
-export const isMine = object({}, { slot: isString, path: isString });
+export const MineSchema = Schema.Struct({ slot: Schema.optionalKey(Schema.String), path: Schema.optionalKey(Schema.String) });
 
-export type Mine = Guarded<typeof isMine>;
+export type Mine = typeof MineSchema.Type;
 
 /** Each files pane's own editor and preview pane, by the files pane's slot. */
-export const isOpened = object({}, { editor: nullable(isMine), preview: nullable(isMine) });
+export const OpenedSchema = Schema.Struct({ editor: Schema.optionalKey(Schema.NullOr(MineSchema)), preview: Schema.optionalKey(Schema.NullOr(MineSchema)) });
 
-export type Opened = Guarded<typeof isOpened>;
+export type Opened = typeof OpenedSchema.Type;
 
-export const OPENED = sharedMapKey("file-tree.opened", isOpened);
+export const OPENED = sharedKey("file-tree.opened", mapOf(OpenedSchema));
 
 /** A file for the preview pane whose slot it names (preview/main.ts shows it). */
-export const isShowRequest = object({ slot: isString, path: isString, n: isNumber }, { at: isNumber });
+export const ShowRequestSchema = Schema.Struct({ slot: Schema.String, path: Schema.String, n: Schema.Finite, at: Schema.optionalKey(Schema.Finite) });
 
-export const SHOW_KEY = sharedKey("preview.show", nullable(isShowRequest));
+export const SHOW_KEY = sharedKey("preview.show", Schema.NullOr(ShowRequestSchema));
 
 /** The file each preview pane shows, by its slot (preview/viewer-load.ts titleOf). */
-const SHOWN = sharedMapKey("preview.paths", nullable(isString));
+const SHOWN = sharedKey("preview.paths", mapOf(Schema.NullOr(Schema.String)));
 
 /** This pane's own panes, as kept (a restart keeps them by its slot). */
 export function openedOf(v: Files): Opened {
-  return (v.slot !== null && v.slot !== "" ? readSharedMap(shared, OPENED).get(v.slot) : undefined) ?? {};
+  return (v.slot !== null && v.slot !== "" ? readShared(shared, OPENED, new Map()).get(v.slot) : undefined) ?? {};
 }
 
 /** Notes this pane's own editor or preview pane (null: none now). */
@@ -59,7 +58,7 @@ export function noteMine(v: Files, which: "editor" | "preview", mine: Mine | nul
   const was = openedOf(v);
   const now: Opened = { editor: was.editor ?? null, preview: was.preview ?? null, [which]: mine };
 
-  writeSharedMap(setShared, OPENED, keptFor(v, readSharedMap(shared, OPENED), v.slot, now));
+  writeShared(setShared, OPENED, keptFor(v, readShared(shared, OPENED, new Map()), v.slot, now));
 }
 
 /** A pane that can be a files pane's own editor or preview pane: on this
@@ -104,7 +103,7 @@ export const ownPreview = (v: Files): PaneInfo | null => own(v, "preview");
 /** The file a preview pane shows: as it noted (it steps through its folder), else its props'. */
 export function previewFile(pane: PaneInfo): string | null {
   const slot = editorProps(pane).slot;
-  const noted = slot !== undefined && slot !== "" ? readSharedMap(shared, SHOWN).get(slot) : undefined;
+  const noted = slot !== undefined && slot !== "" ? readShared(shared, SHOWN, new Map()).get(slot) : undefined;
 
   return noted ?? editorProps(pane).path ?? null;
 }

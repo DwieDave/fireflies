@@ -4,17 +4,16 @@
 // the shapes the pane holds (the name row, the delete question, the menu, a
 // drag, the preview's target). main.ts's Files holds these fields.
 
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Option, Schema, String as Str } from "effect";
 import type * as herdr from "herdr";
 import { exec, home, appHome } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isString, nullable, object, sharedKey, sharedListKey, sharedMapKey } from "./guard.ts";
+import { listOf, mapOf, sharedKey } from "@fireflies/kit";
 import type { MenuItem, Row } from "./logic.ts";
-import { isFilters, isFileChange, isClip } from "./logic.ts";
+import { ClipSchema, FileChangeSchema, FiltersSchema } from "./logic.ts";
 import type { At, Entry, Side } from "./split-size.ts";
 import type { Anchor } from "@fireflies/menu-place";
 import type { NewKind } from "./fit.ts";
-import { isLookEntry } from "./split-size.ts";
+import { LookEntrySchema } from "./split-size.ts";
 
 export const ROW = 22;
 export const PER_FOLDER = 500;
@@ -59,38 +58,42 @@ export const ICONS = "mods/workspace-chrome";
 
 /** What a pane is opened with: the panel { folder, on, slot } (nocturne/files.ts), a pane of
  *  its own { path, on, slot } (files.open, a folder link). */
-export const isFilesProps = object({}, { folder: nullable(isString), path: nullable(isString), on: nullable(isString), slot: nullable(isString) });
+const optionalText = Schema.optionalKey(Schema.NullOr(Schema.String));
 
-export type FilesProps = Guarded<typeof isFilesProps>;
+export const FilesPropsSchema = Schema.Struct({ folder: optionalText, path: optionalText, on: optionalText, slot: optionalText });
+
+export const isFilesProps = Schema.is(FilesPropsSchema);
+
+export type FilesProps = typeof FilesPropsSchema.Type;
 
 /** A mod pane's slot. */
-export const isSlotted = object({ slot: isString });
+export const isSlotted = Schema.is(Schema.Struct({ slot: Schema.String }));
 
 /** A panel's props: a pane of its own has a path. */
-export const isAlone = object({ path: isString });
+export const isAlone = Schema.is(Schema.Struct({ path: Schema.String }));
 
 /** A terminal of herdr-core's listing, the fields `editorPane` reads. */
-export const isTerminal = object({ address: isString }, { argv: nullable(arrayOf(isString)) });
+export const isTerminal = Schema.is(Schema.Struct({ address: Schema.String, argv: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))) }));
 
 /** Each pane's filters by slot (users' state: kept across restarts). */
-export const FILTERS = sharedMapKey(`${MOD}.filters`, isFilters);
+export const FILTERS = sharedKey(`${MOD}.filters`, mapOf(FiltersSchema));
 
 /** What a pane of its own shows, for its header (the folder's name) and the app (files.open). */
-export const TITLES = sharedMapKey(`${MOD}.titles`, isString);
+export const TITLES = sharedKey(`${MOD}.titles`, mapOf(Schema.String));
 
-export const PATHS = sharedMapKey(`${MOD}.paths`, isString);
+export const PATHS = sharedKey(`${MOD}.paths`, mapOf(Schema.String));
 
 /** The pane the keyboard came from into the panel (set by nocturne/files.ts). */
-export const FROM = sharedKey(`${MOD}.from`, nullable(isString));
+export const FROM = sharedKey(`${MOD}.from`, Schema.NullOr(Schema.String));
 
 /** What `x` cut, for `P` in any files pane: { on, items: [{ abs, dir, name }] }. */
-export const CUT = sharedKey(`${MOD}.cut`, nullable(isClip));
+export const CUT = sharedKey(`${MOD}.cut`, Schema.NullOr(ClipSchema));
 
 /** Each pane's preview split by slot: { on, right, bottom } (logic.ts newLook). */
-export const LOOK = sharedMapKey(`${MOD}.look`, isLookEntry);
+export const LOOK = sharedKey(`${MOD}.look`, mapOf(LookEntrySchema));
 
 /** Renames, moves and deletes done here, for the editors to follow (logic.ts withChanges). */
-export const CHANGES = sharedListKey("nocturne.files.changes", isFileChange);
+export const CHANGES = sharedKey("nocturne.files.changes", listOf(FileChangeSchema));
 
 /** How long the selection rests before the preview loads it (ms): stepping through doesn't. */
 export const REST = 90;

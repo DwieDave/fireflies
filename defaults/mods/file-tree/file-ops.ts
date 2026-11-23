@@ -5,7 +5,7 @@
 import { Array as Arr, Option, String as Str } from "effect";
 import type { Context, KeyEvent } from "gpui-kit";
 import { exec, home, shared, setShared } from "herdr";
-import { readShared, readSharedList, writeShared } from "./guard.ts";
+import { readShared, writeShared } from "@fireflies/kit";
 import type { Clip, CutItem, DraftRow, Moved, Row } from "./logic.ts";
 import { isHidden, lists, withChanges, cutItems, base, dirOf } from "./logic.ts";
 import type { Ask, Outcome } from "./state.ts";
@@ -48,7 +48,7 @@ export function why(v: Files, r: Outcome, name: string): string {
  *  null for a delete; a folder once, with its own paths), appended to the
  *  shared record the editors follow. */
 export function recordChanges(v: Files, entries: readonly Moved[]): void {
-  if (entries.length !== 0) setShared(CHANGES.name, withChanges(readSharedList(shared, CHANGES), entries, v.on, Date.now()));
+  if (entries.length !== 0) writeShared(setShared, CHANGES, withChanges(readShared(shared, CHANGES, []), entries, v.on, Date.now()));
 }
 
 /** After `rel` moved to `to` (relative, or null: out of the tree or
