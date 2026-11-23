@@ -7,65 +7,22 @@
 // herdr and gpui are stand-ins (the elements record what they're asked to
 // draw); exec and files are real. Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { found, spawnReply, standIn } from "./databases-host.ts";
 import { mkdtempSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const SQLITE = Bun.which("sqlite3") !== null;
-const closed: string[] = [];
-const commands: [string, any][] = [];
-let sharedState: Record<string, unknown> = {};
 
-async function realExec(cmd: string, args: string[] = []) {
-  const p = Bun.spawn([cmd, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-  return { code: await p.exited, stdout, stderr };
-}
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test-none", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; }, openOverlay: () => "o1",
-  exec: realExec, focused: () => null, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => [], props: () => null,
-  readTextFile: async () => null,
-  writeTextFile: async (p: string, t: string, expected: string | null) => { if (expected === null && existsSync(p)) throw new Error("exists"); writeFileSync(p, t); return null; },
-  pickFile: async () => null, pickFolder: async () => null, run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "linux" }),
-}));
+const { h, theme, el, cx, until, flush, advance, services } = standIn({ disk: true, appHome: "/tmp/herdr-test-none", get Editor() { return Editor; } });
+h.reply = spawnReply; // the programs run for real (sqlite3)
+const { files, commands, closed, execs, written, stores } = h;
 
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => (on ? add(el) : el)
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 /** An input: its text, its change handler (typing calls it). */
-class Input {
-  v = ""; handlers: Record<string, Function> = {}; focused = false;
-  constructor(o: any = {}) { this.v = o.value ?? ""; }
-  on(ev: string, f: Function) { this.handlers[ev] = f; return true; }
-  value() { return this.v; } set_value(v: string) { this.v = v; } focus() { this.focused = true; } release() { return true; } set_masked() {}
-  type(v: string) { this.v = v; this.handlers.change?.({}, cx); }
-}
 class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } cursor() { return { line: 0, col: 0 }; } set_cursor() {} selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-(globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard() {},
-};
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { openTable } = await import("../defaults/mods/databases/actions.ts");
 const { privateDir } = await import("../defaults/mods/databases/runner.ts");
 
@@ -73,19 +30,12 @@ const dirOf = mkdtempSync(join(tmpdir(), "ff-dbedit-view-"));
 const DB = join(dirOf, "lantern.db");
 const sql = (q: string) => Bun.spawnSync(["sqlite3", "-separator", "|", "-nullvalue", "NULL", DB, q]).stdout.toString().trim();
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: { shift: false, control: false, alt: false, platform: false, ...mods } });
-const texts = () => drawn.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
+const texts = () => h.drawn.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 /** Waits until `ok` holds (a run is a real process). */
-async function until(ok: () => boolean, ms = 5000) {
-  const end = Date.now() + ms;
-  while (!ok()) {
-    if (Date.now() > end) throw new Error("timed out");
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
 
 /** A window connected to the throwaway file, `lanterns` open in the Rows tab. */
 async function opened(readonly = false) {
-  sharedState = {};
+  h.shared = {};
   const v: any = new Databases();
   v.init({ folder: dirOf, overlay: "w1" }, cx);
   await until(() => v.dir !== null);
@@ -99,7 +49,7 @@ async function opened(readonly = false) {
   v.panel = "main";
   return v;
 }
-const render = (v: any) => { drawn = []; v.render(); return texts(); };
+const render = (v: any) => { h.drawn = []; v.render(); return texts(); };
 
 function seed() {
   Bun.spawnSync(["sqlite3", DB, "drop table if exists lanterns; drop view if exists bright; create table lanterns(id integer primary key, name text not null, lumens integer, note text); "
@@ -179,8 +129,8 @@ test.skipIf(!SQLITE)("a double click edits a table's cell; changes stay with the
   seed();
   const v = await opened();
   render(v);
-  const at = drawn.findIndex(([m, a]) => m === "id" && a[0] === "rows-grid-c-0-1");
-  const press = drawn.slice(at).find(([m, a]) => m === "on_mouse_down" && a[0] === "left")?.[1][1];
+  const at = h.drawn.findIndex(([m, a]) => m === "id" && a[0] === "rows-grid-c-0-1");
+  const press = h.drawn.slice(at).find(([m, a]) => m === "on_mouse_down" && a[0] === "left")?.[1][1];
   press({ click_count: 2 }, cx);
   expect(v.cellEdit?.column).toBe("name");
   v.cellEdit.input.type("first");

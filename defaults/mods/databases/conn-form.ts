@@ -28,6 +28,7 @@ import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "@fireflies/keyhelp";
 import type { default as DbView } from "./main.ts";
 import { nowMs, pickFile } from "./app.ts";
+import type { Pickers } from "./fx.ts";
 import type { DbRun } from "./app.ts";
 import { edge } from "@fireflies/tones";
 
@@ -424,7 +425,7 @@ export class ConnForm {
   }
 
   /** The system's file picker for the path field. */
-  pick(): Effect.Effect<void> {
+  pick(): Effect.Effect<void, never, Pickers> {
     return Effect.map(pickFile("Open the database"), (path) => {
       if (Option.isSome(path) && Str.isNonEmpty(path.value)) this.inputs.get("path")?.set_value(path.value);
     });

@@ -5,99 +5,35 @@
 // Everything is a stand-in (kubectl, psql, direnv): no cluster, no server, no keychain touched.
 // Its own process: it stands in for "herdr".
 import { test, expect, mock, describe } from "bun:test";
+import { Deferred, Effect } from "effect";
+import type { ExecResult } from "herdr";
+import { found, runReal, spawnReply, standIn } from "./databases-host.ts";
+import type { Reply } from "./databases-host.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-let sharedState: Record<string, unknown> = {};
-const files = new Map<string, string>();
-let propsNow: any = null;
-let panesNow: any[] = [];
-let focusedNow: any = null;
-const commands: [string, any][] = [];
-const opened: any[] = [];
-const closed: string[] = [];
-const execs: string[][] = [];
-const written: [string, string][] = [];
-/** The default answers: the clients are found (envrc.ts lookup), anything else fails quietly. */
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-let execReply: (cmd: string, args: string[]) => any = found;
-let overlayN = 0;
-let platformNow = "linux";
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; },
-  openOverlay: (spec: any) => { opened.push(spec); return `o${++overlayN}`; },
-  exec: async (cmd: string, args: string[] = []) => { execs.push([cmd, ...args]); return execReply(cmd, args); },
-  focused: () => focusedNow, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => panesNow, props: () => propsNow,
-  readTextFile: async (p: string) => files.get(p) ?? null, writeTextFile: async (p: string, t: string) => { written.push([p, t]); return null; },
-  pickFile: async () => null, pickFolder: async () => null,
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: platformNow }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => { drawn.push(["when", []]); return on ? add(el) : el; }
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const handle = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
-class Input { v = ""; masked = false; constructor(o: any = {}) { this.v = o.value ?? ""; } on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; } }
-/** The SQL editor: its text, caret and selection; what the window asks of it. */
-class Editor {
-  text: string; caret = { line: 0, col: 0 }; sel: any = null; diags: any[] = []; keys: any = null; focusedNow = false;
-  constructor(o: any) { this.text = o.value ?? ""; }
-  value() { return this.text; } set_value(v: string) { this.text = v; }
-  on(ev: string, f: any) { if (ev === "key") this.keys = f; return true; }
-  cursor() { return this.caret; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
-  selection() { return this.sel ?? { start: this.caret, end: this.caret, text: "" }; }
-  set_diagnostics(d: any[]) { this.diags = d; } edit(e: any[]) { for (const x of e) this.text = this.text.slice(0, x.start.col) + x.text + this.text.slice(x.end.col); }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; } release() { return true; }
-}
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: handle },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-
-const stores = new Map<string, Map<string, string>>();
-(globalThis as any).localStorage = {
-  getItem: (k: string) => stores.get(JSON.stringify(propsNow))?.get(k) ?? null,
-  setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
-};
-
-let clipboard = "";
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
+const { files, commands, opened, closed, execs, written, stores } = h;
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
-  propsNow = p;
+  h.props = p;
   const v: any = new Databases();
   v.init(p, cx);
   return v;
 }
 function render(v: any, width = 1100) {
   v.size = { width, height: 720 };
-  drawn = [];
+  h.drawn = [];
   v.render();
-  return drawn;
+  return h.drawn;
 }
 const framed = (d: [string, any[]][]) => {
   const i = d.findIndex(([m, a]) => m === "id" && a[0] === "databases");
@@ -107,10 +43,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { sharedState = {}; commands.length = 0; opened.length = 0; closed.length = 0; panesNow = []; focusedNow = null; stores.clear(); execs.length = 0; written.length = 0; execReply = found; };
-const flush = () => new Promise((r) => setTimeout(r, 5));
-
-
+const fresh = () => { forget(); files.clear(); h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
 
 // ---- the stand-ins: kubectl, the client lookup, the folder's direnv, the client runs (each can wait)
 
@@ -123,22 +56,21 @@ const b64 = (s: string) => Buffer.from(s).toString("base64");
 /** His shape: a pod's forward, the password and user from the pod's env (no database). */
 const SOURCE = { from: "kubernetes", context: "nightjar-dev", namespace: "glowworm", name: "glowworm-pg-env", key: "POSTGRES_PASSWORD", userKey: "POSTGRES_USER" };
 const ARGS = { kind: "postgres", name: "glowworm-pg-1 (nightjar-dev/glowworm)", host: "127.0.0.1", port: 15432, from: "port-forward pod/glowworm-pg-1 in nightjar-dev/glowworm", secret: SOURCE };
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const never = () => new Promise<any>(() => {});
+const never = (): Reply => Effect.never;
 
 /** What each stand-in does now. */
 let world: {
-  kube: () => Promise<any>; psqlAt: string | null; folderPsql: string | null; direnv: null | (() => Promise<any>); run: (args: string[]) => Promise<any>; setup: string;
+  kube: () => Reply; psqlAt: string | null; folderPsql: string | null; direnv: null | (() => Reply); run: (args: readonly string[]) => Reply; setup: string;
 };
 const PSQL_OUT = "";
 const ok = (stdout: string) => ({ code: 0, stdout, stderr: "" });
 const reset = () => {
   fresh();
   world = {
-    kube: async () => ok(`${b64("moth-lantern-42")}\n${b64("lantern")}\n`),
-    psqlAt: null, folderPsql: null, direnv: null, run: async () => ok(PSQL_OUT), setup: "nix-darwin",
+    kube: () => ok(`${b64("moth-lantern-42")}\n${b64("lantern")}\n`),
+    psqlAt: null, folderPsql: null, direnv: null, run: () => ok(PSQL_OUT), setup: "nix-darwin",
   };
-  execReply = (cmd: string, args: string[]): any => {
+  h.reply = (cmd: string, args: readonly string[]): Reply => {
     if (cmd === "kubectl") return world.kube();
     if (cmd === "sh" && args[2] === "ff-dir") return ok("/tmp/fireflies-db.abc\n");
     if (cmd === "sh" && args[2] === "ff-setup") return ok(`${world.setup}\n`);
@@ -148,7 +80,7 @@ const reset = () => {
       return path ? ok(`${path}\n`) : { code: 1, stdout: "", stderr: "" };
     }
     if (cmd === "sh" && args[2] === "probe") return world.direnv ? ok(`dir\t${args[3]}\nstatus\t{"state":{"foundRC":{"allowed":0}}}\n`) : ok("");
-    if (cmd === "direnv") return (world.direnv ?? (async () => ok("{}")))();
+    if (cmd === "direnv") return (world.direnv ?? (() => ok("{}")))();
     if (cmd === "sh" && args[2] === "ff-db") return world.run(args);
     if (cmd === "sh" && args[2] === "ff-cancel") return ok("");
     return { code: 1, stdout: "", stderr: "" };
@@ -161,10 +93,6 @@ async function sent(args: any = ARGS, folder = "/w") {
   for (let i = 0; i < 4; i++) await flush();
   command(v, `databases.connect:${JSON.stringify(args)}`, cx);
   return v;
-}
-async function until(f: () => boolean, ms = 3000) {
-  const end = Date.now() + ms;
-  while (!f()) { if (Date.now() > end) throw new Error("timed out waiting"); await sleep(5); }
 }
 const drawnText = (v: any) => texts(render(v)).join(" | ");
 
@@ -185,7 +113,7 @@ test("his case: a pod's forward, psql nowhere: the window says what to install a
   expect(installLine("postgres", "nix-darwin")).toContain("pkgs.postgresql");
   expect(installLine("postgres", "brew")).toBe("brew install libpq && brew link --force libpq");
   expect(installLine("postgres", "nix")).toBe("nix profile install nixpkgs#postgresql");
-  const copy = drawn.find(([m, a]) => m === "id" && a[0] === "tables-missing-copy");
+  const copy = h.drawn.find(([m, a]) => m === "id" && a[0] === "tables-missing-copy");
   expect(copy).toBeTruthy();
   // The Log says what wasn't found, and where it was looked for.
   expect(v.log[0]).toMatchObject({ sql: "looking for psql", ok: false, run: "psql: not on the app's PATH" });
@@ -195,13 +123,13 @@ test("his case delivered twice (props and a command, at every moment), psql abse
   for (const psql of [null, "/run/current-system/sw/bin/psql"]) for (const second of [0, 3, 8, 15, 30]) {
     reset();
     world.psqlAt = psql;
-    world.kube = async () => { await sleep(6); return ok(`${b64("moth-lantern-42")}\n${b64("lantern")}\n`); };
-    world.run = async () => { await sleep(10); return ok(""); };
+    world.kube = () => Effect.as(Effect.sleep(6), ok(`${b64("moth-lantern-42")}\n${b64("lantern")}\n`));
+    world.run = () => Effect.as(Effect.sleep(10), ok(""));
     const v = open({ folder: "/w", overlay: "w1", connect: ARGS });
-    await sleep(second);
+    await advance(second);
     command(v, `databases.connect:${JSON.stringify(ARGS)}`, cx);
     await until(() => !v.catalog.busy && !v.reads.length && (v.catalog.error !== null || runs().length > 0), 2000);
-    await sleep(40);
+    await advance(40);
     expect({ psql, second, busy: v.catalog.busy, reads: v.reads.length }).toEqual({ psql, second, busy: false, reads: 0 });
     expect(drawnText(v)).not.toContain("reading the tables");
   }
@@ -260,9 +188,9 @@ test("stop: esc ends a tables read and interrupts the client by its nonce; the c
   v.key(key("r"), cx);
   await until(() => readIn(v, "tables")?.nonce);
   render(v);
-  const stop = drawn.findIndex(([m, a]) => m === "id" && a[0] === "tables-read-stop");
+  const stop = h.drawn.findIndex(([m, a]) => m === "id" && a[0] === "tables-read-stop");
   expect(stop).toBeGreaterThan(-1);
-  const click = drawn.slice(stop).find(([m]) => m === "on_click")?.[1][0];
+  const click = h.drawn.slice(stop).find(([m]) => m === "on_click")?.[1][0];
   click({}, cx);
   await until(() => !v.catalog.busy);
   expect(v.catalog.error).toBe("reading the tables: stopped · r reads again");
@@ -271,7 +199,7 @@ test("stop: esc ends a tables read and interrupts the client by its nonce; the c
 test("the Log names each client run: the program, its arguments, where it came from, its exit; nothing secret", async () => {
   reset();
   world.psqlAt = "/run/current-system/sw/bin/psql";
-  world.run = async () => ({ code: 2, stdout: "", stderr: 'psql: error: connection to server at "127.0.0.1", port 15432 failed: timeout expired\n' });
+  world.run = () => ({ code: 2, stdout: "", stderr: 'psql: error: connection to server at "127.0.0.1", port 15432 failed: timeout expired\n' });
   const v = await sent();
   await until(() => v.catalog.error !== null);
   const line = v.log[0];
@@ -297,8 +225,9 @@ test("the client from the folder's environment (direnv): waited for, preferred, 
   reset();
   world.psqlAt = "/run/current-system/sw/bin/psql";
   world.folderPsql = "/nix/store/abc-postgresql-17/bin/psql";
-  let release: () => void = () => {};
-  world.direnv = () => new Promise((r) => { release = () => r(ok(JSON.stringify({ PATH: "/nix/store/abc-postgresql-17/bin:/usr/bin" }))); });
+  const env = Effect.runSync(Deferred.make<ExecResult>());
+  const release = () => { Effect.runSync(Deferred.succeed(env, ok(JSON.stringify({ PATH: "/nix/store/abc-postgresql-17/bin:/usr/bin" })))); };
+  world.direnv = () => Deferred.await(env);
   const v = await sent(ARGS, "/home/me/lanterns");
   await until(() => readIn(v, "tables") !== null);
   expect(readIn(v, "tables").what).toBe("loading ~/lanterns's environment (direnv)");
@@ -328,7 +257,7 @@ test("Postgres and MySQL structure reads no exact count (the estimate stands); #
   expect(structureSql("sqlite", { schema: null, name: "lanterns" }).some((s: any) => /count\(\*\)/.test(s.text))).toBe(true);
   reset();
   world.psqlAt = "/usr/bin/psql";
-  world.run = async (args: string[]) => ok("");
+  world.run = () => ok("");
   const v = await sent();
   await until(() => runs().length > 0 && !v.catalog.busy);
   v.catalog.tables = [{ schema: "public", name: "lanterns", type: "table", rows: 1200 }];
@@ -348,7 +277,7 @@ test("said before connecting: a listed connection's row and the new-connection f
   await until(() => v.clients.has("postgres"));
   const d = drawnText(v);
   expect(d).toContain("no psql");
-  expect(drawn.some(([m, a]) => m === "id" && a[0] === "conn-noclient-pg-moth0001")).toBe(true);
+  expect(h.drawn.some(([m, a]) => m === "id" && a[0] === "conn-noclient-pg-moth0001")).toBe(true);
   expect(execs.filter((a) => a[0] === "kubectl" || a[3] === "ff-db")).toEqual([]);
   v.key(key("n"), cx);
   const f = drawnText(v);
@@ -365,17 +294,10 @@ describe.skipIf(!PG_BIN)("a real psql on a black-hole port", () => {
     const { parsePsql } = await import("../defaults/mods/databases/parse-out.ts");
     const hole = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {}, open() {} } });
     const dir = mkdtempSync(join(tmpdir(), "ff-hole-"));
-    const io: any = {
-      exec: async (cmd: string, args: string[] = []) => {
-        const p = Bun.spawn([cmd, ...args], { stdout: "pipe", stderr: "pipe", env: { ...process.env, PGCONNECT_TIMEOUT: "2" } });
-        const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-        return { code: await p.exited, stdout, stderr };
-      },
-      writeTextFile: async (p: string, t: string) => { await Bun.write(p, t); return null; },
-    };
-    const at = Date.now();
-    const r = await run(io, { kind: "postgres", dir, program: join(PG_BIN, "psql"), args: ["-X", "-w", "-h", "127.0.0.1", "-p", String(hole.port), "-d", "postgres"], script: "select 1;" });
-    const took = Date.now() - at;
+    process.env.PGCONNECT_TIMEOUT = "2";
+    const at = performance.now();
+    const r = await runReal(run({ kind: "postgres", dir, program: join(PG_BIN, "psql"), args: ["-X", "-w", "-h", "127.0.0.1", "-p", String(hole.port), "-d", "postgres"], script: "select 1;" } as any));
+    const took = performance.now() - at;
     hole.stop(true);
     rmSync(dir, { recursive: true, force: true });
     expect(took).toBeLessThan(6000);
@@ -388,8 +310,9 @@ describe.skipIf(!PG_BIN)("a real psql on a black-hole port", () => {
 test("a run the stop killed is said as stopped in the Log", async () => {
   reset();
   world.psqlAt = "/usr/bin/psql";
-  let kill: () => void = () => {};
-  world.run = () => new Promise((r) => { kill = () => r({ code: 137, stdout: "", stderr: "ff-db: line 24: 4242 Killed: 9  sh -c …" }); });
+  const killed = Effect.runSync(Deferred.make<ExecResult>());
+  const kill = () => { Effect.runSync(Deferred.succeed(killed, { code: 137, stdout: "", stderr: "ff-db: line 24: 4242 Killed: 9  sh -c …" })); };
+  world.run = () => Deferred.await(killed);
   const v = await sent();
   await until(() => readIn(v, "tables")?.nonce);
   command(v, "databases.stop", cx);
@@ -425,7 +348,7 @@ function callCx() {
 test("a key's or a click's cx ends with its call: a table opened by enter still reads its rows and structure", async () => {
   reset();
   world.psqlAt = "/usr/bin/psql";
-  world.run = async () => { await sleep(5); return ok(""); };
+  world.run = () => Effect.as(Effect.sleep(5), ok(""));
   const v = await sent();
   await until(() => runs().length > 0 && !v.catalog.busy);
   v.catalog.tables = [{ schema: "public", name: "lanterns", type: "table", rows: 1200 }];

@@ -16,7 +16,7 @@ mock.module("herdr", () => ({
   run: (name: string, args?: any) => { ran.push([name, args]); return null; },
   openOverlay: (spec: any) => { opened.push(spec); return "o1"; }, closeOverlay: () => null,
   settings: () => ({ zoom: 1 }), theme: () => theme, window: () => ({ platform: "linux" }), props: () => ({}),
-  panes: () => [], spaces: () => [], focused: () => null, terminals: () => [], nextCommand: () => new Promise(() => {}),
+  panes: () => [], spaces: () => [], focused: () => null, terminals: () => [],
   nativeViewCapabilities: () => ({ available: false, kinds: [] }), nativeViewCall: () => null, nativeView: () => null,
   watchFolder: () => null, highlight: () => [], languageOf: () => null, notify: () => null, keys: () => [],
 }));

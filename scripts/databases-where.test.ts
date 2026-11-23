@@ -8,101 +8,36 @@
 // FF_TEST_PG_BIN a throwaway PostgreSQL on 127.0.0.1:25433 answers instead (never his ports).
 // Its own process: it stands in for "herdr".
 import { test, expect, mock, describe } from "bun:test";
+import { Deferred, Effect } from "effect";
+import { found, standIn } from "./databases-host.ts";
+
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
+const { files, commands, opened, closed, execs, written, stores } = h;
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-let sharedState: Record<string, unknown> = {};
-const files = new Map<string, string>();
-let propsNow: any = null;
-let panesNow: any[] = [];
-let focusedNow: any = null;
-const commands: [string, any][] = [];
-const opened: any[] = [];
-const closed: string[] = [];
-const execs: string[][] = [];
-const written: [string, string][] = [];
-/** The default answers: the clients are found (envrc.ts lookup), anything else fails quietly. */
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-let execReply: (cmd: string, args: string[], opts?: any) => any = found;
 /** Writes land in `written`; a real run (the throwaway server) also puts them on disk. */
 let realFiles = false;
-let overlayN = 0;
-let platformNow = "linux";
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; },
-  openOverlay: (spec: any) => { opened.push(spec); return `o${++overlayN}`; },
-  exec: async (cmd: string, args: string[] = [], opts: any = {}) => { execs.push([cmd, ...args]); return execReply(cmd, args, opts); },
-  focused: () => focusedNow, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => panesNow, props: () => propsNow,
-  readTextFile: async (p: string) => files.get(p) ?? null, writeTextFile: async (p: string, t: string) => { written.push([p, t]); files.set(p, t); if (realFiles) await Bun.write(p, t); return null; },
-  pickFile: async () => null, pickFolder: async () => null,
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: platformNow }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => { drawn.push(["when", []]); return on ? add(el) : el; }
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const handle = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
-class Input { v = ""; masked = false; constructor(o: any = {}) { this.v = o.value ?? ""; } on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; } }
-/** The SQL editor: its text, caret and selection; what the window asks of it. */
-class Editor {
-  text: string; caret = { line: 0, col: 0 }; sel: any = null; diags: any[] = []; keys: any = null; focusedNow = false;
-  constructor(o: any) { this.text = o.value ?? ""; }
-  value() { return this.text; } set_value(v: string) { this.text = v; }
-  on(ev: string, f: any) { if (ev === "key") this.keys = f; return true; }
-  cursor() { return this.caret; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
-  selection() { return this.sel ?? { start: this.caret, end: this.caret, text: "" }; }
-  set_diagnostics(d: any[]) { this.diags = d; } edit(e: any[]) { for (const x of e) this.text = this.text.slice(0, x.start.col) + x.text + this.text.slice(x.end.col); }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; } release() { return true; }
-}
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: handle },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-
-const stores = new Map<string, Map<string, string>>();
-(globalThis as any).localStorage = {
-  getItem: (k: string) => stores.get(JSON.stringify(propsNow))?.get(k) ?? null,
-  setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
-};
-
-let clipboard = "";
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
-  propsNow = p;
+  h.props = p;
   const v: any = new Databases();
   v.init(p, cx);
   return v;
 }
 function render(v: any, width = 1100) {
   v.size = { width, height: 720 };
-  drawn = [];
+  h.drawn = [];
   v.render();
-  return drawn;
+  return h.drawn;
 }
 const framed = (d: [string, any[]][]) => {
   const i = d.findIndex(([m, a]) => m === "id" && a[0] === "databases");
@@ -112,8 +47,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { sharedState = {}; commands.length = 0; opened.length = 0; closed.length = 0; panesNow = []; focusedNow = null; stores.clear(); execs.length = 0; written.length = 0; files.clear(); execReply = found; realFiles = false; };
-const flush = () => new Promise((r) => setTimeout(r, 5));
+const fresh = () => { forget(); h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; files.clear(); h.reply = found; realFiles = false; };
 
 /** psql's flags of a run, from the runner's arguments (runner.ts runnerArgs: the client's own start at the 12th). */
 function psqlArgsOf(args: readonly string[]): Record<string, string> {
@@ -129,11 +63,6 @@ const { emptyWords, whereNow } = await import("../defaults/mods/databases/dbs.ts
 const { modalKey } = await import("../defaults/mods/databases/popups.ts");
 const { connectionsFile } = await import("../defaults/mods/databases/store.ts");
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until(f: () => boolean, ms = 3000) {
-  const end = Date.now() + ms;
-  while (!f()) { if (Date.now() > end) throw new Error("timed out waiting"); await sleep(5); }
-}
 const ok = (stdout: string) => ({ code: 0, stdout, stderr: "" });
 
 // ---- a made-up server: databases with their schemas and tables, answered as psql would
@@ -176,7 +105,7 @@ const reset = () => {
   server = SERVER;
   gone = false;
   user = "app";
-  execReply = (cmd: string, args: string[]): any => {
+  h.reply = (cmd: string, args: string[]): any => {
     if (cmd === "sh" && args[2] === "ff-dir") return ok("/tmp/fireflies-db.abc\n");
     if (cmd === "sh" && args[2] === "ff-setup") return ok("nix-darwin\n");
     if (cmd === "sh" && args[2] === "lookup") return args[4] === "psql" ? ok("/run/current-system/sw/bin/psql\n") : { code: 1, stdout: "", stderr: "" };
@@ -321,7 +250,7 @@ test("a pinned connection keeps the pick in its record (no secret in the file); 
   reset();
   const pinned = { id: "pg-lantern1", name: "lantern", kind: "postgres", host: "127.0.0.1", port: 25433, user: "app", secret: "kubernetes", source: { from: "kubernetes", context: "nightjar-dev", namespace: "glowworm", name: "lantern-app", key: "password", databaseKey: "dbname" } };
   files.set(connectionsFile("/tmp/herdr-test"), JSON.stringify({ connections: [pinned] }));
-  execReply = ((base) => (cmd: string, args: string[], o: any) => (cmd === "kubectl" ? ok(`${Buffer.from("moth-lantern-42").toString("base64")}\n${Buffer.from("postgres").toString("base64")}\n`) : base(cmd, args, o)))(execReply);
+  h.reply = ((base) => (cmd: string, args: string[], o: any) => (cmd === "kubectl" ? ok(`${Buffer.from("moth-lantern-42").toString("base64")}\n${Buffer.from("postgres").toString("base64")}\n`) : base(cmd, args, o)))(h.reply);
   const v = open({ folder: "/w", overlay: "w1" });
   for (let i = 0; i < 6; i++) await flush();
   v.connectTo(v.saved[0], cx);
@@ -360,11 +289,12 @@ test("the state function's every state, and the head's mark, the row's pip and t
   expect(drawnText(v)).toContain("not connected");
   // Connecting: a client that waits.
   // While held, client runs wait; release lets every waiting one answer.
+  const gate = () => Effect.runSync(Deferred.make<void>());
   let hold = true;
-  let waiting: (() => void)[] = [];
-  const release = () => { hold = false; for (const w of waiting) w(); waiting = []; };
-  const base = execReply;
-  execReply = (cmd: string, args: string[], o: any) => (cmd === "sh" && args[2] === "ff-db" && hold ? new Promise((r) => { waiting.push(() => r(psqlRun(args))); }) : base(cmd, args, o));
+  let opening = gate();
+  const release = () => { hold = false; Effect.runSync(Deferred.succeed(opening, undefined)); opening = gate(); };
+  const base = h.reply;
+  h.reply = (cmd: string, args: readonly string[], o: any) => (cmd === "sh" && args[2] === "ff-db" && hold ? Effect.andThen(Deferred.await(opening), Effect.sync(() => psqlRun([...args]))) : base(cmd, args, o));
   command(v, `databases.connect:${JSON.stringify({ ...SENT, readonly: true })}`, cx);
   await until(() => v.catalog.busy && v.reads.length > 0);
   expect(connState(v, v.active).kind).toBe("connecting");
@@ -392,7 +322,7 @@ test("the state function's every state, and the head's mark, the row's pip and t
   release();
   await until(() => !v.catalog.busy);
   // Failed: the server gone, the next read says so everywhere.
-  execReply = base;
+  h.reply = base;
   gone = true;
   v.refreshCatalog(cx);
   await until(() => !v.catalog.busy && v.alive && !v.alive.ok);
@@ -509,7 +439,7 @@ describe.skipIf(!PG_BIN)("a real PostgreSQL 18 on 127.0.0.1:25433", () => {
       reset();
       realFiles = true;
       process.env.PATH = `${PG_BIN}:${process.env.PATH}`;
-      execReply = (cmd: string, args: string[]): any => {
+      h.reply = (cmd: string, args: string[]): any => {
         const r = Bun.spawnSync([cmd, ...args], { stdout: "pipe", stderr: "pipe", env: { ...process.env } });
         return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
       };

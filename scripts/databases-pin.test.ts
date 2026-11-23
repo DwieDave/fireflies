@@ -4,102 +4,30 @@
 // fixture), its failures. herdr, kubectl, psql, hc and the ports are stand-ins: no cluster touched.
 // Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { found, standIn } from "./databases-host.ts";
+
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
+const { files, commands, opened, closed, execs, written, stores } = h;
 import { Effect } from "effect";
 
-let sharedState: Record<string, unknown> = {};
-const files = new Map<string, string>();
-let terminalsNow: any[] = [];
-let hcReply: (args: string[]) => any = () => ({ code: 0, stdout: '{"address":"t9"}', stderr: "" });
-const hcCalls: string[][] = [];
-let propsNow: any = null;
-let panesNow: any[] = [];
-let focusedNow: any = null;
-const commands: [string, any][] = [];
-const opened: any[] = [];
-const closed: string[] = [];
-const execs: string[][] = [];
-const written: [string, string][] = [];
-/** The default answers: the clients are found (envrc.ts lookup), anything else fails quietly. */
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-let execReply: (cmd: string, args: string[]) => any = found;
-let overlayN = 0;
-let platformNow = "linux";
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; },
-  openOverlay: (spec: any) => { opened.push(spec); return `o${++overlayN}`; },
-  exec: async (cmd: string, args: string[] = []) => { execs.push([cmd, ...args]); return execReply(cmd, args); },
-  focused: () => focusedNow, hc: async (args: string[]) => { hcCalls.push(args); return hcReply(args); }, keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => panesNow, props: () => propsNow,
-  readTextFile: async (p: string) => files.get(p) ?? null,
-  // As the app's: written only when the file is still what the writer read (else refused).
-  writeTextFile: async (p: string, t: string, expected: string | null) => { if ((files.get(p) ?? null) !== expected) throw new Error("The file changed outside Fireflies."); files.set(p, t); written.push([p, t]); return null; },
-  pickFile: async () => null, pickFolder: async () => null,
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => terminalsNow, theme: () => theme, window: () => ({ platform: platformNow }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => { drawn.push(["when", []]); return on ? add(el) : el; }
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const handle = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
-class Input { v = ""; masked = false; constructor(o: any = {}) { this.v = o.value ?? ""; } on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; } }
-/** The SQL editor: its text, caret and selection; what the window asks of it. */
-class Editor {
-  text: string; caret = { line: 0, col: 0 }; sel: any = null; diags: any[] = []; keys: any = null; focusedNow = false;
-  constructor(o: any) { this.text = o.value ?? ""; }
-  value() { return this.text; } set_value(v: string) { this.text = v; }
-  on(ev: string, f: any) { if (ev === "key") this.keys = f; return true; }
-  cursor() { return this.caret; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
-  selection() { return this.sel ?? { start: this.caret, end: this.caret, text: "" }; }
-  set_diagnostics(d: any[]) { this.diags = d; } edit(e: any[]) { for (const x of e) this.text = this.text.slice(0, x.start.col) + x.text + this.text.slice(x.end.col); }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; } release() { return true; }
-}
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: handle },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-
-const stores = new Map<string, Map<string, string>>();
-(globalThis as any).localStorage = {
-  getItem: (k: string) => stores.get(JSON.stringify(propsNow))?.get(k) ?? null,
-  setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
-};
-
-let clipboard = "";
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
-
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
-  propsNow = p;
+  h.props = p;
   const v: any = new Databases();
   v.init(p, cx);
   return v;
 }
 function render(v: any, width = 1100) {
   v.size = { width, height: 720 };
-  drawn = [];
+  h.drawn = [];
   v.render();
-  return drawn;
+  return h.drawn;
 }
 const framed = (d: [string, any[]][]) => {
   const i = d.findIndex(([m, a]) => m === "id" && a[0] === "databases");
@@ -109,10 +37,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { sharedState = {}; commands.length = 0; opened.length = 0; closed.length = 0; panesNow = []; focusedNow = null; stores.clear(); execs.length = 0; written.length = 0; execReply = found; };
-const flush = () => new Promise((r) => setTimeout(r, 5));
-
-
+const fresh = () => { forget(); files.clear(); h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
 
 const { forwardProblem, forwardStartArgs, forwardCommand } = await import("../defaults/mods/databases/kube.ts");
 const { connectArgsOf } = await import("../defaults/mods/nocturne/databases.ts");
@@ -131,20 +56,15 @@ const FORWARD_FIXTURE = [
   "--label", "nocturne.name=forward glowworm-pg-1 :25432",
   "--", "kubectl", "--context", "nightjar-dev", "-n", "glowworm", "port-forward", "pod/glowworm-pg-1", "25432:5432", "--address", "127.0.0.1",
 ];
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until(f: () => boolean, ms = 3000) {
-  const end = Date.now() + ms;
-  while (!f()) { if (Date.now() > end) throw new Error("timed out waiting"); await sleep(5); }
-}
 
 /** Which local ports answer; what the client says. */
 let open_ = new Set<number>();
 let clientSays: { code: number; stdout: string; stderr: string } = { code: 0, stdout: "", stderr: "" };
 const ok = (stdout: string) => ({ code: 0, stdout, stderr: "" });
 const reset = () => {
-  fresh(); files.clear(); terminalsNow = []; hcCalls.length = 0; open_ = new Set(); clientSays = { code: 0, stdout: "", stderr: "" };
-  hcReply = () => ok('{"address":"t9"}');
-  execReply = (cmd: string, args: string[]): any => {
+  fresh(); files.clear(); h.terminals = []; h.hcCalls.length = 0; open_ = new Set(); clientSays = { code: 0, stdout: "", stderr: "" };
+  h.hcReply = () => ok('{"address":"t9"}');
+  h.reply = (cmd: string, args: string[]): any => {
     if (cmd === "kubectl") return ok(`${b64(PASSWORD)}\n${b64("glowworm")}\n${b64("app")}\n`);
     if (cmd === "sh" && args[2] === "ff-dir") return ok("/tmp/fireflies-db.abc\n");
     if (cmd === "sh" && args[2] === "lookup") return args[4] === "psql" ? ok("/usr/bin/psql\n") : { code: 1, stdout: "", stderr: "" };
@@ -203,6 +123,7 @@ test("pinned in one window: every other window lists it at its next tick, a rest
   await until(() => runs().length > 0 && !a.catalog.busy);
   a.panel = "conns";
   a.connAt = 0;
+  await advance(1000); // the pin comes after the other windows opened
   a.key(key("P"), cx);
   await until(() => a.saved.length === 1);
   const file = files.get(HOME_FILE) ?? "";
@@ -259,14 +180,14 @@ test("its port open: connected, no ask; closed: the ask with the overview, nothi
   await until(() => runs().length > 0);
   expect(portChecks()).toEqual([25432]);
   expect(v.forwardAsk).toBeNull();
-  expect(hcCalls).toEqual([]);
+  expect(h.hcCalls).toEqual([]);
   reset();
   const w = await win();
   command(w, `databases.connect:${JSON.stringify(ARGS)}`, cx);
   await until(() => w.forwardAsk !== null);
   expect(w.forwardAsk.why).toBe("down");
   expect(execs.filter((a) => a[0] === "kubectl" || a[3] === "ff-db")).toEqual([]);
-  expect(hcCalls).toEqual([]);
+  expect(h.hcCalls).toEqual([]);
   const d = drawnText(w);
   for (const s of ["No forward on localhost:25432", "came from a port-forward; nothing is started unless you say so", "context", "nightjar-dev", "namespace", "glowworm", "pod/glowworm-pg-1 :5432  →  localhost:25432", "runs",
     "enter  start the forward and connect", "c  connect anyway", "esc  cancel"]) expect(d).toContain(s);
@@ -274,9 +195,9 @@ test("its port open: connected, no ask; closed: the ask with the overview, nothi
   expect(texts(render(w))).toEqual(expect.arrayContaining(["kubectl", "--context", "nightjar-dev", "-n", "glowworm", "port-forward", "pod/glowworm-pg-1", "25432:5432", "--address", "127.0.0.1"]));
   // A click on it copies it.
   render(w);
-  const i = drawn.findIndex(([m, a]) => m === "id" && a[0] === "db-fwd-command");
-  drawn.slice(i).find(([m]) => m === "on_click")?.[1][0]({}, cx);
-  expect(clipboard).toBe("kubectl --context nightjar-dev -n glowworm port-forward pod/glowworm-pg-1 25432:5432 --address 127.0.0.1");
+  const i = h.drawn.findIndex(([m, a]) => m === "id" && a[0] === "db-fwd-command");
+  h.drawn.slice(i).find(([m]) => m === "on_click")?.[1][0]({}, cx);
+  expect(h.clipboard).toBe("kubectl --context nightjar-dev -n glowworm port-forward pod/glowworm-pg-1 25432:5432 --address 127.0.0.1");
   // Its buttons by command too (databases.forward-anyway is c's).
   const asked = w.forwardAsk;
   command(w, "databases.forward-nothing", cx);
@@ -284,18 +205,18 @@ test("its port open: connected, no ask; closed: the ask with the overview, nothi
   // esc: nothing started; c: connects anyway.
   w.key(key("escape"), cx);
   expect(w.forwardAsk).toBeNull();
-  expect(hcCalls).toEqual([]);
+  expect(h.hcCalls).toEqual([]);
   w.connectTo(w.sent[0], cx);
   await until(() => w.forwardAsk !== null);
   command(w, "databases.forward-anyway", cx);
   await until(() => runs().length > 0);
-  expect(hcCalls).toEqual([]);
+  expect(h.hcCalls).toEqual([]);
 });
 
 test("enter: the forward starts as the k8s mod starts it, the window waits for its port, then reads the secret and connects", async () => {
   reset();
-  hcReply = (args: string[]) => {
-    if (args[0] === "run") { open_.add(25432); terminalsNow = [{ address: "t9", state: "live", labels: { "k8s.forward": JSON.parse(`"${args[6]!.slice("k8s.forward=".length).replace(/"/g, '\\"')}"`) } }]; }
+  h.hcReply = (args: string[]) => {
+    if (args[0] === "run") { open_.add(25432); h.terminals = [{ address: "t9", state: "live", labels: { "k8s.forward": JSON.parse(`"${args[6]!.slice("k8s.forward=".length).replace(/"/g, '\\"')}"`) } }]; }
     return ok('{"address":"t9"}');
   };
   const v = await win();
@@ -303,7 +224,7 @@ test("enter: the forward starts as the k8s mod starts it, the window waits for i
   await until(() => v.forwardAsk !== null);
   v.key(key("enter"), cx);
   await until(() => runs().length > 0 && !v.catalog.busy);
-  expect(hcCalls[0]).toEqual(FORWARD_FIXTURE);
+  expect(h.hcCalls[0]).toEqual(FORWARD_FIXTURE);
   expect(v.forwardAsk).toBeNull();
   expect(execs.some((a) => a[0] === "kubectl")).toBe(true);
   expect(v.note === null || !/failed/.test(v.note.tone)).toBe(true);
@@ -321,8 +242,8 @@ test("enter: the forward starts as the k8s mod starts it, the window waits for i
 test("a pod that's gone: kubectl's words, said plainly; Kubernetes offered (k) when it's installed", async () => {
   reset();
   files.set("/tmp/herdr-test/mods/k8s/mod.json", "{}");
-  hcReply = (args: string[]) => {
-    if (args[0] === "run") { terminalsNow = [{ address: "t9", state: "exited" }]; return ok('{"address":"t9"}'); }
+  h.hcReply = (args: string[]) => {
+    if (args[0] === "run") { h.terminals = [{ address: "t9", state: "exited" }]; return ok('{"address":"t9"}'); }
     if (args[0] === "read") return ok('Error from server (NotFound): pods "glowworm-pg-1" not found\n');
     return ok("");
   };
@@ -343,7 +264,7 @@ test("a pod that's gone: kubectl's words, said plainly; Kubernetes offered (k) w
 
 test("a forward whose terminal is gone from herdr-core's list (it hides a finished one): ended, its words read", async () => {
   reset();
-  hcReply = (args: string[]) => (args[0] === "read" ? ok('error: error upgrading connection: pods "glowworm-pg-1" is forbidden: User "ada" cannot create resource "pods/portforward"\n') : ok('{"address":"t9"}'));
+  h.hcReply = (args: string[]) => (args[0] === "read" ? ok('error: error upgrading connection: pods "glowworm-pg-1" is forbidden: User "ada" cannot create resource "pods/portforward"\n') : ok('{"address":"t9"}'));
   const v = await win();
   command(v, `databases.connect:${JSON.stringify(ARGS)}`, cx);
   await until(() => v.forwardAsk !== null);
@@ -351,14 +272,14 @@ test("a forward whose terminal is gone from herdr-core's list (it hides a finish
   await until(() => v.forwardAsk?.note !== null && v.forwardAsk?.starting === null);
   expect(v.forwardAsk.why).toBe("down");
   expect(v.forwardAsk.note).toBe('error: error upgrading connection: pods "glowworm-pg-1" is forbidden: User "ada" cannot create resource "pods/portforward"');
-  expect(hcCalls.map((a) => a[0])).toEqual(["run", "read"]);
+  expect(h.hcCalls.map((a) => a[0])).toEqual(["run", "read"]);
 });
 
 test("its port held by another program (it answers, not as the database): said, the forward offered on another local port, the connection follows", async () => {
   reset();
   open_ = new Set([25432, 25433]);
   clientSays = { code: 2, stdout: "", stderr: 'psql: error: connection to server at "127.0.0.1", port 25432 failed: received invalid response to SSL negotiation: H\n' };
-  hcReply = (args: string[]) => { if (args[0] === "run") open_.add(25434); return ok('{"address":"t10"}'); };
+  h.hcReply = (args: string[]) => { if (args[0] === "run") open_.add(25434); return ok('{"address":"t10"}'); };
   const v = await win();
   command(v, `databases.connect:${JSON.stringify(ARGS)}`, cx);
   await until(() => v.forwardAsk !== null);
@@ -370,6 +291,6 @@ test("its port held by another program (it answers, not as the database): said, 
   clientSays = ok("");
   v.key(key("enter"), cx);
   await until(() => v.forwardAsk === null && runs().length > 1);
-  expect(hcCalls[0]).toContain("25434:5432");
+  expect(h.hcCalls[0]).toContain("25434:5432");
   expect(v.sent[0]).toMatchObject({ port: 25434, forward: { ...FORWARD, local: 25434 } });
 });

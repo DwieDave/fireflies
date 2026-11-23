@@ -5,95 +5,29 @@
 // URL and a found DATABASE_URL or PGSSLMODE, and carried or refused by databases.connect.
 // Clients and files are stand-ins. Its own process: it stands in for "herdr".
 import { test, expect, mock, describe } from "bun:test";
+import { found, standIn } from "./databases-host.ts";
 
-let sharedState: Record<string, unknown> = {};
-let propsNow: any = null;
-let panesNow: any[] = [];
-let focusedNow: any = null;
-const commands: [string, any][] = [];
-const opened: any[] = [];
-const closed: string[] = [];
-const execs: string[][] = [];
-const written: [string, string][] = [];
-/** The default answers: the clients are found (envrc.ts lookup), anything else fails quietly. */
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-let execReply: (cmd: string, args: string[]) => any = found;
-let overlayN = 0;
-let platformNow = "linux";
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; },
-  openOverlay: (spec: any) => { opened.push(spec); return `o${++overlayN}`; },
-  exec: async (cmd: string, args: string[] = []) => { execs.push([cmd, ...args]); return execReply(cmd, args); },
-  focused: () => focusedNow, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => panesNow, props: () => propsNow,
-  readTextFile: async () => null, writeTextFile: async (p: string, t: string) => { written.push([p, t]); return null; },
-  pickFile: async () => null, pickFolder: async () => null,
-  run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: platformNow }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => { drawn.push(["when", []]); return on ? add(el) : el; }
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const handle = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
-class Input { v = ""; masked = false; constructor(o: any = {}) { this.v = o.value ?? ""; } on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; } }
-/** The SQL editor: its text, caret and selection; what the window asks of it. */
-class Editor {
-  text: string; caret = { line: 0, col: 0 }; sel: any = null; diags: any[] = []; keys: any = null; focusedNow = false;
-  constructor(o: any) { this.text = o.value ?? ""; }
-  value() { return this.text; } set_value(v: string) { this.text = v; }
-  on(ev: string, f: any) { if (ev === "key") this.keys = f; return true; }
-  cursor() { return this.caret; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
-  selection() { return this.sel ?? { start: this.caret, end: this.caret, text: "" }; }
-  set_diagnostics(d: any[]) { this.diags = d; } edit(e: any[]) { for (const x of e) this.text = this.text.slice(0, x.start.col) + x.text + this.text.slice(x.end.col); }
-  focus() { this.focusedNow = true; } focused() { return this.focusedNow; } release() { return true; }
-}
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: handle },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-
-const stores = new Map<string, Map<string, string>>();
-(globalThis as any).localStorage = {
-  getItem: (k: string) => stores.get(JSON.stringify(propsNow))?.get(k) ?? null,
-  setItem: (k: string, v: string) => { const key = JSON.stringify(propsNow); if (!stores.has(key)) stores.set(key, new Map()); stores.get(key)!.set(k, v); },
-};
-
-let clipboard = "";
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
+const { files, commands, opened, closed, execs, written, stores } = h;
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
-  propsNow = p;
+  h.props = p;
   const v: any = new Databases();
   v.init(p, cx);
   return v;
 }
 function render(v: any, width = 1100) {
   v.size = { width, height: 720 };
-  drawn = [];
+  h.drawn = [];
   v.render();
-  return drawn;
+  return h.drawn;
 }
 const framed = (d: [string, any[]][]) => {
   const i = d.findIndex(([m, a]) => m === "id" && a[0] === "databases");
@@ -103,10 +37,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { sharedState = {}; commands.length = 0; opened.length = 0; closed.length = 0; panesNow = []; focusedNow = null; stores.clear(); execs.length = 0; written.length = 0; execReply = found; };
-const flush = () => new Promise((r) => setTimeout(r, 5));
-
-
+const fresh = () => { forget(); files.clear(); h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
 
 const { connOf, connJson, isConnJson, sslProblem } = await import("../defaults/mods/databases/kinds.ts");
 const { clientFor, flavorOf, mysqlSslArgs } = await import("../defaults/mods/databases/clients.ts");
@@ -329,7 +260,7 @@ describe("databases.connect", () => {
   test("mysql: MariaDB's client gets --skip-ssl, MySQL's --ssl-mode=DISABLED", async () => {
     for (const [version, flag] of [["mysql from 11.4.13-MariaDB, client 15.2", "--skip-ssl"], ["mysql  Ver 8.4.11 for macos26.6 on arm64", "--ssl-mode=DISABLED"]] as const) {
       fresh();
-      execReply = (cmd, args) => (cmd === "/usr/bin/mysql" && args[0] === "--version" ? { code: 0, stdout: `${version}\n`, stderr: "" } : found(cmd, args));
+      h.reply = (cmd, args) => (cmd === "/usr/bin/mysql" && args[0] === "--version" ? { code: 0, stdout: `${version}\n`, stderr: "" } : found(cmd, args));
       const v = open({ folder: "/w", overlay: `c-${flag}` });
       await flush();
       v.dir = "/tmp/fireflies-db.abc";

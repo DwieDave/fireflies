@@ -6,7 +6,8 @@
 // drawn leaves the keyboard nowhere. Each test drives the view as a person
 // does: keys through that model, clicks through the handlers its rows draw.
 // Its own process: it stands in for "herdr", "gpui-kit" and "gpui-base".
-import { test, expect, mock } from "bun:test";
+import { test, expect } from "bun:test";
+import { standIn } from "./databases-host.ts";
 
 /** Whatever has the keyboard: the view's handle, an input or the SQL editor. */
 let focusNow: unknown = null;
@@ -23,30 +24,13 @@ function focusTo(next: unknown): void {
   (next as { fire?: (ev: string) => void } | null)?.fire?.("focus");
 }
 
-const execs: string[][] = [];
-const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
-  closeOverlay: () => null, openOverlay: () => "o1",
-  exec: async (cmd: string, args: string[] = []) => { execs.push([cmd, ...args]); return found(cmd, args); },
-  focused: () => null, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => [], props: () => null,
-  readTextFile: async () => null, writeTextFile: async () => null, pickFile: async () => null, pickFolder: async () => null,
-  run: () => null, settings: () => ({ zoom: 1, font_family: "Mono" }), shared: () => null, setShared: () => {},
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "macos" }),
-}));
-
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => (on ? add(el) : el)
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
+const { h, el, cx, until, flush, services } = standIn({
+  get Input() { return Input; }, get Editor() { return Editor; }, drawnInput: (state) => { drawnInputs.add(state); },
+  focusHandle: () => { const handle = { focus() { focusTo(handle); }, is_focused: () => focusNow === handle, release: () => true }; return handle; },
 });
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
-const scroll = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
+const { execs } = h;
+h.platform = "macos";
+
 class Input {
   v = ""; masked = false; on_: Record<string, (() => void)[]> = {};
   constructor(o: any = {}) { this.v = o.value ?? ""; }
@@ -63,28 +47,13 @@ class Editor {
   selection() { return { start: this.caret, end: this.caret, text: "" }; } set_diagnostics() {} edit() {}
   focus() { focusTo(this); } focused() { return focusNow === this; } release() { return true; }
 }
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: scroll },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: (s: unknown) => { drawnInputs.add(s); return el; } },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: (s: unknown) => { drawnInputs.add(s); return el; } },
-}));
-(globalThis as any).window = { paint_path: () => el };
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-(globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
-
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {},
-  focus_handle: () => { const h = { focus() { focusTo(h); }, is_focused: () => focusNow === h, release: () => true }; return h; },
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard() {},
-};
-
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
 const { viewRun } = await import("./databases-host.ts");
 const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
-const flush = () => new Promise((r) => setTimeout(r, 5));
 
 const PG = { id: "pg-1", name: "lantern-dev", kind: "postgres", host: "db", user: "ada", database: "lantern", readonly: false, secret: "ask", origin: "saved" };
 const table = (name: string, schema = "public", type = "table") => ({ schema, name, type, rows: 3 });
@@ -110,11 +79,11 @@ async function connected(): Promise<any> {
 
 function render(v: any): [string, any[]][] {
   v.size = { width: 1100, height: 720 };
-  drawn = [];
+  h.drawn = [];
   drawnInputs = new Set();
   v.render();
 
-  return drawn;
+  return h.drawn;
 }
 
 /** A key as GPUI hands it out: to the view only while it (or an input it draws) has the keyboard.

@@ -11,67 +11,23 @@
 // handlers on a throwaway SQLite file (lanterns, moths). herdr and gpui are
 // stand-ins; exec and files are real. Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { found, spawnReply, standIn } from "./databases-host.ts";
 import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const SQLITE = Bun.which("sqlite3") !== null;
 const HOME = mkdtempSync(join(tmpdir(), "ff-dbux-home-"));
-const closed: string[] = [];
-const commands: [string, any][] = [];
-let sharedState: Record<string, unknown> = {};
 
-async function realExec(cmd: string, args: string[] = []) {
-  const p = Bun.spawn([cmd, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-  return { code: await p.exited, stdout, stderr };
-}
-mock.module("herdr", () => ({
-  agents: () => [], appHome: () => HOME, home: () => "/home/me",
-  closeOverlay: (id: string) => { closed.push(id); return null; }, openOverlay: () => "o1",
-  exec: realExec, focused: () => null, hc: async () => ({ code: 1, stdout: "" }), keys: () => [], layout: () => null,
-  nextCommand: () => new Promise(() => {}), notify: () => null, panes: () => [], props: () => null,
-  readTextFile: async (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : null),
-  writeTextFile: async (p: string, t: string, expected: string | null) => { if (expected === null && existsSync(p)) throw new Error("exists"); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, t); return null; },
-  pickFile: async () => null, pickFolder: async () => null, run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "linux" }),
-}));
+const { h, theme, el, cx, until, flush, advance, services } = standIn({ disk: true, appHome: HOME, get Editor() { return Editor; } });
+h.reply = spawnReply; // the programs run for real (sqlite3)
+const { files, commands, closed, execs, written, stores } = h;
 
-let drawn: [string, any[]][] = [];
-const el: any = new Proxy(function () {}, {
-  get: (_t, k) => (k === "then" ? undefined
-    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => (on ? add(el) : el)
-    : k === "map" ? (f: (e: unknown) => unknown) => f(el)
-    : (...args: any[]) => { drawn.push([String(k), args]); return el; }),
-  apply: () => el,
-});
-class View {}
-mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 /** An input: its text, its change handler (typing calls it). */
-class Input {
-  v = ""; handlers: Record<string, Function> = {}; focused = false;
-  constructor(o: any = {}) { this.v = o.value ?? ""; }
-  on(ev: string, f: Function) { this.handlers[ev] = f; return true; }
-  value() { return this.v; } set_value(v: string) { this.v = v; } focus() { this.focused = true; } release() { return true; } set_masked() {}
-  type(v: string) { this.v = v; this.handlers.change?.({}, cx); }
-}
 class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } caretAt: any = null; cursor() { return { line: 0, col: 0 }; } set_cursor(line: number, col: number) { this.caretAt = { line, col }; } selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
-mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) },
-  InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
-  EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
-}));
-(globalThis as any).window = { paint_path: () => el };
-(globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
-let clipboard = "";
-const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
-const cx: any = {
-  spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
-};
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+(await import("../defaults/mods/databases/app.ts")).useServices(services);
 const { openTable } = await import("../defaults/mods/databases/actions.ts");
 const { privateDir } = await import("../defaults/mods/databases/runner.ts");
 
@@ -79,19 +35,12 @@ const dirOf = mkdtempSync(join(tmpdir(), "ff-dbux-"));
 const DB = join(dirOf, "lantern.db");
 const sql = (q: string) => Bun.spawnSync(["sqlite3", "-separator", "|", "-nullvalue", "NULL", DB, q]).stdout.toString().trim();
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: { shift: false, control: false, alt: false, platform: false, ...mods } });
-const texts = () => drawn.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
+const texts = () => h.drawn.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 /** Waits until `ok` holds (a run is a real process). */
-async function until(ok: () => boolean, ms = 5000) {
-  const end = Date.now() + ms;
-  while (!ok()) {
-    if (Date.now() > end) throw new Error("timed out");
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
 
 /** A window connected to the throwaway file, `lanterns` open in the Rows tab. */
 async function opened(readonly = false) {
-  sharedState = {};
+  h.shared = {};
   const v: any = new Databases();
   v.init({ folder: dirOf, overlay: "w1" }, cx);
   await until(() => v.dir !== null);
@@ -105,7 +54,7 @@ async function opened(readonly = false) {
   v.panel = "main";
   return v;
 }
-const render = (v: any) => { drawn = []; v.render(); return texts(); };
+const render = (v: any) => { h.drawn = []; v.render(); return texts(); };
 
 function seed() {
   Bun.spawnSync(["sqlite3", DB, "drop table if exists lanterns; drop view if exists bright; create table lanterns(id integer primary key, name text not null, lumens integer, note text); "
@@ -163,18 +112,18 @@ test("columns: hidden, moved and sorted; the way back to the rows as read; never
 
 test("columns: a table's arrangement kept in shared state by connection and table, the newest 200", () => {
   const { keepLayout, keptLayout, tableKey, NO_LAYOUT, setWidth, KEEP_MAX } = ux.columns;
-  sharedState = {};
+  h.shared = {};
   const k = tableKey("sq-1", null, "lanterns");
   keepLayout(k, { ...setWidth(NO_LAYOUT, "name", 210), hidden: ["note"], order: [] }, 1);
   expect(keptLayout(k)).toEqual({ widths: { name: 210 }, hidden: ["note"], order: [] });
   expect(keptLayout(tableKey("sq-1", "public", "lanterns"))).toEqual(NO_LAYOUT);
   for (let i = 0; i < KEEP_MAX + 5; i++) keepLayout(`t${i}`, setWidth(NO_LAYOUT, "a", 50), 10 + i);
-  expect(Object.keys(sharedState["databases.columns"] as object).length).toBe(KEEP_MAX);
+  expect(Object.keys(h.shared["databases.columns"] as object).length).toBe(KEEP_MAX);
   expect(keptLayout(k)).toEqual(NO_LAYOUT);
   // A plain arrangement is forgotten; a bad entry reads as none.
   keepLayout("t300", NO_LAYOUT, 999);
-  expect("t300" in (sharedState["databases.columns"] as object)).toBe(false);
-  sharedState = { "databases.columns": { x: { at: 1, widths: [{ name: 3 }] } } };
+  expect("t300" in (h.shared["databases.columns"] as object)).toBe(false);
+  h.shared = { "databases.columns": { x: { at: 1, widths: [{ name: 3 }] } } };
   expect(keptLayout("x")).toEqual(NO_LAYOUT);
 });
 
@@ -270,24 +219,24 @@ test.skipIf(!SQLITE)("o sorts the table by ORDER BY (shown on the WHERE line), a
 
 test.skipIf(!SQLITE)("widths: } and { step the cursor's column, a drag on the header's edge sets it, a double click fits it; kept for the table", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   let v = await opened();
   v.key(key("l"), cx);
   const before = ux.gridView.colWidth(ux.grid.shownGrid(v)!.cols[1]);
   v.key(key("}"), cx); v.key(key("}"), cx); v.key(key("{"), cx);
   expect(ux.grid.shownGrid(v)!.cols[1].px).toBe(before + 24);
   // The header's edge dragged 80 px right (zoom 1): live, kept on release.
-  const h = (v as any);
+  const vv = (v as any);
   const e = { position: { x: 300, y: 50 }, local_position: { x: before + 20, y: 4 }, click_count: 1, modifiers: { shift: false } };
-  ux.press.pressAt(h, e, { kind: "width", takes: [], move: (dx: number) => { const g = ux.grid.shownGrid(v)!; g.arrange(ux.columns.setWidth(g.layout, "name", before + 24 + dx), false); }, drop: () => { const g = ux.grid.shownGrid(v)!; g.arrange(g.layout, true); } });
-  ux.press.pressMove(h, { position: { x: 380, y: 50 } }, cx);
-  ux.press.pressUp(h, cx);
+  ux.press.pressAt(vv, e, { kind: "width", takes: [], move: (dx: number) => { const g = ux.grid.shownGrid(v)!; g.arrange(ux.columns.setWidth(g.layout, "name", before + 24 + dx), false); }, drop: () => { const g = ux.grid.shownGrid(v)!; g.arrange(g.layout, true); } });
+  ux.press.pressMove(vv, { position: { x: 380, y: 50 } }, cx);
+  ux.press.pressUp(vv, cx);
   expect(ux.grid.shownGrid(v)!.cols[1].px).toBe(before + 104);
-  expect((sharedState["databases.columns"] as any)["sq-1//lanterns"].widths).toEqual([{ name: "name", px: before + 104 }]);
+  expect((h.shared["databases.columns"] as any)["sq-1//lanterns"].widths).toEqual([{ name: "name", px: before + 104 }]);
   // The next window on the same table has it.
-  const kept = sharedState;
+  const kept = h.shared;
   v = await opened();
-  sharedState = kept;
+  h.shared = kept;
   v.columnsAt = null;
   expect(ux.grid.shownGrid(v)!.cols[1].px).toBe(before + 104);
   ux.grid.fitColumn(ux.grid.shownGrid(v)!, 1);
@@ -296,7 +245,7 @@ test.skipIf(!SQLITE)("widths: } and { step the cursor's column, a drag on the he
 
 test.skipIf(!SQLITE)("H hides a column, its menu shows it again; an edit after it lands on the right column", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   v.key(key("l"), cx);
   v.key(key("H"), cx);
@@ -330,7 +279,7 @@ test.skipIf(!SQLITE)("H hides a column, its menu shows it again; an edit after i
 
 test.skipIf(!SQLITE)("a column dragged onto another header takes its place; dragged into a query, its quoted name goes in", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   const g = ux.grid.shownGrid(v)!;
   ux.press.pressAt(v, { position: { x: 0, y: 0 } }, { kind: "column", label: "id", takes: ["col:"], drop: (to: any) => ux.grid.moveTo(ux.grid.shownGrid(v)!, 0, to === "col:2" ? 3 : null) });
@@ -345,12 +294,12 @@ test.skipIf(!SQLITE)("a column dragged onto another header takes its place; drag
 
 test.skipIf(!SQLITE)("a range: shift + arrows, a drag across cells, the row numbers, V, cmd-a; cmd-c copies TSV; esc drops it before it closes", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   v.key(key("down", { shift: true }), cx);
   v.key(key("right", { shift: true }), cx);
   v.key(key("c", { platform: true }), cx);
-  expect(clipboard).toBe("1\tlantern 1\n2\tlantern 2");
+  expect(h.clipboard).toBe("1\tlantern 1\n2\tlantern 2");
   expect(v.note.text).toBe("copied 2 lines");
   v.key(key("escape"), cx);
   expect(v.rows.at.anchor).toBe(null);
@@ -364,11 +313,11 @@ test.skipIf(!SQLITE)("a range: shift + arrows, a drag across cells, the row numb
   ux.press.pressMove(v, { position: { x: 90, y: 30 } }, cx);
   ux.press.pressUp(v, cx);
   v.key(key("y"), cx);
-  expect(clipboard).toBe("lantern 2\t74\t\"tab\there\"\nlantern 3\t11\tNULL");
+  expect(h.clipboard).toBe("lantern 2\t74\t\"tab\there\"\nlantern 3\t11\tNULL");
   // V: whole rows; Y copies them; cmd-a everything.
   v.key(key("V"), cx);
   v.key(key("Y"), cx);
-  expect(clipboard.split("\n")).toEqual(["2\tlantern 2\t74\t\"tab\there\"", "3\tlantern 3\t11\tNULL"]);
+  expect(h.clipboard.split("\n")).toEqual(["2\tlantern 2\t74\t\"tab\there\"", "3\tlantern 3\t11\tNULL"]);
   v.key(key("a", { platform: true }), cx);
   expect(ux.select.rangeOf(v.rows.at)).toEqual({ r0: 0, r1: v.rows.set.rows.length - 1, c0: 0, c1: 3 });
   v.key(key("escape"), cx);
@@ -379,7 +328,7 @@ test.skipIf(!SQLITE)("a range: shift + arrows, a drag across cells, the row numb
 
 test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows does what the row does where it opened", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   const check = (place: string) => {
     for (const r of v.menu.rows) if (r.key) expect([place, r.label, ux.keys.actionsFor(place as any, r.key === "esc" ? "escape" : r.key.replace("↓", "down"))]).toEqual([place, r.label, expect.arrayContaining([r.act])]);
@@ -391,10 +340,10 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   expect(labels()).toEqual(["Change name…", "Set it NULL", "Its whole value", "Copy the value", "Select every cell", "Copy the row", "Copy the row as JSON", "Copy the row as CSV", "Copy the row as INSERT", "Filter by this value", "Sort by name", "name's menu…", "Export…"]);
   check("rows");
   v.menu.rows.find((r: any) => r.label === "Copy the row as INSERT").go();
-  expect(clipboard).toBe(`INSERT INTO "lanterns" ("id", "name", "lumens", "note") VALUES (1, 'lantern 1', 37, NULL);\n`);
+  expect(h.clipboard).toBe(`INSERT INTO "lanterns" ("id", "name", "lumens", "note") VALUES (1, 'lantern 1', 37, NULL);\n`);
   v.key(key("m"), cx);
   v.menu.rows.find((r: any) => r.label === "Copy the row as JSON").go();
-  expect(JSON.parse(clipboard)).toEqual([{ id: 1, name: "lantern 1", lumens: 37, note: null }]);
+  expect(JSON.parse(h.clipboard)).toEqual([{ id: 1, name: "lantern 1", lumens: 37, note: null }]);
   v.key(key("m"), cx);
   v.menu.rows.find((r: any) => r.label === "Filter by this value").go();
   await until(() => !v.rows.busy && v.rows.browse.filter !== "");
@@ -446,7 +395,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   v.menu = null;
   v.connAt = 1;
   v.key(key("y"), cx);
-  expect(clipboard).toBe("postgresql://ada@db.invalid:5433/moths");
+  expect(h.clipboard).toBe("postgresql://ada@db.invalid:5433/moths");
   v.key(key("D"), cx);
   expect([v.form.editing.name, v.form.editing.secret, v.form.value("password"), v.form.value("host")]).toEqual(["moths copy", "none", "", "db.invalid"]);
   v.form = null;
@@ -472,16 +421,16 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   render(v);
   // The root's move handler (dividers.ts tracking: the first one registered) learns where the view
   // sits in the window: a window overlay 60 px in and 40 px down.
-  const rootMove = drawn.find(([m]) => m === "on_mouse_move")?.[1].at(-1);
+  const rootMove = h.drawn.find(([m]) => m === "on_mouse_move")?.[1].at(-1);
   rootMove({ position: { x: 300, y: 200 }, local_position: { x: 240, y: 160 }, modifiers: {} }, cx);
   expect(v.origin).toEqual({ x: 60, y: 40 });
   // A press far from where the root last heard the pointer: the menu stands at the press.
   ux.menus.atPointer(v, () => ux.menus.cellMenu(v, 0, 0, cx), { position: { x: 560, y: 400 } });
   expect(v.menu.near).toEqual({ x: 500, y: 360 });
   v.menu = null;
-  // Every right press drawn passes its press: each menu it opens stands there.
+  // Every right press h.drawn passes its press: each menu it opens stands there.
   render(v);
-  const rights = drawn.filter(([m, a]) => m === "on_mouse_down" && a[0] === "right").map(([, a]) => a.at(-1));
+  const rights = h.drawn.filter(([m, a]) => m === "on_mouse_down" && a[0] === "right").map(([, a]) => a.at(-1));
   let menus = 0;
   for (const press of rights) {
     v.menu = null;
@@ -494,7 +443,7 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   expect(menus).toBeGreaterThan(6);
   v.menu = null;
   // By key, the main panel with the keys: under the cursor's cell (the Rows tab: under the filter
-  // line), found as the menu is drawn (a window resized since moves it with the cell).
+  // line), found as the menu is h.drawn (a window resized since moves it with the cell).
   const anchor = await import("../defaults/mods/databases/menu-anchor.ts");
   const popups = await import("../defaults/mods/databases/popups.ts");
   v.panel = "main";
@@ -505,10 +454,10 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   const first = { x: left + ux.gridView.gutterWidth(v.rows.set.rows.length), y: 34 + 12 + 7 + 24 + 22, w: ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]), h: 20 };
   expect(anchor.keyedAnchor(v)).toEqual(first);
   const drawnAt = () => {
-    drawn = [];
+    h.drawn = [];
     popups.menuLayer({}, v);
-    const i = drawn.findIndex(([m, a]) => m === "id" && a[0] === "db-menu-box");
-    const after = drawn.slice(i);
+    const i = h.drawn.findIndex(([m, a]) => m === "id" && a[0] === "db-menu-box");
+    const after = h.drawn.slice(i);
     return { x: after.find(([m]) => m === "left")?.[1][0], y: after.find(([m]) => m === "top")?.[1][0] };
   };
   expect(drawnAt()).toEqual({ x: Math.round(first.x), y: first.y + 20 });
@@ -566,7 +515,7 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
 
 test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Rows tab it opens; a query tab and a saved connection to another place", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   // A new tab's caret is after its text (a name dropped goes there).
   const q = v.addQuery("select *\nfrom ");
@@ -680,7 +629,7 @@ test.skipIf(!SQLITE)("disconnect: the tables close, the query tabs stay; changes
 
 test.skipIf(!SQLITE)("a sorted column is at least as wide as its name and mark, however far { narrows it", async () => {
   seed();
-  sharedState = {};
+  h.shared = {};
   const v = await opened();
   v.key(key("l"), cx); v.key(key("l"), cx); // lumens
   for (let i = 0; i < 12; i++) v.key(key("{"), cx);
