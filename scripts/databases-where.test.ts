@@ -83,7 +83,7 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
@@ -431,7 +431,7 @@ test("the focus coming back after a while asks the connection once more; a dead 
   // Shortly after an answer: nothing is asked.
   v.handle = { focus() {}, is_focused: () => true, release: () => true };
   render(v);
-  v.tick(cx);
+  await runView(v.tick());
   expect(runs().length).toBe(n);
   // A while after: one select 1.
   v.handle = { focus() {}, is_focused: () => false, release: () => true };
@@ -440,7 +440,7 @@ test("the focus coming back after a while asks the connection once more; a dead 
   gone = true;
   v.handle = { focus() {}, is_focused: () => true, release: () => true };
   render(v);
-  v.tick(cx);
+  await runView(v.tick());
   await until(() => !v.checking);
   expect(runs().length).toBe(n + 1);
   expect(files.get(`/tmp/fireflies-db.abc/q-${execs.filter((a) => a[3] === "ff-db").at(-1)?.[5]}.sql`)).toContain("select 1;");

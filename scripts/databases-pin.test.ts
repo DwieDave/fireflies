@@ -79,7 +79,7 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
@@ -214,7 +214,7 @@ test("pinned in one window: every other window lists it at its next tick, a rest
   expect(drawnText(a)).toContain("pinned · every window");
   // The other window: its tick reads the file again.
   expect(b.saved).toEqual([]);
-  b.tick(cx);
+  await runView(b.tick());
   await until(() => b.saved.length === 1);
   expect(b.saved[0]).toMatchObject({ name: "glowworm-pg-1 (nightjar-dev/glowworm)", source: SOURCE, forward: FORWARD, origin: "saved" });
   expect(drawnText(b)).toContain("pinned · every window");
@@ -233,7 +233,7 @@ test("pinned in one window: every other window lists it at its next tick, a rest
   expect(c.ask.text).toBe("Unpin glowworm-pg-1 (nightjar-dev/glowworm)? Every Databases window drops it; its password stays in the cluster's secret; its history goes.");
   c.key(key("y"), cx);
   await until(() => c.saved.length === 0);
-  a.tick(cx);
+  await runView(a.tick());
   await until(() => a.saved.length === 0);
   expect(JSON.parse(files.get(HOME_FILE) ?? "{}").connections).toEqual([]);
 });

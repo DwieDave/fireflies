@@ -52,14 +52,15 @@ export function loadFolderEnv(v: DbView): Effect.Effect<void, never, DbRun> {
 
   v.env = { kind: "loading", done };
 
+  // Those waiting go on once v.env says how it went (or the load was interrupted: the window closed).
   return Effect.gen(function* () {
-    const env = yield* projectEnvIn(folder).pipe(Effect.map(envOf), Effect.ensuring(Deferred.succeed(done, undefined)));
+    const env = yield* Effect.map(projectEnvIn(folder), envOf);
 
     // A skip (esc) while it loaded set the app's PATH: the folder's takes over now it's there.
     v.env = env;
     v.clients.clear();
     yield* redraw;
-  });
+  }).pipe(Effect.ensuring(Deferred.succeed(done, undefined)));
 }
 
 /** Waits for the folder's environment while it loads (a read; esc skips it: the app's PATH then). */

@@ -171,7 +171,7 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
     kind: c.kind, dir, program: found.path, args: client.args, script: script.text, path: envPath(v),
     account: c.secret === "keychain" ? c.id : null, secret, readonly: c.readonly, limit,
   }, started).pipe(Effect.onInterrupt(() => Effect.sync(() => {
-    if (pending !== null) settle({ ...pending, said: "stopped", run: `${runs} · stopped` });
+    if (pending !== null) settle({ ...pending, ok: false, said: "stopped", run: `${runs} · stopped` });
   })));
 
   const texts = Arr.map(statements, (s) => s.text);

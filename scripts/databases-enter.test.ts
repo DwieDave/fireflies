@@ -75,7 +75,7 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {},
   focus_handle: () => { const h = { focus() { focusTo(h); }, is_focused: () => focusNow === h, release: () => true }; return h; },
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard() {},
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard() {},
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
