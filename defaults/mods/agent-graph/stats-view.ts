@@ -5,8 +5,9 @@ import { div } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr, Option, String as Str } from "effect";
 import { dither } from "./kit.ts";
-import type { Agent, Snapshot } from "./claude.ts";
+import type { Agent, Snapshot, Usage } from "./claude.ts";
 import { ranFor, span, count, emptyUsage, addUsage } from "./claude.ts";
 import { toneOf, WORDS } from "./graph.ts";
 import type { StatsGroup } from "./state.ts";
@@ -17,29 +18,29 @@ import { edge } from "@fireflies/tones";
 
 /** "41.2k tok · $0.82" for a transcript, once its tokens are known. */
 export function tokens(v: Agents, file: string | null): string | null {
-  const u = file ? v.usage?.get(file) : null;
+  const u = file === null ? null : v.usage?.get(file) ?? null;
 
-  if (!u || !u.tokens) return null;
+  if (u === null || u.tokens === 0) return null;
 
   return `${count(u.tokens)} tok · ${money(u)}`;
 }
 
 /** Every agent of the session together, and the session itself. */
 export function totals(v: Agents) {
-  const list = [...(v.data?.agents.values() ?? [])];
-  const by = (st: Agent["status"]) => list.filter((a) => a.status === st).length;
+  const list = v.data === null ? [] : Arr.fromIterable(v.data.agents.values());
+  const by = (st: Agent["status"]) => Arr.filter(list, (a) => a.status === st).length;
   const sub = emptyUsage(), all = emptyUsage();
 
   for (const a of list) addUsage(sub, v.usage?.get(a.file));
 
   addUsage(all, sub);
 
-  if (v.data) addUsage(all, v.usage?.get(v.data.main));
+  if (v.data !== null) addUsage(all, v.usage?.get(v.data.main));
 
   return {
     n: list.length, working: by("working"), done: by("done"), stopped: by("stopped") + by("idle"),
-    time: list.reduce((k, a) => k + ranFor(a), 0),
-    wall: v.data?.mainStarted ? Date.now() - v.data.mainStarted : 0,
+    time: Arr.reduce(list, 0, (k, a) => k + ranFor(a, v.now)),
+    wall: v.data === null || v.data.mainStarted === 0 ? 0 : v.now - v.data.mainStarted,
     sub, all,
   };
 }
@@ -77,6 +78,9 @@ export function statsStrip(v: Agents, t: Theme): Element {
     .child(div().absolute().left(0).right(0).bottom(0).h(1).bg(edge(t)));
 }
 
+/** A transcript's tokens and cost cells ("–" until it has any). */
+const priced = (u: Usage | null | undefined): readonly string[] => (u === null || u === undefined || u.tokens === 0 ? ["–", "–"] : [count(u.tokens), money(u)]);
+
 /** Each agent's share, grouped by run (the session's own first), with totals. */
 export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
   const s = totals(v);
@@ -92,25 +96,29 @@ export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
     const u = v.usage?.get(a.file);
 
     return h_flex().id(`ag-st-${a.id}`).gap(6).items_center().hover((st) => st.bg(`${edge(t)}55`))
-      .on_click((_e, cx) => pickNode(v, { key: a.id, kind: "agent" }, cx))
+      .on_click((_e, cx) => {
+        pickNode(v, { key: a.id, kind: "agent" });
+        cx.notify();
+      })
       .child(div().w(6).h(6).flex_none().relative().child(dither(toneOf(t, a.status), 1)))
       .child(div().flex_1().min_w(0).child(cols(`ag-stc-${a.id}`, t.muted, [
         div().truncate().text_color(t.foreground).child(a.label),
         div().text_color(toneOf(t, a.status)).child(WORDS[a.status]),
-        div().text_color(a.status === "working" ? t.working : t.muted).child(span(ranFor(a))),
-        u?.tokens ? count(u.tokens) : "–", u?.tokens ? money(u) : "–"])));
+        div().text_color(a.status === "working" ? t.working : t.muted).child(span(ranFor(a, v.now))),
+        ...priced(u)])));
   };
 
-  const agents = [...d.agents.values()].sort((a, b) => a.started - b.started);
-  const own = agents.filter((a) => !a.run);
+  const agents = Arr.fromIterable(d.agents.values()).sort((a, b) => a.started - b.started);
+  const own = Arr.filter(agents, (a) => a.run === null);
+  const ownGroup: readonly StatsGroup[] = own.length > 0 ? [{ id: "own", name: "the session's subagents", list: own }] : [];
 
-  const groups: StatsGroup[] = [
-    ...(own.length ? [{ id: "own", name: "the session's subagents", list: own }] : []),
-    ...d.runs.map((r) => ({ id: r.id, name: `${r.name} · ${span((r.ended ?? Date.now()) - r.started)}`, list: r.agents.flatMap((id) => d.agents.get(id) ?? []) })),
+  const groups: readonly StatsGroup[] = [
+    ...ownGroup,
+    ...Arr.map(d.runs, (r) => ({ id: r.id, name: `${r.name} · ${span((r.ended ?? v.now) - r.started)}`, list: Arr.flatMap(r.agents, (id) => Option.toArray(Option.fromUndefinedOr(d.agents.get(id)))) })),
   ];
 
   const head = (g: StatsGroup) => h_flex().id(`ag-stg-${g.id}`).pt(6).pb(2).gap(8).items_center()
-    .child(div().flex_none().text_size(10).text_color(t.muted).child(g.name.toUpperCase()))
+    .child(div().flex_none().text_size(10).text_color(t.muted).child(Str.toUpperCase(g.name)))
     .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)));
 
   const main = v.usage?.get(d.main);
@@ -120,9 +128,9 @@ export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
     .child(h_flex().id("ag-st-main").gap(6).items_center()
       .child(div().w(6).h(6).flex_none())
       .child(div().flex_1().min_w(0).child(cols("ag-stc-main", t.muted, [
-        div().truncate().text_color(t.foreground).child("the session itself"), "", s.wall ? span(s.wall) : "–",
-        main?.tokens ? count(main.tokens) : "–", main?.tokens ? money(main) : "–"]))))
-    .children(groups.flatMap((g) => [head(g), ...g.list.map(row)]))
+        div().truncate().text_color(t.foreground).child("the session itself"), "", s.wall === 0 ? "–" : span(s.wall),
+        ...priced(main)]))))
+    .children(Arr.flatMap(groups, (g) => [head(g), ...Arr.map(g.list, row)]))
     .child(div().h(2).mt(6).relative().child(dither(edge(t), 1)))
     .child(h_flex().gap(6).pl(12).child(div().flex_1().child(cols("ag-st-sum", t.foreground, [
       `${s.n} agents · ${s.working} working · ${s.done} done · ${s.stopped} stopped`, "", span(s.time), count(s.all.tokens), money(s.all)]))))

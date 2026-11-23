@@ -9,6 +9,7 @@
 import { div, svg } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Status, Theme } from "herdr";
 import { ART, dither, pip } from "./kit.ts";
 import type { Agent, Run, Snapshot } from "./claude.ts";
@@ -43,7 +44,7 @@ export const toneOf = (t: Theme, s: NodeStatus): Color => (TONE[s] === "edge" ? 
 
 export const WORDS = { working: "working", done: "done", failed: "failed", killed: "stopped", stopped: "stopped", idle: "quiet", waiting: "waiting", pending: "not started", blocked: "needs you" } as const satisfies { readonly [S in NodeStatus]: string };
 
-const shortModel = (m: string | null) => (m ?? "").replace(/^claude-/, "").replace(/-(\d+)-(\d+)$/, " $1.$2");
+const shortModel = (m: string | null) => Str.replace(/-(\d+)-(\d+)$/, " $1.$2")(Str.replace(/^claude-/, "")(m ?? ""));
 
 /** What every node has; x, y and h are set when it is placed, rel (its top under its
  *  parent's) while it is laid out. */
@@ -99,56 +100,70 @@ export interface MainLabel {
 /** Not placed yet. */
 const UNPLACED = { x: 0, y: 0, h: 0, rel: 0 };
 
-/** The tree for a snapshot: the session, what it spawned, a run's phases and their agents. */
-export function tree(data: Snapshot, main: MainLabel, open: ReadonlySet<string>): MainNode {
+/** A run's status as a node's: running works, completed is done, failed failed, anything else stopped. */
+const RUN_STATUS: ReadonlyMap<string, NodeStatus> = new Map([["running", "working"], ["completed", "done"], ["failed", "failed"]]);
+
+/** A phase's status from its agents, `running` its run's. */
+function phaseStatus(inPhase: readonly Agent[], running: boolean): NodeStatus {
+  if (inPhase.length === 0) return running ? "pending" : "stopped";
+
+  if (Arr.some(inPhase, (a) => a.status === "working")) return "working";
+
+  if (Arr.every(inPhase, (a) => a.status === "done")) return "done";
+
+  return running ? "waiting" : "stopped";
+}
+
+/** The tree for a snapshot at `now`: the session, what it spawned, a run's phases and their agents. */
+export function tree(data: Snapshot, main: MainLabel, open: ReadonlySet<string>, now: number): MainNode {
   // Every list of children in the order they started.
   const byStart = (a: { readonly started: number }, b: { readonly started: number }) => a.started - b.started;
-  const agents = [...data.agents.values()].sort(byStart);
+  const agents = Arr.fromIterable(data.agents.values()).sort(byStart);
 
   const agentNode = (a: Agent): AgentNode => ({
-    ...UNPLACED, key: a.id, kind: "agent", agent: a, label: a.label, status: a.status, time: span(ranFor(a)),
-    sub: [a.run ? null : a.type, shortModel(a.model), WORDS[a.status]].filter(Boolean).join(" · "),
-    children: agents.filter((x) => !x.run && x.parent === a.id).map(agentNode),
+    ...UNPLACED, key: a.id, kind: "agent", agent: a, label: a.label, status: a.status, time: span(ranFor(a, now)),
+    sub: Arr.join(Arr.filter([a.run === null ? a.type : "", shortModel(a.model), WORDS[a.status]], Str.isNonEmpty), " · "),
+    children: Arr.map(Arr.filter(agents, (x) => x.run === null && x.parent === a.id), agentNode),
   });
 
   const runNode = (r: Run): RunNode => {
-    const list = r.agents.flatMap((id) => data.agents.get(id) ?? []);
-    const done = list.filter((a) => a.status === "done").length;
-    const status = r.status === "running" ? "working" : r.status === "completed" ? "done" : r.status === "failed" ? "failed" : "stopped";
+    const list = Arr.flatMap(r.agents, (id) => Option.toArray(Option.fromUndefinedOr(data.agents.get(id))));
+    const done = Arr.filter(list, (a) => a.status === "done").length;
+    const running = r.status === "running";
+    const status = RUN_STATUS.get(r.status) ?? "stopped";
     // The phase it's in: the last one with an agent working.
-    const now = r.status === "running" ? [...r.phases].reverse().find((p) => list.some((a) => a.phase === p && a.status === "working")) : null;
+    const current = running ? Option.getOrNull(Arr.findLast(r.phases, (p) => Arr.some(list, (a) => a.phase === p && a.status === "working"))) : null;
     // Running runs and the latest one start open; "-<id>" in `open` folds those, "<id>" opens others.
-    const byDefault = r.status === "running" || r.id === data.runs[data.runs.length - 1]?.id;
+    const byDefault = running || r.id === Arr.last(data.runs).pipe(Option.map((x) => x.id), Option.getOrNull);
     const show = byDefault ? !open.has(`-${r.id}`) : open.has(r.id);
+    const phases = r.phases.length === 1 ? "phase" : "phases";
 
     return {
       ...UNPLACED, key: r.id, kind: "run", run: r, label: r.name, status, folded: !show, foldKey: byDefault ? `-${r.id}` : r.id,
-      time: span((r.ended ?? Date.now()) - r.started),
-      sub: `${done}/${list.length} done · ${r.phases.length} phase${r.phases.length === 1 ? "" : "s"}${r.status === "running" ? "" : ` · ${WORDS[status]}`}`,
-      children: !show ? [] : r.phases.map((p): PhaseNode => {
-        const inPhase = list.filter((a) => a.phase === p).sort(byStart);
+      time: span((r.ended ?? now) - r.started),
+      sub: `${done}/${list.length} done · ${r.phases.length} ${phases}${running ? "" : ` · ${WORDS[status]}`}`,
+      children: !show ? [] : Arr.map(r.phases, (p): PhaseNode => {
+        const inPhase = Arr.filter(list, (a) => a.phase === p).sort(byStart);
+        const doneHere = Arr.filter(inPhase, (a) => a.status === "done").length;
 
-        const ps = !inPhase.length ? (r.status === "running" ? "pending" : "stopped")
-          : inPhase.some((a) => a.status === "working") ? "working"
-          : inPhase.every((a) => a.status === "done") ? "done" : r.status === "running" ? "waiting" : "stopped";
-
-        return { ...UNPLACED, key: `${r.id}/${p}`, kind: "phase", label: p, status: ps, now: p === now, run: r,
-          sub: inPhase.length ? `${inPhase.filter((a) => a.status === "done").length}/${inPhase.length}` : "", children: inPhase.map(agentNode) };
+        return { ...UNPLACED, key: `${r.id}/${p}`, kind: "phase", label: p, status: phaseStatus(inPhase, running), now: p === current, run: r,
+          sub: inPhase.length > 0 ? `${doneHere}/${inPhase.length}` : "", children: Arr.map(inPhase, agentNode) };
       }),
     };
   };
 
+  const spawned: readonly (Run | Agent)[] = [...data.runs, ...Arr.filter(agents, (a) => a.run === null && a.parent === "main")];
+
   return {
     ...UNPLACED, key: "main", kind: "main", label: main.label, sub: main.sub, status: main.status,
     // Workflow runs and the session's own subagents, interleaved by start.
-    children: [...data.runs, ...agents.filter((a) => !a.run && a.parent === "main")].sort(byStart)
-      .map((x) => ("phases" in x ? runNode(x) : agentNode(x))),
+    children: Arr.map([...spawned].sort(byStart), (x) => ("phases" in x ? runNode(x) : agentNode(x))),
   };
 }
 
 /** Whether something under n (or n itself) is working: where the activity is. */
 function live(n: GraphNode): boolean {
-  return n.status === "working" || n.children.some(live);
+  return n.status === "working" || Arr.some(n.children, live);
 }
 
 /**
@@ -156,12 +171,14 @@ function live(n: GraphNode): boolean {
  * the one leading to the current work, else an opened run (one with
  * children), else the middle one.
  */
-function anchor(n: GraphNode): GraphNode | undefined {
+function anchor(n: GraphNode): Option.Option<GraphNode> {
   const c = n.children;
 
-  return c.find((x) => x.status === "working" && live(x)) ?? c.find(live)
-    ?? (n.kind === "main" ? c.find((x) => x.kind === "run" && x.children.length) : undefined)
-    ?? c[Math.floor((c.length - 1) / 2)];
+  return Arr.findFirst(c, (x) => x.status === "working" && live(x)).pipe(
+    Option.orElse(() => Arr.findFirst(c, live)),
+    Option.orElse(() => (n.kind === "main" ? Arr.findFirst(c, (x) => x.kind === "run" && x.children.length > 0) : Option.none())),
+    Option.orElse(() => Option.fromUndefinedOr(c[Math.floor((c.length - 1) / 2)])),
+  );
 }
 
 /** Per level of a subtree: its [top, bottom]. */
@@ -195,7 +212,7 @@ export function place(root: GraphNode, d: Dims = dims()): Placed {
     n.h = n.kind === "phase" ? d.PH : d.NH;
     nodes.push(n);
 
-    if (!n.children.length) return [[0, n.h]];
+    if (n.children.length === 0) return [[0, n.h]];
 
     const merged: Outline = []; // children's outline, in the first child's frame
     const offs: number[] = [];
@@ -204,38 +221,36 @@ export function place(root: GraphNode, d: Dims = dims()): Placed {
       const outline = lay(c, level + 1);
       let off = 0;
 
-      if (offs.length) {
+      if (offs.length > 0) {
         off = -Infinity;
 
         for (let k = 0; k < Math.min(merged.length, outline.length); k++) {
           const m = merged[k], o = outline[k];
 
-          if (m && o) off = Math.max(off, m[1] + (k === 0 ? d.GAP_Y : GROUP) - o[0]);
+          if (m !== undefined && o !== undefined) off = Math.max(off, m[1] + (k === 0 ? d.GAP_Y : GROUP) - o[0]);
         }
       }
 
       offs.push(off);
-      outline.forEach(([top, bottom], k) => {
+
+      for (const [k, [top, bottom]] of outline.entries()) {
         const m = merged[k];
 
-        merged[k] = m ? [Math.min(m[0], top + off), Math.max(m[1], bottom + off)] : [top + off, bottom + off];
-      });
+        merged[k] = m === undefined ? [top + off, bottom + off] : [Math.min(m[0], top + off), Math.max(m[1], bottom + off)];
+      }
     }
 
     // Level with the anchor child: its centre is n's centre.
-    const a = anchor(n);
-    const ai = a ? n.children.indexOf(a) : 0;
+    const ai = Option.getOrElse(Option.map(anchor(n), (a) => n.children.indexOf(a)), () => 0);
     const base = Math.round(n.h / 2) - ((offs[ai] ?? 0) + Math.round((n.children[ai]?.h ?? 0) / 2));
 
-    n.children.forEach((c, k) => {
-      c.rel = (offs[k] ?? 0) + base;
-    });
+    for (const [k, c] of n.children.entries()) c.rel = (offs[k] ?? 0) + base;
 
-    return [[0, n.h], ...merged.map(([top, bottom]): readonly [number, number] => [top + base, bottom + base])];
+    return [[0, n.h], ...Arr.map(merged, ([top, bottom]): readonly [number, number] => [top + base, bottom + base])];
   };
 
   const outline = lay(root, 0);
-  const top = Math.min(...outline.map((o) => o[0])), bottom = Math.max(...outline.map((o) => o[1]));
+  const top = Math.min(...Arr.map(outline, (o) => o[0])), bottom = Math.max(...Arr.map(outline, (o) => o[1]));
 
   const put = (n: GraphNode, y: number) => {
     n.y = y;
@@ -255,13 +270,13 @@ function seg(color: Color, x: number, y: number, w: number, h: number): Element 
 
 /** Lines from a parent to its children, elbowed at the gap's middle. */
 function edges(t: Theme, n: GraphNode, d: Dims): Element[] {
-  if (!n.children.length) return [];
+  if (n.children.length === 0) return [];
 
   const out: Element[] = [];
   const px = n.x + d.NW, py = n.y + Math.round(n.h / 2);
   const mid = px + Math.round(d.GAP_X / 2);
-  const live = n.children.some((c) => c.status === "working");
-  const ys = n.children.map((c) => c.y + Math.round(c.h / 2));
+  const live = Arr.some(n.children, (c) => c.status === "working");
+  const ys = Arr.map(n.children, (c) => c.y + Math.round(c.h / 2));
   const top = Math.min(py, ...ys), bottom = Math.max(py, ...ys);
 
   out.push(seg(live ? t.working : t.muted, px, py - 1, mid - px, 2));
@@ -271,7 +286,9 @@ function edges(t: Theme, n: GraphNode, d: Dims): Element[] {
     const cy = c.y + Math.round(c.h / 2);
     const color = toneOf(t, c.status);
 
-    out.push(seg(c.status === "pending" ? edge(t) : c.status === "working" ? color : t.muted, mid, cy - 1, c.x - mid, 2));
+    const line = c.status === "working" ? color : t.muted;
+
+    out.push(seg(c.status === "pending" ? edge(t) : line, mid, cy - 1, c.x - mid, 2));
 
     // A pulse running into what's working.
     if (c.status === "working") {
@@ -289,6 +306,22 @@ const pipStatus = (s: NodeStatus): Status | null => (s === "working" || s === "d
 /** Hands a picked node (and the event's context) on. */
 export type OnPick = (n: GraphNode, cx: Context) => void;
 
+/** A phase's name: bright where the run is now, dim not started yet. */
+function phaseInk(t: Theme, n: PhaseNode): Color {
+  if (n.now) return t.foreground;
+
+  return n.status === "pending" ? t.dim : t.muted;
+}
+
+/** A node's mark: Claude's for the session, layers for a run, a pip for an agent. */
+function nodeMark(t: Theme, n: GraphNode, color: Color, d: Dims): Element {
+  if (n.kind === "main") return svg(`${ART}/logo-claude.svg`).size(d.icon).flex_none().text_color(n.status === "working" ? t.working : t.foreground);
+
+  if (n.kind === "run") return svg("mods/workspace-chrome/layers.svg").size(Math.round(12 * d.z)).flex_none().text_color(color);
+
+  return pip(t, pipStatus(n.status), Math.max(4, Math.round(6 * d.z)));
+}
+
 /** One node at zoom d. */
 function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d: Dims): Element {
   const color = toneOf(t, n.status);
@@ -303,17 +336,13 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d
   if (n.kind === "phase") {
     return box.child(h_flex().relative().size_full().px(Math.round(8 * d.z)).gap(6).items_center().text_size(d.small)
       .when(n.now, (el) => el.child(dither(`${t.accent}88`, 1)))
-      .child(div().relative().flex_1().min_w(0).truncate().text_color(n.now ? t.foreground : n.status === "pending" ? t.dim : t.muted).child(n.label.toUpperCase()))
+      .child(div().relative().flex_1().min_w(0).truncate().text_color(phaseInk(t, n)).child(Str.toUpperCase(n.label)))
       .child(div().relative().flex_none().text_color(n.now ? t.accent : t.dim).child(n.now ? "now" : n.sub)));
   }
 
   const stripe = div().absolute().left(0).top(0).bottom(0).w(4).child(dither(color, 1));
 
-  const mark = n.kind === "main"
-    ? svg(`${ART}/logo-claude.svg`).size(d.icon).flex_none().text_color(n.status === "working" ? t.working : t.foreground)
-    : n.kind === "run"
-      ? svg("mods/workspace-chrome/layers.svg").size(Math.round(12 * d.z)).flex_none().text_color(color)
-      : pip(t, pipStatus(n.status), Math.max(4, Math.round(6 * d.z)));
+  const mark = nodeMark(t, n, color, d);
 
   // Zoomed far out, only the name fits.
   const compact = d.z < 0.75;
@@ -330,7 +359,7 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d
         .when(!compact, (el) => el.child(h_flex().min_w(0).gap(6)
           .child(div().flex_1().min_w(0).truncate().text_size(d.small).text_color(t.dim).child(n.sub))
           // How long it ran (still running: so far, in its status color).
-          .when(Boolean(time), (el) => el.child(div().flex_none().text_size(d.small).text_color(n.status === "working" ? t.working : t.muted).child(time))))))
+          .when(Str.isNonEmpty(time), (el) => el.child(div().flex_none().text_size(d.small).text_color(n.status === "working" ? t.working : t.muted).child(time))))))
       .when(n.kind === "run", (el) => el.child(div().flex_none().text_size(d.small).text_color(t.dim).child(n.kind === "run" && n.folded ? "+" : "−"))));
 }
 
@@ -339,8 +368,8 @@ export function canvas(t: Theme, root: GraphNode, selected: string | null, onPic
   const { nodes, width, height } = place(root, d);
 
   const el = div().id("graph-canvas").absolute().left(panX).top(panY).w(width).h(height)
-    .children(nodes.flatMap((n) => edges(t, n, d)))
-    .children(nodes.map((n) => node(t, n, selected, onPick, d)));
+    .children(Arr.flatMap(nodes, (n) => edges(t, n, d)))
+    .children(Arr.map(nodes, (n) => node(t, n, selected, onPick, d)));
 
   return { el, width, height, nodes };
 }

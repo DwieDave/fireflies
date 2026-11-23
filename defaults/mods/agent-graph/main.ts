@@ -51,9 +51,10 @@ import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Point, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { v_flex, VirtualListScrollHandle } from "gpui-base";
-import { theme, run, nextCommand, shared } from "herdr";
+import { theme, shared } from "herdr";
 import type { Theme } from "herdr";
-import { readSharedMap } from "./guard.ts";
+import { Array as Arr, Clock, Duration, Effect, Option, String as Str } from "effect";
+import { Commands, readSharedOption, redraw } from "@fireflies/kit";
 import type { KeyRow } from "@fireflies/keyhelp";
 import { keysView, keysKey, hintBar } from "@fireflies/keyhelp";
 import type { Feed, Snapshot, Usage } from "./claude.ts";
@@ -61,12 +62,14 @@ import { unpack } from "./claude.ts";
 import type { GraphNode } from "./graph.ts";
 import { tree, ZOOM, WORDS } from "./graph.ts";
 import type { Session, ClaudePane, Step, StatsPick } from "./state.ts";
-import { agentsProps, remembered, CACHE, POLL, claudePanes, isStep, STATS, PAN, PLACEHOLDER, DETAIL_MIN } from "./state.ts";
-import { poll, runCommand, startFollowing, targetPane, toWorking } from "./reading.ts";
+import { agentsProps, remembered, CACHE, claudePanes, isStep, STATS, PAN, PLACEHOLDER, DETAIL_MIN } from "./state.ts";
+import { pollLoop, runCommand, startFollowing, targetPane, toWorking } from "./reading.ts";
 import { cycleAgents, flipRun, movePan, saveState, stepGraph, zoomTo } from "./navigate.ts";
 import { details, drawToolbar } from "./feed-view.ts";
 import { statsStrip } from "./stats-view.ts";
 import { viewport } from "./viewport.ts";
+import type { AgentsFx } from "./fx.ts";
+import { attach, nowMs } from "./fx.ts";
 
 /** What ? lists: every key key() takes, ? keys last. */
 export const KEYS: readonly KeyRow[] = [
@@ -96,8 +99,9 @@ export default class Agents extends View {
   feedScroll: VirtualListScrollHandle | null = null;
   lastDrawn = 0; // when the feed last drew its newest step (it's on screen)
   handle: FocusHandle | null = null;
-  busy = 0; // when the running poll started
-  gen = 0;
+  fx: AgentsFx | null = null;
+  now = 0; // the time this render draws at (ms)
+  selectWorking = false; // opened with props { select: "working" }
   usage: ReadonlyMap<string, Usage | null> | null = null;
   startedOn = false;
   kept: string | null = null; // the last entry written to the cache, as JSON
@@ -109,13 +113,18 @@ export default class Agents extends View {
   rootY = 0;
 
   override init(_props: Props | undefined, cx: AsyncContext) {
-    this.terminal = agentsProps().terminal ?? null;
-    this.pinned = Boolean(this.terminal);
+    const p = agentsProps();
+
+    this.terminal = p.terminal ?? null;
+    this.pinned = this.terminal !== null;
+    this.selectWorking = p.select === "working";
 
     const kept = remembered();
+    const zoom = kept.zoom ?? 0;
+    const detailH = kept.detailH ?? 0;
 
-    this.zoom = Math.min(ZOOM.max, Math.max(ZOOM.min, Number(kept.zoom) || 1));
-    this.detailH = Number(kept.detailH) || null;
+    this.zoom = Math.min(ZOOM.max, Math.max(ZOOM.min, zoom === 0 ? 1 : zoom));
+    this.detailH = detailH === 0 ? null : detailH;
     this.feedScroll = VirtualListScrollHandle.new();
 
     const handle = cx.focus_handle();
@@ -123,27 +132,58 @@ export default class Agents extends View {
     this.handle = handle;
 
     // Start from the last read of this terminal's session, if there is one.
-    const hit = this.terminal ? readSharedMap(shared, CACHE).get(this.terminal) : undefined;
+    const terminal = this.terminal;
 
-    if (hit) {
-      this.session = hit.session;
-      this.data = hit.data && unpack(hit.data);
+    if (terminal !== null) {
+      Option.map(Option.flatMap(readSharedOption(shared, CACHE), (m) => Option.fromUndefinedOr(m.get(terminal))), (hit) => {
+        this.session = hit.session;
+        this.data = hit.data === null ? null : unpack(hit.data);
+      });
     }
 
+    const fx = attach(cx);
+
+    this.fx = fx;
     // Commands: "focus" from pane.go onto this pane (mod.json focusable),
     // and agent-graph.<move> from keys.json.
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const c = String(await nextCommand()).replace(/^agent-graph\./, "");
+    fx.run(Effect.forever(Commands.use((c) => c.next).pipe(
+      Effect.tap((c) => Effect.sync(() => this.command(c, handle))),
+      Effect.andThen(redraw),
+    )));
+    this.poll();
+  }
 
-        if (c === "focus") handle.focus();
-        else runCommand(this, c, cx);
+  /** Its copy closed: the poll and the command loop end. */
+  override close(): Promise<void> | undefined {
+    return this.fx?.close();
+  }
 
-        cx.notify();
-      }
-    });
-    poll(this, cx);
-    cx.timer.every(POLL, (cx) => poll(this, cx));
+  /** Reads now, and from then on every POLL (a read under way gives way to this one). */
+  poll(): void {
+    this.fx?.run(pollLoop(this), { key: "poll", redraw: false });
+  }
+
+  /** A command for this copy: "focus", else agent-graph.<move>. */
+  command(name: string, handle: FocusHandle): void {
+    const c = Str.replace(/^agent-graph\./, "")(name);
+
+    if (c === "focus") handle.focus();
+    else runCommand(this, c);
+  }
+
+  /** Scrolled down in the feed: follows again if the newest step drew just now (it's on screen). */
+  followIfAtEnd(): void {
+    this.fx?.run(Effect.sleep(Duration.millis(60)).pipe(
+      Effect.andThen(Clock.currentTimeMillis),
+      Effect.map((now) => {
+        if (now - this.lastDrawn < 250) this.follow = true;
+      }),
+    ), { key: "follow" });
+  }
+
+  /** Focuses the Claude Code terminal shown. */
+  focusTerminal(pane: ClaudePane): void {
+    this.fx?.run(Commands.use((c) => c.run("pane.focus", { pane: pane.pane })), { redraw: false });
   }
 
   /** Which Claude Code to show now. */
@@ -154,8 +194,8 @@ export default class Agents extends View {
   // ---- keyboard, zoom
 
   /** Moves the selection: h parent, l first child, j / k next / previous in the column. */
-  step(dir: Step, cx: Context) {
-    return stepGraph(this, dir, cx);
+  step(dir: Step): void {
+    stepGraph(this, dir);
   }
 
   key(e: KeyEvent, cx: Context) {
@@ -163,10 +203,10 @@ export default class Agents extends View {
 
     if (m.control || m.platform || m.alt) return;
 
-    const typed = e.key_char && e.key_char.length === 1 ? e.key_char : null;
+    const typed = e.key_char !== null && e.key_char !== undefined && e.key_char.length === 1 ? e.key_char : null;
     const help = keysKey(e, this.help);
 
-    if (help) {
+    if (help !== null) {
       this.help = help === "toggle" ? !this.help : false;
       cx.stop_propagation();
       cx.notify();
@@ -177,50 +217,51 @@ export default class Agents extends View {
     if (this.help) return;
 
     if (typed === "[" || typed === "]") {
-      cycleAgents(this, typed === "]" ? 1 : -1, cx);
+      cycleAgents(this, typed === "]" ? 1 : -1);
       cx.stop_propagation();
       cx.notify();
 
       return;
     }
 
-    const k = e.key, upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
+    const k = e.key, upper = m.shift || /^[A-Z]$/.test(k), low = Str.toLowerCase(k);
     const pan = upper ? PAN.get(low) : undefined;
 
-    if (pan) movePan(this, pan[0], pan[1]);
-    else if (isStep(k)) {
-      this.step(k, cx);
-
-      return;
-    } else if (k === "+" || k === "=") zoomTo(this, this.zoom * ZOOM.step);
+    if (pan !== undefined) movePan(this, pan[0], pan[1]);
+    else if (isStep(k)) this.step(k);
+    else if (k === "+" || k === "=") zoomTo(this, this.zoom * ZOOM.step);
     else if (k === "-" || k === "_") zoomTo(this, this.zoom / ZOOM.step);
     else if (k === "0") {
       this.zoom = 1;
       this.pan = null;
       saveState(this);
     } else if (k === "enter" || k === "space") {
-      const n = (this.layout ?? []).find((x) => x.key === this.selected);
-
-      if (n?.kind === "run") flipRun(this, n);
+      Option.map(Arr.findFirst(this.layout ?? [], (x) => x.key === this.selected), (n) => {
+        if (n.kind === "run") flipRun(this, n);
+      });
     } else if (k === "f" && !upper) {
       const pane = this.target();
 
-      if (pane) run("pane.focus", { pane: pane.pane });
+      if (pane !== null) this.focusTerminal(pane);
 
       return;
     } else if (low === "g" && upper) startFollowing(this);
     else if (k === "g") {
       // gg (two within half a second): the oldest step, and stop following.
-      if (Date.now() - this.gAt < 500) {
+      const now = nowMs();
+
+      if (now - this.gAt < 500) {
         this.gAt = 0;
         this.follow = false;
         this.feedScroll?.scroll_to_item(0);
       } else {
-        this.gAt = Date.now();
+        this.gAt = now;
 
         return;
       }
-    } else if (k === "w") toWorking(this, cx);
+    } else if (k === "w") {
+      if (toWorking(this)) this.poll();
+    }
     else if (k === "s") {
       this.selected = this.selected === STATS ? null : STATS;
       this.detail = null;
@@ -261,11 +302,13 @@ export default class Agents extends View {
 
   override render() {
     const t = theme();
+
+    this.now = nowMs();
     const list = claudePanes();
     const pane = this.target();
 
     const endResize = (cx: Context) => {
-      if (this.resizing) {
+      if (this.resizing !== null) {
         this.resizing = null;
         saveState(this);
         cx.notify();
@@ -274,7 +317,7 @@ export default class Agents extends View {
 
     const frame = v_flex().id("agent-graph").relative().size_full().bg(t.background);
 
-    const shell = (this.handle ? frame.track_focus(this.handle) : frame)
+    const shell = (this.handle !== null ? frame.track_focus(this.handle) : frame)
       .on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => {
         if (size.height >= PLACEHOLDER) {
@@ -282,11 +325,11 @@ export default class Agents extends View {
           cx.notify();
         }
       })
-      .when(Boolean(this.resizing), (el) => el.cursor_row_resize())
+      .when(this.resizing !== null, (el) => el.cursor_row_resize())
       .on_mouse_move((e, cx) => {
         const r = this.resizing;
 
-        if (!r) return;
+        if (r === null) return;
 
         this.detailH = Math.round(Math.min(this.paneH - 34 - 80, Math.max(DETAIL_MIN, r.from - (e.position.y - r.y))));
         cx.notify();
@@ -304,18 +347,19 @@ export default class Agents extends View {
       .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.muted).child(sub)))
       .child(this.hints(t));
 
-    if (!pane) return note("No Claude Code in this space", "Start one from + new, then its agents and workflows show here.");
+    if (pane === null) return note("No Claude Code in this space", "Start one from + new, then its agents and workflows show here.");
 
-    if (this.error && !this.data) return note(this.error, "");
+    if (Str.isNonEmpty(this.error) && this.data === null) return note(this.error, "");
 
     const data = this.data;
 
-    if (!data) return note("Reading the session…", pane.cwd ?? "");
+    if (data === null) return note("Reading the session…", pane.cwd ?? "");
 
-    const root = tree(data, { label: pane.name, sub: [this.session?.name, WORDS[pane.status ?? "idle"]].filter(Boolean).join(" · "), status: pane.status ?? "idle" }, this.open);
-    const find = (n: GraphNode): GraphNode | undefined => n.key === this.selected ? n : n.children.map(find).find(Boolean);
+    const sub = Arr.filter([this.session?.name ?? "", WORDS[pane.status ?? "idle"]], Str.isNonEmpty);
+    const root = tree(data, { label: pane.name, sub: Arr.join(sub, " · "), status: pane.status ?? "idle" }, this.open, this.now);
+    const find = (n: GraphNode): Option.Option<GraphNode> => (n.key === this.selected ? Option.some(n) : Arr.findFirst(n.children, find));
     const stats: StatsPick = { key: STATS, kind: "stats" };
-    const sel = this.selected === STATS ? stats : this.selected ? find(root) : undefined;
+    const sel = this.selected === STATS ? stats : this.selected === null ? undefined : Option.getOrUndefined(find(root));
 
     return shell
       .when(data.agents.size > 0, (el) => el.child(statsStrip(this, t)))
@@ -326,8 +370,8 @@ export default class Agents extends View {
 
         return el;
       })
-      .when(sel !== undefined, (el) => (sel ? el.child(details(this, t, sel, pane, data)) : el))
-      .when(!root.children.length, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.muted)
+      .when(sel !== undefined, (el) => (sel === undefined ? el : el.child(details(this, t, sel, pane, data))))
+      .when(root.children.length === 0, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.muted)
         .child("No subagents or workflows in this session yet.")))
       .child(this.hints(t));
   }

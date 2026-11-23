@@ -13,7 +13,7 @@ import { edge } from "@fireflies/tones";
 
 /** Where the graph sits: dragged there, else at the left, the whole graph centred when it fits, else the session node. */
 export function panFor(v: Agents, height: number): Point {
-  if (v.pan) return v.pan;
+  if (v.pan !== null) return v.pan;
 
   const vh = v.view.height;
   const y = height <= vh ? (vh - height) / 2 : Math.min(0, Math.max(vh - height, vh / 2 - v.rootY));
@@ -31,17 +31,21 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
   v.layout = probe.nodes;
 
   const at = panFor(v, probe.height);
-  const { el } = canvas(t, root, v.selected, (n, cx) => pickNode(v, n, cx), at.x, at.y, d);
+
+  const { el } = canvas(t, root, v.selected, (n, cx) => {
+    pickNode(v, n);
+    cx.notify();
+  }, at.x, at.y, d);
 
   const end = (cx: Context) => {
-    if (v.drag) {
+    if (v.drag !== null) {
       v.drag = null;
       cx.notify();
     }
   };
 
   return div().id("ag-graph").relative().flex_1().min_h(0).overflow_hidden()
-    .when(Boolean(v.drag), (el) => el.cursor_grabbing()).when(!v.drag, (el) => el.cursor_grab())
+    .when(v.drag !== null, (el) => el.cursor_grabbing()).when(v.drag === null, (el) => el.cursor_grab())
     .on_size_change((size, cx) => {
       if (size.width >= PLACEHOLDER && size.height >= PLACEHOLDER) {
         v.view = size;
@@ -64,7 +68,7 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
     .on_mouse_move((e, cx) => {
       const d = v.drag;
 
-      if (!d) return;
+      if (d === null) return;
 
       v.pan = { x: Math.round(d.from.x + e.position.x - d.x), y: Math.round(d.from.y + e.position.y - d.y) };
       cx.notify();
@@ -87,7 +91,7 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
     })
     .child(sky(t, at.x, at.y))
     .child(el)
-    .when(Boolean(v.pan), (el) => el.child(div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
+    .when(v.pan !== null, (el) => el.child(div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
       .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {

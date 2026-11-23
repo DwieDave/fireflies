@@ -1,14 +1,14 @@
 // Moving around the agent graph: picking a node, folding a run, zoom and pan
-// (kept per session), h j k l through the graph, revealing the selection,
-// cycling the working agents, asking an agent.
+// (kept per copy), h j k l through the graph, revealing the selection,
+// cycling the sessions, asking an agent.
 
-import type { Context, Point } from "gpui-kit";
-import { hc } from "herdr";
+import type { Point } from "gpui-kit";
+import { Array as Arr, Match, Option } from "effect";
+import { hcOk } from "@fireflies/kit";
 import type { AgentNode as AgentNodeOf, GraphNode, PhaseNode, RunNode } from "./graph.ts";
 import { dims, ZOOM } from "./graph.ts";
 import type { ClaudePane, AgentPick, Step } from "./state.ts";
 import { claudePanes, remember } from "./state.ts";
-import { poll } from "./reading.ts";
 import type { default as Agents } from "./main.ts";
 import { panFor } from "./viewport.ts";
 
@@ -18,30 +18,43 @@ export function flipRun(v: Agents, n: RunNode) {
   else v.open.add(n.foldKey);
 }
 
-export function pickNode(v: Agents, n: GraphNode | AgentPick, cx: Context, again = true) {
+/** Selects `n` (its details: from the next read). `again`: a second click on a run folds or opens it. */
+export function select(v: Agents, n: GraphNode | AgentPick, again: boolean): void {
   v.handle?.focus();
 
-  // A second click folds or opens it.
   if (again && n.kind === "run" && v.selected === n.key) flipRun(v, n);
 
   if (v.selected !== n.key) v.follow = true;
 
   v.selected = n.key;
   v.detail = null;
-  v.busy = 0;
-  poll(v, cx);
-  cx.notify();
 }
 
-export function askAgent(n: AgentNodeOf | RunNode | PhaseNode, pane: ClaudePane) {
-  const what = n.kind === "run" ? `the workflow run ${n.run.name} (${n.run.id})`
-    : n.kind === "phase" ? `the ${n.label} phase of the workflow ${n.run.name} (${n.run.id})`
-    : `the subagent "${n.label}" (${n.key})`;
-
-  hc(["send", pane.terminal, `How is ${what} doing? Brief status, anything blocked or worth my attention.`]).catch(() => null);
+/** Selects `n` and reads its steps now. */
+export function pickNode(v: Agents, n: GraphNode | AgentPick, again = true): void {
+  select(v, n, again);
+  v.poll();
 }
 
-export function saveState(v: Agents) {
+/** What `ask` sends about `n`. */
+export function askText(n: AgentNodeOf | RunNode | PhaseNode): string {
+  const what = Match.value(n).pipe(
+    Match.discriminatorsExhaustive("kind")({
+      run: (x) => `the workflow run ${x.run.name} (${x.run.id})`,
+      phase: (x) => `the ${x.label} phase of the workflow ${x.run.name} (${x.run.id})`,
+      agent: (x) => `the subagent "${x.label}" (${x.key})`,
+    }),
+  );
+
+  return `How is ${what} doing? Brief status, anything blocked or worth my attention.`;
+}
+
+/** Asks that Claude Code, in its own terminal, how `n` is doing (a send that fails: a toast says why). */
+export function askAgent(v: Agents, n: AgentNodeOf | RunNode | PhaseNode, pane: ClaudePane): void {
+  v.fx?.run(hcOk(["send", pane.terminal, askText(n)]), { redraw: false });
+}
+
+export function saveState(v: Agents): void {
   remember({ zoom: v.zoom, detailH: v.detailH });
 }
 
@@ -67,35 +80,34 @@ export function movePan(v: Agents, dx: number, dy: number) {
 }
 
 /** Moves the selection: h parent, l first child, j / k next / previous in the column. */
-export function stepGraph(v: Agents, dir: Step, cx: Context) {
+export function stepGraph(v: Agents, dir: Step): void {
   const nodes = v.layout ?? [];
 
-  if (!nodes.length) return;
+  const next = Option.match(Arr.findFirst(nodes, (n) => n.key === v.selected), {
+    onNone: () => Arr.findFirst(nodes, (n) => n.kind === "main"),
+    onSome: (cur): Option.Option<GraphNode> => {
+      if (dir === "h") return Arr.findFirst(nodes, (n) => n.children.includes(cur));
 
-  const cur = nodes.find((n) => n.key === v.selected);
-  let next: GraphNode | undefined;
+      if (dir === "l") {
+        if (cur.kind === "run" && cur.folded) {
+          flipRun(v, cur);
 
-  if (!cur) next = nodes.find((n) => n.kind === "main");
-  else if (dir === "h") next = nodes.find((n) => n.children.includes(cur));
-  else if (dir === "l") {
-    if (cur.kind === "run" && cur.folded) {
-      flipRun(v, cur);
-      cx.notify();
+          return Option.none();
+        }
 
-      return;
-    }
+        return Arr.head(cur.children);
+      }
 
-    next = cur.children[0];
-  } else {
-    const col = nodes.filter((n) => n.x === cur.x).sort((a, b) => a.y - b.y);
+      const col = Arr.filter(nodes, (n) => n.x === cur.x).sort((a, b) => a.y - b.y);
 
-    next = col[col.indexOf(cur) + (dir === "j" ? 1 : -1)];
-  }
+      return Option.fromUndefinedOr(col[col.indexOf(cur) + (dir === "j" ? 1 : -1)]);
+    },
+  });
 
-  if (!next) return;
-
-  pickNode(v, next, cx, false);
-  reveal(v, next);
+  Option.map(next, (n) => {
+    pickNode(v, n, false);
+    reveal(v, n);
+  });
 }
 
 /** Moves the graph so `n` is in view, if it isn't. */
@@ -110,20 +122,24 @@ export function reveal(v: Agents, n: GraphNode) {
   if (y < m) dy = m - y;
   else if (y + n.h > v.view.height - m) dy = v.view.height - m - y - n.h;
 
-  if (dx || dy) movePan(v, dx, dy);
+  if (dx !== 0 || dy !== 0) movePan(v, dx, dy);
 }
 
 /** [ / ]: the previous / next session in the toolbar's chips, kept. */
-export function cycleAgents(v: Agents, d: number, cx: Context) {
+export function cycleAgents(v: Agents, d: number): void {
   const list = claudePanes(), cur = v.target();
-  const i = list.findIndex((p) => p.terminal === cur?.terminal);
+  const i = Option.getOrElse(Arr.findFirstIndex(list, (p) => p.terminal === cur?.terminal), () => -1);
   const p = list[(i + d + list.length) % list.length];
 
-  if (!p) return;
+  if (p === undefined) return;
 
-  v.terminal = p.terminal;
+  showSession(v, p.terminal);
+}
+
+/** Shows the Claude Code in `terminal` from now on (kept), read now. */
+export function showSession(v: Agents, terminal: string): void {
+  v.terminal = terminal;
   v.pinned = true;
   v.session = null;
-  v.busy = 0;
-  poll(v, cx);
+  v.poll();
 }

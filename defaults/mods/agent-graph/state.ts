@@ -1,36 +1,52 @@
 // The agent graph's state: its props, the poll's pace, the cached sessions
-// and what's remembered per terminal, the Claude panes it follows, the
-// shapes it holds (a step's keys and pans, the stats and agent picks).
+// and what's remembered per copy, the Claude panes it follows, the shapes it
+// holds (a step's keys and pans, the stats and agent picks).
 
 import type { Context, MouseButtonEvent } from "gpui-kit";
 import { spaces, panes, terminals, props } from "herdr";
-import type { PaneInfo, TabInfo, TerminalPaneInfo } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, parseJson, sharedMapKey } from "./guard.ts";
+import type { PaneInfo, SpaceInfo, TabInfo, TerminalPaneInfo } from "herdr";
+import { Array as Arr, Option, Schema, String as Str } from "effect";
+import { listOf, mapOf, sharedKey } from "@fireflies/kit";
 import type { Agent, FeedItem, Usage } from "./claude.ts";
-import { isPackedSnapshot } from "./claude.ts";
+import { PackedSnapshotSchema } from "./claude.ts";
 
-/** A terminal of terminals(), for the name a person gave it. */
-export const isLabelled = object({ address: isString }, { labels: nullable(object({}, { "nocturne.name": isString })) });
+/** A terminal of terminals(), the fields read here: its address, the name a person gave it
+ *  (Nocturne's "Rename": the nocturne.name label) and the program it runs now. */
+export const TerminalSchema = Schema.Struct({
+  address: Schema.String,
+  labels: Schema.optionalKey(Schema.NullOr(Schema.Struct({ "nocturne.name": Schema.optionalKey(Schema.String) }))),
+  foreground: Schema.optionalKey(Schema.NullOr(Schema.Struct({ pid: Schema.optionalKey(Schema.Finite) }))),
+});
 
-/** A terminal of terminals(), for the program it runs now. */
-export const isRunning = object({ address: isString }, { foreground: nullable(object({}, { pid: isNumber })) });
+export type Terminal = typeof TerminalSchema.Type;
 
-/** The name a person gave a pane's terminal (Nocturne's "Rename": the nocturne.name label), or null. */
-export const givenName = (terminal: string | null): string | null => terminals().filter(isLabelled).find((x) => x.address === terminal)?.labels?.["nocturne.name"] || null;
+/** terminals() read entry by entry (one in another shape is left out; not a list: none). */
+export const terminalsOf = (list: ReturnType<typeof terminals>): readonly Terminal[] =>
+  Option.getOrElse(Schema.decodeOption(listOf(TerminalSchema))(list), (): readonly Terminal[] => []);
+
+/** The name a person gave a pane's terminal, or none. */
+export const givenName = (list: readonly Terminal[], terminal: string): Option.Option<string> =>
+  Arr.findFirst(list, (x) => x.address === terminal).pipe(
+    Option.flatMap((x) => Option.fromUndefinedOr(x.labels?.["nocturne.name"])),
+    Option.filter(Str.isNonEmpty),
+  );
+
+/** The process a terminal runs now, or none. */
+export const pidOf = (list: readonly Terminal[], terminal: string): Option.Option<number> =>
+  Option.flatMap(Arr.findFirst(list, (x) => x.address === terminal), (x) => Option.fromUndefinedOr(x.foreground?.pid));
 
 /** What it is opened with (see the top); other props are no props. */
-export const isAgentsProps = object({}, { terminal: isString, select: isString });
+export const AgentsPropsSchema = Schema.Struct({ terminal: Schema.optionalKey(Schema.String), select: Schema.optionalKey(Schema.String) });
 
-export type AgentsProps = Guarded<typeof isAgentsProps>;
+export type AgentsProps = typeof AgentsPropsSchema.Type;
 
-export const agentsProps = (): AgentsProps => {
-  const p = props();
+const readProps = Schema.decodeUnknownOption(AgentsPropsSchema);
 
-  return isAgentsProps(p) ? p : {};
-};
+export const agentsProps = (): AgentsProps => Option.getOrElse(readProps(props()), (): AgentsProps => ({}));
 
 export const POLL = 2500;
+
+// A read that takes longer than this is given up; the next one starts.
 export const STALE = 15000;
 export const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 export const PAN_STEP = 80;
@@ -44,34 +60,64 @@ export const DETAIL_MIN = 90;
 export const STATS = "@stats";
 
 /** The Claude Code session a terminal runs: its process, the session id, its name and folder. */
-export const isSession = object({ pid: isNumber, id: isString }, { name: nullable(isString), cwd: nullable(isString) });
+export const SessionSchema = Schema.Struct({
+  pid: Schema.Finite,
+  id: Schema.String,
+  name: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  cwd: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
 
-export type Session = Guarded<typeof isSession>;
+export type Session = typeof SessionSchema.Type;
+
+/** One terminal's last read: the session, and the snapshot as JSON-safe values. */
+export const CacheEntrySchema = Schema.Struct({ session: Schema.NullOr(SessionSchema), data: Schema.NullOr(PackedSnapshotSchema) });
+
+export type CacheEntry = typeof CacheEntrySchema.Type;
 
 /** The last read of each terminal's session (keyed by terminal), so a pane coming back
- *  draws at once: the session, and the snapshot as JSON-safe values. */
-export const CACHE = sharedMapKey("agent-graph.cache", object({ session: nullable(isSession), data: nullable(isPackedSnapshot) }));
+ *  draws at once. */
+export const CACHE = sharedKey("agent-graph.cache", mapOf(CacheEntrySchema));
 
 /** This copy's remembered zoom and detail height. */
-export const isRemembered = object({}, { zoom: nullable(isNumber), detailH: nullable(isNumber) });
+export const RememberedSchema = Schema.Struct({
+  zoom: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+  detailH: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
+});
 
-export type Remembered = Guarded<typeof isRemembered>;
+export type Remembered = typeof RememberedSchema.Type;
 
-/** This copy's remembered zoom and detail height (localStorage may be missing). */
-export function remembered(): Remembered {
+const rememberedJson = Schema.fromJsonString(RememberedSchema);
+const decodeRemembered = Schema.decodeUnknownOption(rememberedJson);
+const encodeRemembered = Schema.encodeOption(rememberedJson);
+
+/** What state.ts uses of localStorage. */
+interface Store {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/** localStorage when the runtime has it (tests and stock Herdr may not). */
+function store(): Store | null {
   try {
-    return parseJson(localStorage.getItem("view") ?? "{}", isRemembered) ?? {};
+    return typeof localStorage === "undefined" ? null : localStorage;
   } catch {
-    return {};
+    return null;
   }
 }
 
-export function remember(v: Remembered) {
-  try {
-    localStorage.setItem("view", JSON.stringify(v));
-  } catch {
-    /* not kept */
-  }
+/** This copy's remembered zoom and detail height; none kept (or a store that refuses): nothing. */
+export function remembered(): Remembered {
+  let text: string | null = null;
+
+  // localStorage that refuses a read: nothing kept.
+  try { text = store()?.getItem("view") ?? null; } catch { /* none, as said */ }
+
+  return text === null ? {} : Option.getOrElse(decodeRemembered(text), (): Remembered => ({}));
+}
+
+/** Keeps this copy's zoom and detail height (a store that refuses: not kept). */
+export function remember(v: Remembered): void {
+  Option.map(encodeRemembered(v), (text) => { try { store()?.setItem("view", text); } catch { /* not kept, as said */ } });
 }
 
 /** A Claude Code pane in the shown space (a terminal's), with the name it shows under and its space's machine. */
@@ -80,29 +126,36 @@ export interface ClaudePane extends TerminalPaneInfo {
   readonly machine: string | null;
 }
 
+const isTerminalPane = (p: PaneInfo): p is TerminalPaneInfo => p.terminal !== undefined;
+
 /** Claude Code panes in the shown space, the shown tab's first. */
-export function claudePanes(): ClaudePane[] {
-  const space = spaces().find((s) => s.active);
+export function claudePanesOf(spaceList: readonly SpaceInfo[], paneList: readonly PaneInfo[], terminalList: readonly Terminal[]): readonly ClaudePane[] {
+  return Option.match(Arr.findFirst(spaceList, (s) => s.active), {
+    onNone: (): readonly ClaudePane[] => [],
+    onSome: (space) => {
+      const tabs = new Map<string, TabInfo>(Arr.map(space.tabs, (c) => [c.id, c] as const));
 
-  if (!space) return [];
+      // The shown tab first, then by position.
+      const rank = (p: PaneInfo) => {
+        const tab = tabs.get(p.tab);
 
-  const tabs = new Map<string, TabInfo>(space.tabs.map((c) => [c.id, c]));
+        return (tab?.active === true ? 0 : 1000) + (tab?.index ?? 0);
+      };
 
-  // The shown tab first, then by position.
-  const rank = (p: PaneInfo) => {
-    const tab = tabs.get(p.tab);
-
-    return (tab?.active ? 0 : 1000) + (tab?.index ?? 0);
-  };
-
-  return panes().flatMap((p) => (p.terminal && p.app === "claude-code" && tabs.has(p.tab)
-    ? [{ ...p, name: givenName(p.terminal) ?? p.program.name, machine: space.machine }]
-    : []))
-    .sort((a, b) => rank(a) - rank(b));
+      return Arr.flatMap(paneList, (p): readonly ClaudePane[] => (isTerminalPane(p) && Str.isNonEmpty(p.terminal) && p.app === "claude-code" && tabs.has(p.tab)
+        ? [{ ...p, name: Option.getOrElse(givenName(terminalList, p.terminal), () => p.program.name), machine: space.machine }]
+        : []))
+        .sort((a, b) => rank(a) - rank(b));
+    },
+  });
 }
 
-export function ago(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+/** Claude Code panes in the shown space now (a render's read). */
+export const claudePanes = (): readonly ClaudePane[] => claudePanesOf(spaces(), panes(), terminalsOf(terminals()));
+
+/** "12s ago", "4m ago", "2h ago" at `now`. */
+export function ago(ms: number, now: number): string {
+  const s = Math.max(0, Math.round((now - ms) / 1000));
 
   return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
 }
@@ -115,11 +168,12 @@ export function money(u: Usage): string {
   return u.unpriced ? `≈${v}` : v;
 }
 
-
 /** A move of the selection: h parent, l first child, j / k down / up the column. */
-export const isStep = literal("h", "j", "k", "l");
+export const StepSchema = Schema.Literals(["h", "j", "k", "l"]);
 
-export type Step = Guarded<typeof isStep>;
+export const isStep = Schema.is(StepSchema);
+
+export type Step = typeof StepSchema.Type;
 
 /** H J K L: which way each moves the graph. */
 export const PAN = new Map<string, readonly [number, number]>([["h", [PAN_STEP, 0]], ["l", [-PAN_STEP, 0]], ["k", [0, PAN_STEP]], ["j", [0, -PAN_STEP]]]);
