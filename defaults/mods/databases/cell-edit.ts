@@ -8,7 +8,7 @@
 // Leaving the table, reading it again or closing the window with changes
 // staged asks first: save, discard or stay.
 
-import type { Context, KeyEvent } from "gpui-kit";
+import type { KeyEvent } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { Array as Arr, Effect, Option, String as Str } from "effect";
 import { redraw } from "@fireflies/kit";

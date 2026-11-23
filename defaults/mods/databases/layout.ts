@@ -5,11 +5,10 @@
 // kept in shared state, one set for the window and one for panes.
 
 import { shared, setShared } from "herdr";
-import { Array as Arr } from "effect";
-import { isNumber, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import type { Guarded } from "./guard.ts";
+import { Array as Arr, Schema } from "effect";
+import { readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Divider, Edge, Sizes } from "@fireflies/dividers";
-import { GRAB } from "@fireflies/dividers";
+import { GRAB, SizesSchema } from "@fireflies/dividers";
 import type { Place } from "./keys.ts";
 
 /** Under this width the view is one column (the pattern's one break per mod). */
@@ -25,18 +24,11 @@ export const LEAST = { left: 200, right: 320, conns: 60, tables: 80, struct: 80,
 /** The line between a query's editor and its result (main-view.ts resultHead). */
 export const RESULT_HEAD = 22;
 
-const isSizesEntry = object({}, { left: isNumber, conns: isNumber, struct: isNumber, log: isNumber, editor: isNumber });
-
 /** The dragged sizes, kept: the window's, and the panes' (one set for every pane). */
-export const SIZES_KEY = sharedKey("databases.sizes", nullable(object({}, { window: isSizesEntry, pane: isSizesEntry })));
-
-type SizesEntry = Guarded<typeof isSizesEntry>;
-
-/** An entry put together field by field. */
-type SizesDraft = { -readonly [K in keyof SizesEntry]: SizesEntry[K] };
+export const SIZES_KEY = sharedKey("databases.sizes", Schema.NullOr(Schema.Struct({ window: Schema.optionalKey(SizesSchema), pane: Schema.optionalKey(SizesSchema) })));
 
 /** The sizes kept for a window or a pane. */
-export function keptSizes(window: boolean): SizesEntry {
+export function keptSizes(window: boolean): Sizes {
   const all = readShared(shared, SIZES_KEY, null);
 
   return (window ? all?.window : all?.pane) ?? {};
@@ -45,7 +37,7 @@ export function keptSizes(window: boolean): SizesEntry {
 /** The sizes kept again (the other kind's left as they are). */
 export function keepSizes(window: boolean, sizes: Sizes): void {
   const all = readShared(shared, SIZES_KEY, null) ?? {};
-  const entry: SizesDraft = {};
+  const entry: Record<string, number> = {};
 
   for (const k of ["left", "conns", "struct", "log", "editor"] as const) {
     const n = sizes[k];

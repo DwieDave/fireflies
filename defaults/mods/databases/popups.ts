@@ -107,9 +107,9 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
 }
 
 /** A line input's keys (the filter, the find): enter keeps it, esc drops it; the rest is typing. */
-function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
+function lineKey(v: DbView, e: KeyEvent): Taken {
   if (v.rows.filtering) {
-    if (e.key === "enter") applyFilter(v, cx);
+    if (e.key === "enter") applyFilter(v);
     else if (e.key === "escape") {
       v.rows.filtering = false;
       v.filterInput = null;
@@ -202,7 +202,7 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   if (v.rename !== null) return renameKey(v, e);
 
   if (v.review !== null) {
-    reviewKey(v, e, cx);
+    reviewKey(v, e);
 
     return true;
   }
@@ -227,7 +227,7 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   if (!v.help && v.place() === "editor" && v.shownQuery()?.editor.focused() === true) return "typing";
 
   // A line being typed in (the WHERE filter, the find) takes its ? too.
-  if (v.rows.filtering || v.findTyping) return lineKey(v, e, cx);
+  if (v.rows.filtering || v.findTyping) return lineKey(v, e);
 
   const help = keysKey(e, v.help);
 
@@ -237,7 +237,7 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
     return true;
   }
 
-  return lineKey(v, e, cx);
+  return lineKey(v, e);
 }
 
 /** The ask, in the bar over the keys: y / esc, then for a destructive one the name typed. */

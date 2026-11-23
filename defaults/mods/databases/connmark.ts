@@ -122,7 +122,7 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
 
   if (name !== null && Str.isNonEmpty(name)) {
     rows.push(
-      entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(c.kind, name), cx)),
+      entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(c.kind, name))),
       entry("tables", "copy", "Copy its name", () => copy(v, name, cx)),
     );
   }

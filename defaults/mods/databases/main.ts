@@ -350,10 +350,12 @@ export default class Databases extends View {
 
     const dir = this.dir;
     const last = Effect.andThen(Effect.ignore(saveQueries(this)), dir === null ? Effect.void : removeDir(dir));
-    const fx = this.fx;
 
-    // Every read and loop of this copy stops first; then its query tabs are kept and its folder goes.
-    return (fx === null ? Promise.resolve() : fx.close()).then(() => runtime.runtime.runPromise(last));
+    // Every read and loop of this copy is interrupted; its query tabs are kept and its folder goes on the
+    // mod's runtime (as github's cache write), so the close waits for them and no run of the copy can stop them.
+    void this.fx?.close();
+
+    return runtime.runtime.runPromise(Effect.andThen(Effect.yieldNow, last));
   }
 
   // ---- what the modules ask of the view
@@ -498,7 +500,7 @@ export default class Databases extends View {
   }
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
-  move(cx: Context): void {
+  move(): void {
     beforeLeaving(this, this.overlay !== null && Str.isNonEmpty(this.overlay) ? "move into a pane" : "move out to a window", () => handoverOut(this));
   }
 

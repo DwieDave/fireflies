@@ -206,10 +206,10 @@ function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Elem
     // A saved one drags to another place among the saved (kept in connections.json).
     press: saved ? (e) => pressAt(v, e, {
       kind: "conn", label: c.name, takes: ["conn:"],
-      drop: (to, cx) => {
+      drop: (to) => {
         const at = to !== null && Str.isNonEmpty(to) ? Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => `conn:${s.id}` === to), () => -1) : -1;
 
-        if (at >= 0) placeConn(v, c, at, cx);
+        if (at >= 0) placeConn(v, c, at);
       },
     }) : undefined,
     target: saved ? `conn:${c.id}` : undefined,
@@ -318,8 +318,8 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
     // Its name drags into a query's editor (quoted); onto the Rows tab, it opens there.
     press: (e) => pressAt(v, e, {
       kind: "name", label: qualified(kind, x), takes: ["editor:", "rows-tab"],
-      drop: (to, cx) => {
-        if (to?.startsWith("editor:") === true) insertName(v, qualified(kind, x), cx);
+      drop: (to) => {
+        if (to?.startsWith("editor:") === true) insertName(v, qualified(kind, x));
         else if (to === "rows-tab") openTable(v, x);
       },
     }),
@@ -522,8 +522,8 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
     // A column's (an index's, a key's) name drags into a query's editor, quoted.
     press: r.name !== null && Str.isNonEmpty(r.name) ? (e) => pressAt(v, e, {
       kind: "name", label: quoteName(kind, r.name ?? ""), takes: ["editor:"],
-      drop: (to, cx) => {
-        if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, r.name ?? ""), cx);
+      drop: (to) => {
+        if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, r.name ?? ""));
       },
     }) : undefined,
   })), v.structAt, v.seen.structure);

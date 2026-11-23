@@ -159,7 +159,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
 }
 
 /** The review's keys: y / enter commit, esc / n back (not while it runs). */
-export function reviewKey(v: DbView, e: KeyEvent, cx: Context): void {
+export function reviewKey(v: DbView, e: KeyEvent): void {
   const r = v.review;
 
   if (r === null) return;

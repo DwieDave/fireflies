@@ -8,11 +8,10 @@
 // lives with the tab.
 
 import { setShared, shared } from "herdr";
-import { Array as Arr, Option, Record as Rec, String as Str } from "effect";
+import { Array as Arr, Option, Order, Record as Rec, Schema, String as Str } from "effect";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { Column } from "@fireflies/viewer/table";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isNumber, isString, object, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 
 /** How a grid's columns are arranged: widths by name (layout px), hidden names, names in order. */
 export interface ColumnLayout {
@@ -182,13 +181,18 @@ export const plainLayout = (l: ColumnLayout): boolean => Rec.keys(l.widths).leng
 
 // ---- kept per table
 
-const isWidth = object({ name: isString, px: isNumber });
-const isKept = object({ at: isNumber }, { widths: arrayOf(isWidth), hidden: arrayOf(isString), order: arrayOf(isString) });
+const WidthSchema = Schema.Struct({ name: Schema.String, px: Schema.Finite });
+const KeptSchema = Schema.Struct({
+  at: Schema.Finite,
+  widths: Schema.optionalKey(Schema.Array(WidthSchema)),
+  hidden: Schema.optionalKey(Schema.Array(Schema.String)),
+  order: Schema.optionalKey(Schema.Array(Schema.String)),
+});
 
-type Kept = Guarded<typeof isKept>;
+type Kept = typeof KeptSchema.Type;
 
-/** The tables' arrangements: by connection and table, the most recent KEEP_MAX. */
-export const COLUMNS_KEY = sharedMapKey("databases.columns", isKept);
+/** The tables' arrangements: by connection and table, the most recent KEEP_MAX (an entry of another shape left out, not the rest). */
+export const COLUMNS_KEY = sharedKey("databases.columns", mapOf(KeptSchema));
 
 export const KEEP_MAX = 200;
 
@@ -197,7 +201,7 @@ export const tableKey = (conn: string, schema: string | null, name: string): str
 
 /** The arrangement kept for a table (none: the plain one). */
 export function keptLayout(key: string): ColumnLayout {
-  const k = readSharedMap(shared, COLUMNS_KEY).get(key);
+  const k = readShared(shared, COLUMNS_KEY, new Map<string, Kept>()).get(key);
 
   if (k === undefined) return NO_LAYOUT;
 
@@ -205,8 +209,8 @@ export function keptLayout(key: string): ColumnLayout {
 }
 
 /** A table's arrangement kept (a plain one forgotten); the oldest go past KEEP_MAX. */
-export function keepLayout(key: string, layout: ColumnLayout, now = Date.now()): void {
-  const all = new Map(readSharedMap(shared, COLUMNS_KEY));
+export function keepLayout(key: string, layout: ColumnLayout, now: number): void {
+  const all = new Map(readShared(shared, COLUMNS_KEY, new Map<string, Kept>()));
 
   all.delete(key);
 
@@ -216,7 +220,7 @@ export function keepLayout(key: string, layout: ColumnLayout, now = Date.now()):
     all.set(key, kept);
   }
 
-  const newest = [...all.entries()].sort((a, b) => b[1].at - a[1].at).slice(0, KEEP_MAX);
+  const newest = Arr.take(Arr.sort(Arr.fromIterable(all), Order.mapInput(Order.flip(Order.Number), ([, k]: readonly [string, Kept]) => k.at)), KEEP_MAX);
 
-  writeSharedMap(setShared, COLUMNS_KEY, new Map(newest));
+  writeShared(setShared, COLUMNS_KEY, new Map(newest));
 }

@@ -61,7 +61,7 @@ function header(t: Theme, v: DbView): Element {
     .when(live && !narrow, (el) => el.child(div().relative().flex_none().text_color(t.dim).child(`${v.catalog.tables.length} tables`)))
     // Where the window's ✕ is, the move (opening.ts): ◧ into a pane, from a pane ⧉ out to a window.
     .child(h_flex().id("db-move-tip").relative().flex_none().tooltip(v.overlay !== null && Str.isNonEmpty(v.overlay) ? "Into a pane · ctrl-t" : "Out to a window · ctrl-t")
-      .child(chip(t, "db-move", v.overlay !== null && Str.isNonEmpty(v.overlay) ? "◧" : "⧉", false, (cx) => v.move(cx))))
+      .child(chip(t, "db-move", v.overlay !== null && Str.isNonEmpty(v.overlay) ? "◧" : "⧉", false, () => v.move())))
     .child(h_flex().id("db-refresh-tip").relative().flex_none().tooltip("Read it again · r").child(chip(t, "db-refresh", "↻", false, (cx) => v.act("window", "refresh", cx))))
     .when(Boolean(v.overlay), (el) => el.child(h_flex().id("db-close-tip").relative().flex_none().tooltip("Close · q, esc").child(chip(t, "db-close", "✕", false, () => v.closeWindow()))));
 }

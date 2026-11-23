@@ -181,7 +181,7 @@ export class ConnForm {
       case "move": this.at = a.to; this.focusStop(); break;
       case "submit": this.v.run(this.save()); break;
       case "cancel": this.close(); break;
-      case "press": this.press(s?.id ?? "", cx); break;
+      case "press": this.press(s?.id ?? ""); break;
       case "step":
       case "open": if (s?.id === "kind") this.step(a.act === "step" ? a.by : 1); break;
       case "flip": this.flip(s?.id ?? ""); break;
@@ -209,7 +209,7 @@ export class ConnForm {
     return this.sslmode !== "disable";
   }
 
-  press(id: string, cx: Context): void {
+  press(id: string): void {
     if (id === "test") this.v.run(this.test());
     else if (id === "save") this.v.run(this.save());
     else if (id === "cancel") this.close();
@@ -407,7 +407,7 @@ export class ConnForm {
       .border_color(main ? t.accent : t.muted).text_color(main ? t.foreground : t.muted).cursor_pointer()
       .on_mouse_down("left", (_e, cx) => {
         cx.stop_propagation();
-        this.press(id, cx);
+        this.press(id);
         cx.notify();
       })
       .child(div().child(label)).child(div().text_size(10.8).text_color(t.accent).child(key)), on(id), t.accent);

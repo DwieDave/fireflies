@@ -88,7 +88,7 @@ export function editorKey(v: DbView, tab: QueryTab, e: KeyEvent, cx: Context): b
   const mod = m.control || m.platform;
 
   if (e.key === "enter" && mod) {
-    runQuery(v, tab, m.shift, cx);
+    runQuery(v, tab, m.shift);
   } else if (e.key === "escape") {
     if (tab.running !== null) cancelQuery(v, tab);
     else {
@@ -136,7 +136,7 @@ function askText(c: Conn, v: Verdict, count: number): string {
 }
 
 /** Runs the tab's statements, after the asks. */
-export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): void {
+export function runQuery(v: DbView, tab: QueryTab, all: boolean): void {
   const c = v.active;
 
   if (c === null) {

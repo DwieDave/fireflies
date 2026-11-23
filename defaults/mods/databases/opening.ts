@@ -238,7 +238,7 @@ export function command(v: DbView, c: string, cx: Context): void {
     if (Option.isSome(args)) receive(v, args.value);
     else v.say("databases.connect: its argument isn't a connection", "failed");
   } else if (Str.startsWith("sql:")(name)) v.addQuery(Str.slice("sql:".length)(name));
-  else if (name === "run" || name === "run-all") runShown(v, name === "run-all", cx);
+  else if (name === "run" || name === "run-all") runShown(v, name === "run-all");
   else if (Str.startsWith("table:")(name)) openNamed(v, Str.slice("table:".length)(name));
   else if (Str.startsWith("set:")(name)) setCell(v, Str.slice("set:".length)(name));
   else if (name === "to-pane" && (v.overlay !== null && Str.isNonEmpty(v.overlay))) handoverOut(v);
@@ -265,14 +265,14 @@ function dismiss(v: DbView): void {
 }
 
 /** Runs the shown query tab (databases.run, run-all): the statement under its caret, or every one. */
-function runShown(v: DbView, all: boolean, cx: Context): void {
+function runShown(v: DbView, all: boolean): void {
   const q = v.shownQuery() ?? v.queries.at(-1);
 
   if (q === undefined) return;
 
   v.mainTab = v.queries.indexOf(q) + 1;
   v.panel = "main";
-  runQuery(v, q, all, cx);
+  runQuery(v, q, all);
 }
 
 /** Opens a table by name (databases.table:<name> or <schema>.<name>) on the connection. */

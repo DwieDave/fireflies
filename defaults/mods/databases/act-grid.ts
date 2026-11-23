@@ -17,6 +17,7 @@ import { cellAt, colWidth, columnsOf, measuredWidth, moveGrid, rowsIn, sortedWid
 import { loadRows } from "./session.ts";
 import { cellMenu, columnMenu, tabMenu } from "./menus.ts";
 import { openExport } from "./export-form.ts";
+import { nowMs } from "./app.ts";
 import { saveQueries } from "./queries.ts";
 import { stageNull, startEdit, undoCell } from "./cell-edit.ts";
 import type { ColumnLayout, GridColumn, Shown } from "./columns.ts";
@@ -116,7 +117,7 @@ export function shownGrid(v: DbView): GridNow | null {
 
       v.columnsAt = { key, layout: l };
 
-      if (keep) keepLayout(key, l);
+      if (keep) keepLayout(key, l, nowMs());
     },
     sort: v.rows.browse?.sort ?? null, q: null,
   };
@@ -208,10 +209,10 @@ export function gridAct(v: DbView, place: "rows" | "results", action: string, cx
     case "wider":
     case "narrower": if (g !== null) widen(v, g, g.at.col, action === "wider" ? WIDTH_STEP : -WIDTH_STEP); break;
     case "hide": if (g !== null) hideColumn(v, g, g.at.col); break;
-    case "sort": if (g !== null) sortColumn(v, g.set.columns[g.at.col] ?? null, cx); break;
+    case "sort": if (g !== null) sortColumn(v, g.set.columns[g.at.col] ?? null); break;
     case "tab-next":
     case "tab-prev": v.mainTab = (v.mainTab + (action === "tab-next" ? 1 : v.queries.length)) % (v.queries.length + 1); v.focusShown(); break;
-    default: return place === "rows" ? rowsAct(v, action, cx) : resultsAct(v, action, cx);
+    default: return place === "rows" ? rowsAct(v, action) : resultsAct(v, action, cx);
   }
 
   return true;
@@ -308,7 +309,7 @@ export function exportShown(v: DbView, cx: Context): void {
   else if (q === null && t !== undefined) openExport(v, { table: t }, cx);
 }
 
-function rowsAct(v: DbView, action: string, cx: Context): boolean {
+function rowsAct(v: DbView, action: string): boolean {
   const b = v.rows.browse;
 
   if (b === null) return false;
@@ -339,11 +340,11 @@ function rowsAct(v: DbView, action: string, cx: Context): boolean {
 
 /** s on a column: the Rows tab asks the database (ORDER BY), a result sorts what came back. Each
  *  goes ascending, descending, then as it was. */
-export function sortColumn(v: DbView, column: string | null, cx: Context): void {
+export function sortColumn(v: DbView, column: string | null): void {
   const q = v.shownQuery();
 
   if (q === null) {
-    sortBy(v, column, cx);
+    sortBy(v, column);
 
     return;
   }
@@ -363,18 +364,18 @@ export function setLocalSort(v: DbView, q: QueryTab, sort: QueryTab["sort"]): vo
 }
 
 /** Sorts the Rows tab by a column: ascending, then descending, then as the table has them. */
-export function sortBy(v: DbView, column: string | null, cx: Context): void {
+export function sortBy(v: DbView, column: string | null): void {
   const b = v.rows.browse;
 
   if (b === null || (column === null || Str.isEmpty(column))) return;
 
   const s = b.sort;
 
-  setSort(v, s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true }, cx);
+  setSort(v, s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true });
 }
 
 /** The Rows tab's ORDER BY set (null: none), read again from the first page. */
-export function setSort(v: DbView, sort: { readonly column: string; readonly desc: boolean } | null, cx: Context): void {
+export function setSort(v: DbView, sort: { readonly column: string; readonly desc: boolean } | null): void {
   const b = v.rows.browse;
 
   if (b === null) return;
@@ -401,7 +402,7 @@ export function equalsSql(v: DbView, column: string, value: Cell): string {
 }
 
 /** The Rows tab filtered to a condition at once (a read, from the first page). */
-export function filterTo(v: DbView, where: string, cx: Context): void {
+export function filterTo(v: DbView, where: string): void {
   const b = v.rows.browse;
 
   if (b === null) return;
@@ -411,7 +412,7 @@ export function filterTo(v: DbView, where: string, cx: Context): void {
 }
 
 /** The filter line's text applied (enter), from the first page. */
-export function applyFilter(v: DbView, cx: Context): void {
+export function applyFilter(v: DbView): void {
   const b = v.rows.browse;
   const text = v.filterInput?.value() ?? "";
 

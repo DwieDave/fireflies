@@ -6,7 +6,7 @@
 // a run going on with its cancel). The grids' pointer work is handlers().
 
 import { div } from "gpui-kit";
-import type { Context, Element, MouseButtonEvent } from "gpui-kit";
+import type { Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
 import { Array as Arr, String as Str } from "effect";
@@ -178,8 +178,8 @@ function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col:
   // A click sorts; dragged, it moves the column (or its name goes into a query).
   pressAt(v, e, {
     kind: "column", label: name, takes: ["col:", "editor:"],
-    click: (x) => sortColumn(v, name, x),
-    drop: (to, x) => {
+    click: () => sortColumn(v, name),
+    drop: (to) => {
       const at = /^col:(\d+)$/.exec(to ?? "");
       const g2 = now();
 
@@ -188,7 +188,7 @@ function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col:
 
         // Dropped on a header: it takes that header's place (after it when moving right).
         moveTo(g2, col, col < target ? (target + 1 < g2.set.columns.length ? target + 1 : null) : target);
-      } else if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, name), x);
+      } else if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, name));
     },
   });
 }
@@ -244,7 +244,7 @@ function orderPart(t: Theme, v: DbView): Element | null {
   return h_flex().id("rows-order").relative().flex_none().gap(6).items_center().tooltip("the database sorts the rows: this is in the statement the window runs · s on a column, or click its header")
     .child(div().text_color(t.ansi5).child("order by"))
     .child(div().text_color(t.foreground).child(Str.replace(/^order by /, "")(orderSql(v.active?.kind ?? "sqlite", sort))))
-    .child(chip(t, "rows-order-clear", "✕", false, (cx) => setSort(v, null, cx)));
+    .child(chip(t, "rows-order-clear", "✕", false, () => setSort(v, null)));
 }
 
 /** The WHERE line over the Rows grid: the input while typing, else the filter as it is; the
@@ -273,7 +273,7 @@ function filterLine(t: Theme, v: DbView): Element {
       cx.notify();
     })
     .child(now || "every row · / to filter"))
-    .when(Boolean(now), (el) => el.child(h_flex().id("rows-filter-clear-tip").relative().flex_none().tooltip("every row again · T: the tab's menu").child(chip(t, "rows-filter-clear", "✕ clear", false, (cx) => filterTo(v, "", cx)))))
+    .when(Boolean(now), (el) => el.child(h_flex().id("rows-filter-clear-tip").relative().flex_none().tooltip("every row again · T: the tab's menu").child(chip(t, "rows-filter-clear", "✕ clear", false, () => filterTo(v, "")))))
     .when(order !== null, (el) => (order !== null ? el.child(order) : el));
 }
 
@@ -288,7 +288,7 @@ function pager(t: Theme, v: DbView): Element {
   const total = v.rows.total;
   const more = n >= b.limit;
 
-  const page = (by: number, cx: Context) => {
+  const page = (by: number) => {
     v.rows.browse = { ...b, offset: Math.max(0, b.offset + by * b.limit) };
     v.run(loadRows(v), { key: "rows" });
   };
@@ -303,8 +303,8 @@ function pager(t: Theme, v: DbView): Element {
 
       return g !== null && hidden !== 0 ? el.child(h_flex().id("rows-hidden-tip").flex_none().tooltip("O on a column: its menu hides or shows").child(chip(t, "rows-hidden", `${hidden} hidden · show`, false, () => showColumns(g)))) : el;
     })
-    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, (cx) => page(-1, cx), b.offset > 0 ? t.foreground : edgeTone(t))))
-    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, (cx) => page(1, cx), more ? t.foreground : edgeTone(t))));
+    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, () => page(-1), b.offset > 0 ? t.foreground : edgeTone(t))))
+    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, () => page(1), more ? t.foreground : edgeTone(t))));
 }
 
 function rowsBody(t: Theme, v: DbView, active: boolean): Element {
@@ -432,7 +432,7 @@ export function mainPanel(t: Theme, v: DbView): Element {
   const q = v.shownQuery();
   const tabs: (readonly [string, string])[] = [["0", "Rows"], ...Arr.map(v.queries, (x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
 
-  const pick = (key: string, cx: Context) => {
+  const pick = (key: string) => {
     if (key === "+") v.addQuery("");
     else {
       v.mainTab = Number(key);
