@@ -2,15 +2,18 @@
 // data/databases/queries/<id>.json: each tab's name and text, nothing it
 // answered. Found and sent connections keep theirs in memory only.
 
-import type { Context } from "gpui-kit";
-import { Array as Arr, Option, String as Str } from "effect";
-import { arrayOf, isString, object, parseJson } from "./guard.ts";
+import { Array as Arr, Effect, Option, Schema, String as Str } from "effect";
+import { Files, decodeJsonOption } from "@fireflies/kit";
+import type { FileError, StaleFile } from "@fireflies/kit";
 import type { Conn } from "./kinds.ts";
-import { IO, dataHome } from "./session.ts";
+import { dataHome } from "./session.ts";
 import { newQuery } from "./query.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
-const isQueriesDoc = object({ tabs: arrayOf(object({ name: isString, text: isString })) });
+const QueriesDocSchema = Schema.Struct({ tabs: Schema.Array(Schema.Struct({ name: Schema.String, text: Schema.String })) });
+const queriesDoc = decodeJsonOption(QueriesDocSchema);
+const docText = Schema.encodeSync(Schema.fromJsonString(QueriesDocSchema, { space: 2 }));
 
 /** The file of a connection's tabs. */
 export const queriesFile = (home: string, id: string): string => `${home}/data/databases/queries/${Str.replace(/[^A-Za-z0-9_-]/g, "_")(id)}.json`;
@@ -18,15 +21,14 @@ export const queriesFile = (home: string, id: string): string => `${home}/data/d
 /** Whose tabs the view holds now (they're saved under this connection). */
 const owner = new WeakMap<DbView, string>();
 
-/** Opens the connection's kept tabs (one empty tab when it has none). */
-export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
+/** Opens the connection's kept tabs (one empty tab when it has none). The tabs before are kept
+ *  first where they can be (a file that refuses: they're dropped, as before). */
+export const loadQueries = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
+  yield* Effect.ignore(saveQueries(v));
 
-  await saveQueries(v);
-
-  const text = c.origin === "saved" ? await IO.readTextFile(queriesFile(dataHome(), c.id)).catch(() => null) : null;
-  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isQueriesDoc) : undefined;
-  const tabs = doc?.tabs.length !== undefined && doc?.tabs.length !== 0 ? doc.tabs : [{ name: "Query 1", text: "" }];
+  const text = c.origin === "saved" ? yield* Effect.orElseSucceed(Files.use((f) => f.read(queriesFile(dataHome(), c.id))), () => Option.none<string>()) : Option.none<string>();
+  const doc = Option.flatMap(text, queriesDoc);
+  const tabs = Option.getOrElse(Option.filter(Option.map(doc, (d) => d.tabs), Arr.isReadonlyArrayNonEmpty), () => [{ name: "Query 1", text: "" }]);
 
   if (v.active !== c) return;
 
@@ -40,11 +42,10 @@ export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void
   v.mainTab = 0;
   owner.set(v, c.id);
   v.queriesDirty = false;
-  cx.notify();
-}
+});
 
 /** Writes the tabs of the connection they belong to (a saved one). */
-export async function saveQueries(v: DbView): Promise<void> {
+export const saveQueries = (v: DbView): Effect.Effect<void, FileError | StaleFile, Files> => Effect.gen(function* () {
   const id = owner.get(v);
   const c = Option.getOrUndefined(Arr.findFirst(v.saved, (s) => s.id === id));
 
@@ -52,10 +53,10 @@ export async function saveQueries(v: DbView): Promise<void> {
 
   if (c === undefined) return;
 
+  const files = yield* Files;
   const path = queriesFile(dataHome(), c.id);
-  const was = await IO.readTextFile(path).catch(() => null);
-  const doc = { tabs: Arr.map(v.queries, (q) => ({ name: q.name, text: q.editor.value() })) };
-  const text = `${JSON.stringify(doc, null, 2)}\n`;
+  const was = Option.getOrNull(yield* files.read(path));
+  const text = `${docText({ tabs: Arr.map(v.queries, (q) => ({ name: q.name, text: q.editor.value() })) })}\n`;
 
-  if (text !== was) await IO.writeTextFile(path, text, was).catch(() => null);
-}
+  if (text !== was) yield* files.write(path, text, was);
+});

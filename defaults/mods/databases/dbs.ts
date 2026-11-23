@@ -8,7 +8,8 @@
 // database says instead of a bare 0.
 
 import type { Context } from "gpui-kit";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Effect, String as Str } from "effect";
+import { causeMessage, redraw } from "@fireflies/kit";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import type { KubeSource } from "./kube.ts";
 import type { Here } from "./catalog.ts";
@@ -21,6 +22,7 @@ import { openConn } from "./conns.ts";
 import { counted } from "./edits.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** Whether a kind has other databases on its server to list and pick. */
 export const hasDatabases = (c: Pick<Conn, "kind" | "url">): boolean => c.kind === "postgres" || c.kind === "mysql";
@@ -70,21 +72,20 @@ export function withDatabase(c: Conn, name: string | null): Conn {
 }
 
 /** Reads the server's databases into the Databases tab (`sized`: with each one's size, asked). */
-export async function loadDatabases(v: DbView, cx: Context, sized = false): Promise<void> {
-  cx = v.held(cx);
-
+export const loadDatabases = (v: DbView, sized = false): Effect.Effect<void, never, DbRun> => Effect.suspend(() => {
   const c = v.active;
 
-  if (c === null || !hasDatabases(c)) return;
+  if (c === null || !hasDatabases(c)) return Effect.void;
 
   const d: ServerDbs = { conn: c.id, list: v.dbs?.conn === c.id ? v.dbs.list : [], busy: true, error: null, sized };
+  const what = sized ? "measuring the server's databases" : "reading the server's databases";
 
   v.dbs = d;
-  cx.notify();
 
-  try {
-    const what = sized ? "measuring the server's databases" : "reading the server's databases";
-    const e = await reading(v, what, "tables", cx, (started) => runOn(v, c, databasesSql(c.kind, sized), started, undefined, "the server's databases"));
+  return Effect.gen(function* () {
+    yield* redraw;
+
+    const e = yield* reading(v, what, "tables", (started) => runOn(v, c, databasesSql(c.kind, sized), started, undefined, "the server's databases"));
 
     if (v.dbs !== d) return;
 
@@ -98,13 +99,15 @@ export async function loadDatabases(v: DbView, cx: Context, sized = false): Prom
       // Read the first time with the tab shown: the cursor on the database it's in.
       if (first && v.tablesTab === "databases" && v.active === c) v.tableAt = Math.max(0, dbRows(v).indexOf(whereNow(c, v.catalog.here).database));
     }
-  } catch (error) {
-    d.error = `reading the server's databases failed: ${error instanceof Error ? error.message : String(error)}`;
-  } finally {
-    d.busy = false;
-    cx.notify();
-  }
-}
+  }).pipe(
+    Effect.catchDefect((defect) => Effect.sync(() => {
+      d.error = `reading the server's databases failed: ${causeMessage(defect)}`;
+    })),
+    Effect.ensuring(Effect.andThen(Effect.sync(() => {
+      d.busy = false;
+    }), redraw)),
+  );
+});
 
 /** The server's databases as read for the active connection, or null (not read, another's). */
 export const dbsNow = (v: DbView): ServerDbs | null => (v.dbs !== null && v.active !== null && v.dbs.conn === v.active.id ? v.dbs : null);
@@ -141,15 +144,13 @@ export function showDatabases(v: DbView, cx: Context): void {
 /** Connects the active connection to another database of its server: changes staged on a table's
  *  rows ask first; the secret stays in memory (nothing read again); the tables, structure and rows
  *  are read anew; a pinned one keeps the pick in its record, a sent one while the window lives. */
-export function useDatabase(v: DbView, name: string | null, cx: Context): void {
-  cx = v.held(cx);
-
+export function useDatabase(v: DbView, name: string | null): void {
   const c = v.active;
 
   if (c === null) return;
 
   if (counted(v.edits).cells !== 0) {
-    beforeLeaving(v, `connect to ${name ?? "every database"}`, () => useDatabase(v, name, cx));
+    beforeLeaving(v, `connect to ${name ?? "every database"}`, () => useDatabase(v, name));
 
     return;
   }
@@ -161,7 +162,7 @@ export function useDatabase(v: DbView, name: string | null, cx: Context): void {
   v.sent = swap(v.sent);
   v.found = Arr.map(v.found, (f) => (f.conn.id === c.id ? { ...f, conn: next } : f));
 
-  if (c.origin === "saved") void changePinned(v, (now) => Arr.map(now, (x) => (x.id === c.id ? withDatabase(x, name) : x)), cx);
+  if (c.origin === "saved") v.run(changePinned(v, (now) => Arr.map(now, (x) => (x.id === c.id ? withDatabase(x, name) : x))));
   else v.picked.set(c.id, name);
 
   v.schema = null;
@@ -170,11 +171,11 @@ export function useDatabase(v: DbView, name: string | null, cx: Context): void {
   const to = name ?? "every database";
 
   v.say(`${c.name}: connecting to ${to}${c.origin === "saved" ? " · kept in its pin" : ""}`, "working");
-  void openConn(v, next, cx).then(() => {
-    if (v.active === next) v.say(v.catalog.error !== null && Str.isNonEmpty(v.catalog.error) ? `${c.name}: ${to} didn't answer` : `${c.name}: in ${to}${c.origin === "saved" ? " · kept in its pin" : ""}`, v.catalog.error !== null && Str.isNonEmpty(v.catalog.error) ? "failed" : "done");
+  v.run(Effect.andThen(openConn(v, next), Effect.sync(() => {
+    const failed = v.catalog.error !== null && Str.isNonEmpty(v.catalog.error);
 
-    cx.notify();
-  });
+    if (v.active === next) v.say(failed ? `${c.name}: ${to} didn't answer` : `${c.name}: in ${to}${c.origin === "saved" ? " · kept in its pin" : ""}`, failed ? "failed" : "done");
+  })));
 }
 
 /** What an empty database says in [2] instead of a bare 0: its name, the server's others (one by
@@ -223,7 +224,7 @@ export function enterEmpty(v: DbView, cx: Context): boolean {
   if (e?.enter === null || e?.enter === undefined) return false;
 
   if (e.enter === "list") showDatabases(v, cx);
-  else useDatabase(v, e.enter.use, cx);
+  else useDatabase(v, e.enter.use);
 
   return true;
 }

@@ -9,23 +9,25 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { EditorState, InputState } from "gpui-base";
 import { settings, theme } from "herdr";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { redraw } from "@fireflies/kit";
 import type { Conn } from "./kinds.ts";
 import type { Statement } from "./split.ts";
 import { splitStatements, statementAt } from "./split.ts";
 import type { Verdict } from "./safety.ts";
 import { allowedReadOnly, asks, classify, worst } from "./safety.ts";
 import type { Ran } from "./session.ts";
-import { IO, dataHome, needsPassword, runOn } from "./session.ts";
+import { dataHome, needsPassword, runOn } from "./session.ts";
 import { cancel } from "./runner.ts";
 import { closest, namedIn, resultWords } from "./parse-out.ts";
 import { addHistory } from "./store.ts";
 import type { HistoryEntry } from "./store.ts";
 import type { QueryTab } from "./state.ts";
-import { gridStart, noteOf } from "./state.ts";
+import { gridStart } from "./state.ts";
 import { selectionColor, syntaxColors } from "./kit.ts";
 import { NO_LAYOUT } from "./columns.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** A place in the editor (0-based line, UTF-16 column). */
 interface Pos {
@@ -88,7 +90,7 @@ export function editorKey(v: DbView, tab: QueryTab, e: KeyEvent, cx: Context): b
   if (e.key === "enter" && mod) {
     runQuery(v, tab, m.shift, cx);
   } else if (e.key === "escape") {
-    if (tab.running !== null) void cancelQuery(v, tab, cx);
+    if (tab.running !== null) cancelQuery(v, tab);
     else {
       tab.inResults = true;
       v.focusSelf();
@@ -163,8 +165,8 @@ export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): v
   }
 
   const go = () => {
-    if (needsPassword(v, c)) v.askPassword(c, false, cx, () => void execute(v, tab, c, list, verdicts, cx));
-    else void execute(v, tab, c, list, verdicts, cx);
+    if (needsPassword(v, c)) v.askPassword(c, false, () => v.run(execute(v, tab, c, list, verdicts)));
+    else v.run(execute(v, tab, c, list, verdicts));
   };
 
   if (!asks(w)) {
@@ -177,16 +179,16 @@ export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): v
 }
 
 /** Runs them (asked already) and shows the answer. */
-async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], cx: Context): Promise<void> {
-  cx = v.held(cx);
+const execute = (v: DbView, tab: QueryTab, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[]): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
+  const at = yield* Clock.currentTimeMillis;
 
-  tab.running = { nonce: null, at: Date.now() };
+  tab.running = { nonce: null, at };
   tab.ranText = tab.editor.value();
   tab.editor.set_diagnostics([]);
-  cx.notify();
+  yield* redraw;
 
-  const o = await runOn(v, c, Arr.map(list, (s, i) => ({ text: s.text, risk: verdicts[i]?.risk ?? "write" })), (nonce) => {
-    tab.running = { nonce, at: tab.running?.at ?? Date.now() };
+  const o = yield* runOn(v, c, Arr.map(list, (s, i) => ({ text: s.text, risk: verdicts[i]?.risk ?? "write" })), (nonce) => {
+    tab.running = { nonce, at };
   });
 
   tab.running = null;
@@ -200,14 +202,12 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   tab.shown = withRows >= 0 ? withRows : Math.max(0, o.results.length - 1);
   tab.inResults = false;
   placeError(tab, list, o);
-  record(v, c, list, verdicts, o);
+  record(v, c, list, verdicts, o, yield* Clock.currentTimeMillis);
   tab.verdicts = Arr.map(verdicts, (x) => x.risk);
 
   // A statement that changed the schema: read the tables again.
-  if (Arr.some(verdicts, (x) => x.risk !== "read" && x.risk !== "session") && o.error === null) v.refreshCatalog(cx);
-
-  cx.notify();
-}
+  if (Arr.some(verdicts, (x) => x.risk !== "read" && x.risk !== "session") && o.error === null) v.refreshCatalog();
+});
 
 /** A missing table's error with the nearest table named ("did you mean lanterns?"). */
 function withSuggestion(v: DbView, o: Ran): Ran {
@@ -234,7 +234,7 @@ function placeError(tab: QueryTab, list: readonly Statement[], o: Ran): void {
 }
 
 /** The Log panel's lines and the history's entries for a run. */
-function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], o: Ran): void {
+function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], o: Ran, now: number): void {
   Arr.forEach(list, (s, i) => {
     const r = Option.getOrUndefined(Arr.findFirst(o.results, (x) => x.index === i));
     const failed = o.error?.index === i;
@@ -248,11 +248,12 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     v.logLine({ sql: s.text, ok: !failed, ms: o.ms, said, conn: c.name, run: o.run });
 
     if (c.origin === "saved") {
-      const entry: HistoryEntry = rows === null ? { sql: s.text, at: Date.now(), ms: o.ms, ok: !failed } : { sql: s.text, at: Date.now(), ms: o.ms, ok: !failed, rows };
+      const entry: HistoryEntry = rows === null ? { sql: s.text, at: now, ms: o.ms, ok: !failed } : { sql: s.text, at: now, ms: o.ms, ok: !failed, rows };
 
-      void addHistory(IO, dataHome(), c.id, entry).then((h) => {
+      // A history that can't be written: the run stands, its line is in the Log.
+      v.run(Effect.ignore(Effect.map(addHistory(dataHome(), c.id, entry), (h) => {
         if (v.active?.id === c.id) v.history = h;
-      });
+      })));
     }
   });
 
@@ -260,17 +261,14 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
 }
 
 /** Stops the tab's run. */
-export async function cancelQuery(v: DbView, tab: QueryTab, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export function cancelQuery(v: DbView, tab: QueryTab): void {
   const n = tab.running?.nonce;
   const dir = v.dir;
 
   if ((n === null || n === undefined || Str.isEmpty(n)) || (dir === null || Str.isEmpty(dir))) return;
 
-  v.note = noteOf("cancelling…", "working");
-  cx.notify();
-  await cancel(IO, dir, n);
+  v.say("cancelling…", "working");
+  v.run(cancel(dir, n));
 }
 
 /** The text of a query tab after an insert at its caret (a table or column name). */

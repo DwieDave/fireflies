@@ -6,31 +6,31 @@
 // history too). A connection whose password is a cluster's secret (kube.ts)
 // reads it at each connect, into memory; a failed read says why and asks.
 
-import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
-import { exec, readTextFile } from "herdr";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Deferred, Effect, Option, String as Str } from "effect";
+import { Exec, Files, causeMessage, redraw } from "@fireflies/kit";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { isSslMode, newId, speaksTls, sslProblem, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import { ENV_FILES, FIND_SCRIPT, foundFile, foundInVars, mergeFound, parseEnvFile } from "./discover.ts";
-import { deleteSecret, hasSecret, saveSecret } from "./secrets.ts";
+import { deleteSecret, saveSecret } from "./secrets.ts";
 import type { KubeSource } from "./kube.ts";
 import { forwardProblem, kubeProblem, kubeWords, readKube } from "./kube.ts";
 import { clearHistory, readHistory } from "./store.ts";
 import { changePinned } from "./pinned.ts";
-import { IO, clientFrom, clientOf, dataHome, loadTables, needsPassword, runLine, runOn } from "./session.ts";
+import { clientFrom, clientOf, dataHome, loadTables, needsPassword, runLine, runOn } from "./session.ts";
 import { PROGRAMS } from "./clients.ts";
 import { endWords, reading } from "./reads.ts";
 import { folderEnvReady } from "./folderenv.ts";
 import { forwardFirst, takenAfter } from "./forward.ts";
 import type { ConnectArgs } from "./state.ts";
-import { gridStart, noteOf } from "./state.ts";
+import { gridStart } from "./state.ts";
 import { counted } from "./edits.ts";
 import { withDatabase } from "./dbs.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { keepCopy } from "./opening.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** The list the Connections panel shows, in order. */
 export function connList(v: DbView): Conn[] {
@@ -41,30 +41,26 @@ export function connList(v: DbView): Conn[] {
 export const connAtCursor = (v: DbView): Conn | null => connList(v)[v.connAt] ?? null;
 
 /** Finds connections in the space's folder: its .env files, its direnv environment (only when
- *  direnv already allows it: never allowed from here), its SQLite files. */
-export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = Promise.resolve()): Promise<void> {
-  cx = v.held(cx);
-
+ *  direnv already allows it: never allowed from here; waited for while it loads), its SQLite files. */
+export const discover = (v: DbView): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   const folder = v.folder;
 
   if ((folder === null || Str.isEmpty(folder)) || (v.on !== null && Str.isNonEmpty(v.on))) return;
 
-  const lists: Found[][] = [];
+  const files = yield* Files;
+  // A file that can't be read is one not there.
+  const texts = yield* Effect.forEach(ENV_FILES, (f) => Effect.map(Effect.orElseSucceed(files.read(`${folder}/${f}`), () => Option.none<string>()), (text) => [f, text] as const));
+  const lists: Found[][] = Arr.flatMap(texts, ([f, text]) => (Option.isSome(text) && Str.isNonEmpty(text.value) ? [foundInVars(parseEnvFile(text.value), f, folder)] : []));
+  const found = yield* Effect.orElseSucceed(Effect.map(Exec.use((x) => x.run("sh", ["-c", FIND_SCRIPT, "ff-find", folder])), (r) => r.stdout), () => "");
 
-  for (const f of ENV_FILES) {
-    const text = await readTextFile(`${folder}/${f}`).catch(() => null);
-
-    if (text !== null && Str.isNonEmpty(text)) lists.push(foundInVars(parseEnvFile(text), f, folder));
-  }
-
-  const files = await exec("sh", ["-c", FIND_SCRIPT, "ff-find", folder]).catch(() => null);
-
-  lists.push(Arr.map(Arr.filter(Str.split((files?.stdout ?? ""), "\n"), Boolean), (p) => foundFile(p, folder)));
+  lists.push(Arr.map(Arr.filter(Str.split(found, "\n"), Str.isNonEmpty), (p) => foundFile(p, folder)));
   setFound(v, mergeFound(lists));
-  cx.notify();
+  yield* redraw;
 
   // direnv last: a flake's shell can take a while the first time (folderenv.ts loads it).
-  await envLoad;
+  const loading = v.env;
+
+  if (loading.kind === "loading") yield* Deferred.await(loading.done);
 
   const env = v.env;
 
@@ -72,8 +68,8 @@ export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = 
 
   lists.splice(lists.length - 1, 0, foundInVars(env.env, "direnv", folder));
   setFound(v, mergeFound(lists));
-  cx.notify();
-}
+  yield* redraw;
+});
 
 /** The found ones, their secrets into memory (never shared, never written). */
 function setFound(v: DbView, list: readonly Found[]): void {
@@ -91,7 +87,7 @@ function setFound(v: DbView, list: readonly Found[]): void {
 /** A connection another mod sent (databases.connect): listed and connected, not saved. A
  *  cluster's secret named in it is checked first (kube.ts), and its sslmode: a bad one refuses the
  *  request. */
-export function receive(v: DbView, a: ConnectArgs, cx: Context, go = true): Conn | null {
+export function receive(v: DbView, a: ConnectArgs, go = true): Conn | null {
   const problem = (a.secret !== undefined ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward !== undefined ? forwardProblem(a.forward, a.kind, a.host, a.port) : null)
     ?? (a.sslmode !== undefined ? sslProblem(a.sslmode) : null);
 
@@ -118,7 +114,7 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context, go = true): Conn
   v.connAt = v.saved.length;
   v.panel = "conns";
 
-  if (go) void connect(v, kept, cx);
+  if (go) v.run(connect(v, kept));
 
   return kept;
 }
@@ -151,35 +147,31 @@ function pick(a: ConnectArgs): Place {
 /** Connects: the password first where it must be asked (or read from a cluster's secret), then
  *  the tables. A local server that trusts its socket needs none, so a sent one tries without and
  *  asks when refused. */
-export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const connect = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   if (counted(v.edits).cells !== 0) {
-    beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
+    beforeLeaving(v, `connect to ${c.name}`, () => v.run(connect(v, c)));
 
     return;
   }
 
   // A connection from a port-forward: its port looked at first (down: the ask, forward.ts).
-  if (c.forward !== undefined && !(await forwardFirst(v, c, cx))) return;
+  if (c.forward !== undefined && !(yield* forwardFirst(v, c))) return;
 
-  return connectNow(v, c, cx);
-}
+  yield* connectNow(v, c);
+});
 
 /** Connects without looking at its forward (after the port was found open, or started). */
-export function connectNow(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
-  if (c.secret === "kubernetes" && c.source !== undefined) return readThenOpen(v, c, c.source, cx);
+export const connectNow = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.suspend(() => {
+  if (c.secret === "kubernetes" && c.source !== undefined) return readThenOpen(v, c, c.source);
 
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
-    v.askPassword(c, false, cx, () => void connect(v, c, cx));
+    v.askPassword(c, false, () => v.run(connect(v, c)));
 
-    return Promise.resolve();
+    return redraw;
   }
 
-  return open(v, c, cx);
-}
+  return open(v, c);
+});
 
 /** The connection with what the read gave that isn't secret (its user, its database), in its list. */
 function placed(v: DbView, c: Conn, user: string | undefined, database: string | undefined): Conn {
@@ -205,82 +197,81 @@ export const KUBE_DEADLINE = 20000;
 /** Reads the password from the cluster's secret (again at every connect), then connects; a failed
  *  read says why and asks for it instead. The client is looked for first: without one there is
  *  nothing to read the secret for. Nothing of the value is said, logged or written. */
-export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const readThenOpen = (v: DbView, c: Conn, s: KubeSource): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   v.active = c;
   v.alive = null;
   v.catalog = { tables: [], error: null, busy: false };
-  cx.notify();
+  yield* redraw;
 
   const cat = v.catalog;
-  let r: Awaited<ReturnType<typeof readKube>>;
+  const what = `reading the password from secret ${s.name}`;
 
-  try {
-    const missing = await clientMissing(v, c, cx);
+  const read = yield* Effect.gen(function* () {
+    const missing = yield* clientMissing(v, c);
 
-    if (v.active !== c || v.catalog !== cat) return;
+    if (v.active !== c || v.catalog !== cat) return null;
 
     if (missing !== null && Str.isNonEmpty(missing)) {
       cat.error = missing;
       v.say(missing, "failed");
 
-      return;
+      return null;
     }
 
-    v.say(`reading the password from secret ${s.name}…`, "working");
+    v.say(`${what}…`, "working");
 
-    const e = await reading(v, `reading the password from secret ${s.name}`, "tables", cx, () => readKube(exec, s), KUBE_DEADLINE);
+    const e = yield* reading(v, what, "tables", () => readKube(s), KUBE_DEADLINE);
 
-    if (v.active !== c || v.catalog !== cat) return;
+    if (v.active !== c || v.catalog !== cat) return null;
 
     if (!("value" in e)) {
-      cat.error = endWords(e, `reading the password from secret ${s.name}`);
+      cat.error = endWords(e, what);
       v.say(cat.error ?? "", "failed");
 
-      return;
+      return null;
     }
 
-    r = e.value;
-  } catch (error) {
-    if (v.catalog === cat) cat.error = `reading the password from secret ${s.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+    return e.value;
+  }).pipe(
+    Effect.catchDefect((d) => Effect.sync(() => {
+      if (v.catalog === cat) cat.error = `${what} failed: ${causeMessage(d)}`;
 
-    return;
-  } finally {
-    cx.notify();
-  }
+      return null;
+    })),
+    Effect.ensuring(redraw),
+  );
 
-  if ("error" in r) {
-    const why = `couldn't read secret ${s.name} · ${s.key}: ${r.error}`;
+  if (read === null) return;
+
+  if ("error" in read) {
+    const why = `couldn't read secret ${s.name} · ${s.key}: ${read.error}`;
 
     v.secrets.delete(c.id);
     v.sourced.set(c.id, { ok: false, text: why });
     v.say(`${why} · type the password`, "failed");
-    v.askPassword(c, false, cx, () => void open(v, c, cx));
-    cx.notify();
+    v.askPassword(c, false, () => v.run(open(v, c)));
+    yield* redraw;
 
     return;
   }
 
-  const next = placed(v, c, r.user, r.database);
+  const next = placed(v, c, read.user, read.database);
 
-  v.secrets.set(next.id, r.password);
+  v.secrets.set(next.id, read.password);
   v.sourced.set(next.id, { ok: true, text: `password from ${kubeWords(s)}` });
   v.say(`password from ${kubeWords(s)}`, "done");
 
-  return open(v, next, cx);
-}
+  yield* open(v, next);
+});
 
 /** Why the connection's client can't run (said before anything is read for it), or null. The
  *  folder's environment is waited for first (it may bring the client). */
-export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<string | null> {
-  cx = v.held(cx);
-
+export const clientMissing = (v: DbView, c: Conn): Effect.Effect<string | null, never, DbRun> => Effect.gen(function* () {
   if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return null;
 
-  await folderEnvReady(v, cx);
+  yield* folderEnvReady(v);
 
-  const f = await clientOf(v, c.kind);
+  const f = yield* clientOf(v, c.kind);
 
   if (!("missing" in f)) return null;
 
@@ -289,16 +280,12 @@ export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<st
   v.logLine({ sql: `looking for ${Arr.join(PROGRAMS[c.kind], " / ")}`, ok: false, ms: 0, said, conn: c.name, run: runLine(v, c.kind, f, []) });
 
   return said;
-}
+});
 
 /** Connects with what the window has (the password in memory, the keychain's, none). */
-export function openConn(v: DbView, c: Conn, cx: Context): Promise<void> {
-  return open(v, c, cx);
-}
+export const openConn = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => open(v, c);
 
-function open(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+const open = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   v.active = c;
   v.alive = null;
   v.catalog = { tables: [], error: null, busy: true };
@@ -309,102 +296,93 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
   v.tableAt = 0;
   v.history = [];
 
-  const tables = loadTables(v, cx).then(() => {
-    // Connected: kept as where the view is (its space's place, a pane's own).
-    if (v.active?.id === c.id && v.catalog.error === null) keepCopy(v);
+  if (c.origin === "saved") {
+    v.run(Effect.map(Effect.orElseSucceed(readHistory(dataHome(), c.id), () => []), (h) => {
+      if (v.active === c) v.history = h;
+    }));
+  }
 
-    // A sent one refused without a password: ask for it, then again.
-    const e = v.catalog.error ?? "";
-    const refused = v.active === c && /password|authentication/i.test(e);
+  v.loadQueries(c);
+  yield* redraw;
+  yield* loadTables(v);
 
-    if (refused && c.origin === "sent" && !v.secrets.has(c.id)) v.askPassword(c, false, cx, () => void connect(v, c, cx));
+  // Connected: kept as where the view is (its space's place, a pane's own).
+  if (v.active?.id === c.id && v.catalog.error === null) keepCopy(v);
 
-    // Something other than the database on a forward's port (another program holds it): said, with
-    // another local port offered.
-    if (v.active === c && Str.isNonEmpty(e) && c.forward !== undefined) void takenAfter(v, c, e, cx);
+  // A sent one refused without a password: ask for it, then again.
+  const e = v.catalog.error ?? "";
+  const refused = v.active === c && /password|authentication/i.test(e);
 
-    // A secret's password the server refused (the wrong secret picked, rotated since): asked once.
-    if (refused && c.secret === "kubernetes" && c.source !== undefined && v.sourced.get(c.id)?.ok === true) {
-      v.sourced.set(c.id, { ok: false, text: `the server refused the password from secret ${c.source.name} · ${c.source.key}` });
-      v.askPassword(c, false, cx, () => void open(v, c, cx));
-    }
-  });
+  if (refused && c.origin === "sent" && !v.secrets.has(c.id)) v.askPassword(c, false, () => v.run(connect(v, c)));
 
-  if (c.origin === "saved") void readHistory(IO, dataHome(), c.id).then((h) => {
-    if (v.active === c) v.history = h;
+  // Something other than the database on a forward's port (another program holds it): said, with
+  // another local port offered.
+  if (v.active === c && Str.isNonEmpty(e) && c.forward !== undefined) v.run(takenAfter(v, c, e));
 
-    cx.notify();
-  });
-
-  void v.loadQueries(c, cx);
-  cx.notify();
-
-  return tables;
-}
+  // A secret's password the server refused (the wrong secret picked, rotated since): asked once.
+  if (refused && c.secret === "kubernetes" && c.source !== undefined && v.sourced.get(c.id)?.ok === true) {
+    v.sourced.set(c.id, { ok: false, text: `the server refused the password from secret ${c.source.name} · ${c.source.key}` });
+    v.askPassword(c, false, () => v.run(open(v, c)));
+  }
+});
 
 /** Tests a connection: one `select 1`, said in the bar (a read: its seconds shown, esc stops it). */
-export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
+export const test = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
+  const missing = yield* clientMissing(v, c);
 
-  try {
-    const missing = await clientMissing(v, c, cx);
+  if (missing !== null && Str.isNonEmpty(missing)) {
+    v.say(`${c.name}: ${missing}`, "failed");
 
-    if (missing !== null && Str.isNonEmpty(missing)) {
-      v.note = noteOf(`${c.name}: ${missing}`, "failed");
-
-      return;
-    }
-
-    const source = c.secret === "kubernetes" ? c.source ?? null : null;
-
-    if (source !== null) {
-      const e = await reading(v, `reading the password from secret ${source.name}`, "conns", cx, () => readKube(exec, source), KUBE_DEADLINE);
-      const r = "value" in e ? e.value : { error: endWords(e, "the read") ?? "" };
-
-      if ("error" in r) {
-        v.note = noteOf(`${c.name}: couldn't read secret ${source.name}: ${r.error}`, "failed");
-
-        return;
-      }
-
-      v.secrets.set(c.id, r.password);
-    }
-
-    if (needsPassword(v, c)) {
-      v.askPassword(c, false, cx, () => void test(v, c, cx));
-
-      return;
-    }
-
-    v.note = noteOf(`testing ${c.name}…`, "working");
-    cx.notify();
-
-    const e = await reading(v, `testing ${c.name}`, "conns", cx, (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, `test of ${c.name}`));
-
-    if (!("value" in e)) {
-      v.note = noteOf(endWords(e, `testing ${c.name}`) ?? "", "failed");
-
-      return;
-    }
-
-    const o = e.value;
-
-    v.note = o.noSecret === true ? noteOf(`${c.name}: the keychain has no password for it (e to set one)`, "failed")
-      : o.error !== null ? noteOf(`${c.name}: ${o.error.message}`, "failed") : noteOf(`${c.name} answers · ${o.ms} ms`, "done");
-  } catch (error) {
-    v.note = noteOf(`testing ${c.name} failed: ${error instanceof Error ? error.message : String(error)}`, "failed");
-  } finally {
-    cx.notify();
+    return;
   }
-}
+
+  const source = c.secret === "kubernetes" ? c.source ?? null : null;
+
+  if (source !== null) {
+    const e = yield* reading(v, `reading the password from secret ${source.name}`, "conns", () => readKube(source), KUBE_DEADLINE);
+    const r = "value" in e ? e.value : { error: endWords(e, "the read") ?? "" };
+
+    if ("error" in r) {
+      v.say(`${c.name}: couldn't read secret ${source.name}: ${r.error}`, "failed");
+
+      return;
+    }
+
+    v.secrets.set(c.id, r.password);
+  }
+
+  if (needsPassword(v, c)) {
+    v.askPassword(c, false, () => v.run(test(v, c)));
+
+    return;
+  }
+
+  v.say(`testing ${c.name}…`, "working");
+  yield* redraw;
+
+  const e = yield* reading(v, `testing ${c.name}`, "conns", (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, `test of ${c.name}`));
+
+  if (!("value" in e)) {
+    v.say(endWords(e, `testing ${c.name}`) ?? "", "failed");
+
+    return;
+  }
+
+  const o = e.value;
+
+  if (o.noSecret === true) v.say(`${c.name}: the keychain has no password for it (e to set one)`, "failed");
+  else if (o.error !== null) v.say(`${c.name}: ${o.error.message}`, "failed");
+  else v.say(`${c.name} answers · ${o.ms} ms`, "done");
+}).pipe(
+  Effect.catchDefect((d) => Effect.sync(() => v.say(`testing ${c.name} failed: ${causeMessage(d)}`, "failed"))),
+  Effect.ensuring(redraw),
+);
 
 /** Saves a found or sent connection: kept, its password (if one) moved to the keychain. */
-export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const saveFound = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   if (c.origin === "saved") return;
 
-  const id = newId(c.kind);
+  const id = yield* newId(c.kind);
   const secret = v.secrets.get(c.id) ?? null;
   const kube = c.secret === "kubernetes" && c.source !== undefined ? c.source : null;
   const kept: Conn = { ...c, id, origin: "saved", secret: kube !== null ? "kubernetes" : secret !== null && Str.isNonEmpty(secret) ? "keychain" : c.secret === "ask" ? "ask" : "none" };
@@ -418,10 +396,10 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
     if (read !== undefined) v.sourced.set(id, read);
   } else if ((secret !== null && Str.isNonEmpty(secret)) && (dir !== null && Str.isNonEmpty(dir))) {
-    const failed = await saveSecret(IO, dir, id, `Fireflies database ${c.name}`, secret);
+    const saved = yield* Effect.result(saveSecret(dir, id, `Fireflies database ${c.name}`, secret));
 
-    if (failed !== null && Str.isNonEmpty(failed)) {
-      v.say(`the keychain refused it: ${failed}`, "failed");
+    if (saved._tag === "Failure") {
+      v.say(`the keychain refused it: ${saved.failure.message}`, "failed");
 
       return;
     }
@@ -429,7 +407,7 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
   if (v.active?.id === c.id) v.active = kept;
 
-  const list = await changePinned(v, (now) => [...Arr.filter(now, (x) => x.id !== id), kept], cx);
+  const list = yield* changePinned(v, (now) => [...Arr.filter(now, (x) => x.id !== id), kept]);
 
   if (list === null) return;
 
@@ -437,35 +415,31 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
   v.sent = Arr.filter(v.sent, (s) => s.id !== c.id);
   v.connAt = Math.max(0, Option.getOrElse(Arr.findFirstIndex(v.saved, (x) => x.id === id), () => -1));
   v.say(`pinned ${c.name}: every Databases window lists it${kube !== null ? ` · its password is read from secret ${kube.name} at each connect` : secret !== null && Str.isNonEmpty(secret) ? " · its password is in the keychain" : ""}${c.forward !== undefined ? ` · its forward (${c.forward.target}) is offered when its port is down` : ""}`, "done");
-  cx.notify();
-}
+});
 
 /** Removes a saved connection (asked first by the caller): its keychain item and history go too. */
-export async function remove(v: DbView, c: Conn, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const remove = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   if (c.origin !== "saved") {
     v.sent = Arr.filter(v.sent, (s) => s.id !== c.id);
-    cx.notify();
 
     return;
   }
 
-  if ((await changePinned(v, (now) => Arr.filter(now, (s) => s.id !== c.id), cx)) === null) return;
+  if ((yield* changePinned(v, (now) => Arr.filter(now, (s) => s.id !== c.id))) === null) return;
 
-  await deleteSecret(IO, c.id);
-  await clearHistory(IO, dataHome(), c.id);
+  // Its keychain item and history: gone where they can be (a missing one is gone already).
+  yield* Effect.ignore(deleteSecret(c.id));
+  yield* Effect.ignore(clearHistory(dataHome(), c.id));
 
   if (v.active?.id === c.id) v.active = null;
 
   v.connAt = Math.max(0, Math.min(v.connAt, connList(v).length - 1));
   v.say(`unpinned ${c.name}`, "done");
-  cx.notify();
-}
+});
 
 /** Asks for a connection's password (masked), kept in memory; `keychain`: the keychain had none
  *  (offer to keep it there). Enter runs `then`. */
-export function askPassword(v: DbView, c: Conn, keychain: boolean, cx: Context, then?: () => void): void {
+export function askPassword(v: DbView, c: Conn, keychain: boolean, then?: () => void): void {
   const input = InputState.new({ placeholder: keychain ? "the password (kept in the keychain)" : "the password (kept while the window is open)" });
 
   input.set_masked(true);
@@ -480,20 +454,16 @@ export function askPassword(v: DbView, c: Conn, keychain: boolean, cx: Context, 
       v.focusShown();
       v.secrets.set(c.id, pw);
 
-      const go = then ?? (() => void connect(v, keychain ? { ...c, secret: "ask" } : c, cx));
+      const go = then ?? (() => v.run(connect(v, keychain ? { ...c, secret: "ask" } : c)));
+      const dir = v.dir;
 
-      if (keychain && (v.dir !== null && Str.isNonEmpty(v.dir)) && Str.isNonEmpty(pw)) {
-        void saveSecret(IO, v.dir, c.id, `Fireflies database ${c.name}`, pw).then((failed) => {
-          if (failed !== null && Str.isNonEmpty(failed)) v.say(`the keychain refused it: ${failed}`, "failed");
-
-          go();
-        });
+      if (keychain && (dir !== null && Str.isNonEmpty(dir)) && Str.isNonEmpty(pw)) {
+        v.run(saveSecret(dir, c.id, `Fireflies database ${c.name}`, pw).pipe(
+          Effect.catch((failed) => Effect.sync(() => v.say(`the keychain refused it: ${failed.message}`, "failed"))),
+          Effect.andThen(Effect.sync(go)),
+        ));
       } else go();
     },
   };
-  cx.notify();
   input.focus();
 }
-
-/** Whether a saved connection that keeps its password in the keychain has one there. */
-export const keychainHas = (c: Conn): Promise<boolean> => (c.secret === "keychain" ? hasSecret(IO, c.id) : Promise.resolve(true));
