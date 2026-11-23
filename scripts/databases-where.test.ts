@@ -11,7 +11,7 @@ import { test, expect, mock, describe } from "bun:test";
 import { Deferred, Effect } from "effect";
 import { found, standIn } from "./databases-host.ts";
 
-const { h, theme, el, cx, until, flush, advance, services } = standIn();
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
 const { files, commands, opened, closed, execs, written, stores } = h;
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,7 +47,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; files.clear(); h.reply = found; realFiles = false; };
+const fresh = () => { forget(); h.shared = {}; commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; files.clear(); h.reply = found; realFiles = false; };
 
 /** psql's flags of a run, from the runner's arguments (runner.ts runnerArgs: the client's own start at the 12th). */
 function psqlArgsOf(args: readonly string[]): Record<string, string> {

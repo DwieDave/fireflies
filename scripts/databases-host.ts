@@ -358,7 +358,14 @@ export function standIn(options: StandInOptions = {}) {
   /** The window's services: the stand-ins above (give them to app.ts useServices before a copy opens). */
   const services = Layer.mergeAll(files, exec, hc.layer, commands, shared, workspace.layer, pickers, libsql);
 
-  return { h, theme, el, cx, now: () => now, advance: (ms: number) => Effect.runPromise(advance(ms)), until, flush, services };
+  /** The windows a test opened before are left behind: their timers never fire again. */
+  const forget = (): void => {
+    for (const t of timers) t.live = false;
+
+    timers.length = 0;
+  };
+
+  return { h, theme, el, cx, forget, now: () => now, advance: (ms: number) => Effect.runPromise(advance(ms)), until, flush, services };
 }
 
 /** Takes `n` turns: every fiber ready to go runs meanwhile. */

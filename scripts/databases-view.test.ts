@@ -9,7 +9,7 @@
 import { test, expect, mock } from "bun:test";
 import { found, standIn } from "./databases-host.ts";
 
-const { h, theme, el, cx, until, flush, advance, services } = standIn();
+const { h, theme, el, cx, forget, until, flush, advance, services } = standIn();
 const { files, commands, opened, closed, execs, written, stores } = h;
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
@@ -40,7 +40,7 @@ const framed = (d: [string, any[]][]) => {
 const texts = (d: [string, any[]][]) => d.filter(([m]) => m === "child").flatMap(([, a]) => a.filter((x) => typeof x === "string"));
 const tips = (d: [string, any[]][]) => d.filter(([m]) => m === "tooltip").map(([, a]) => a[0]);
 const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ? k : undefined, modifiers: mods });
-const fresh = () => { h.shared = {}; files.clear(); commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
+const fresh = () => { forget(); h.shared = {}; files.clear(); commands.length = 0; opened.length = 0; closed.length = 0; h.panes = []; h.focused = null; stores.clear(); execs.length = 0; written.length = 0; h.reply = found; };
 
 const LITE = { id: "sq-1", name: "lantern.db", kind: "sqlite", path: "/w/lantern.db", readonly: false, secret: "none", origin: "saved" };
 const PG = { id: "pg-1", name: "lantern-dev", kind: "postgres", host: "db", user: "ada", database: "lantern", readonly: false, secret: "ask", origin: "saved" };
