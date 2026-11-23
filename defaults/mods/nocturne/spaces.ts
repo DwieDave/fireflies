@@ -69,6 +69,16 @@ interface Repo {
 }
 
 /** A sidebar row: a space (indented under its repo's when it's a linked worktree), or a repo's name. */
+/** A repo's name from its main checkout's folder (git's common dir without
+ *  /.git): the folder's, a bare repo's without .git, or, for one hidden
+ *  beside its worktrees (<project>/.bare), its project's. */
+export function repoName(main: string): string {
+  const parts = main.replace(/\/+$/, "").split("/");
+  const last = parts.at(-1) ?? "";
+
+  return last === ".bare" ? parts.at(-2) ?? last : last.replace(/\.git$/, "");
+}
+
 export type SpaceRow = { readonly s: SpaceInfo; readonly depth: number } | { readonly header: string; readonly key: string };
 
 /** The stops of an inline form. */
@@ -264,7 +274,7 @@ export default class Spaces {
         continue;
       }
 
-      out.push({ header: g.slice(g.indexOf("|") + 1).split("/").pop() ?? "", key: g });
+      out.push({ header: repoName(g.slice(g.indexOf("|") + 1)), key: g });
 
       for (const k of list) out.push({ s: k, depth: 1 });
     }

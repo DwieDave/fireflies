@@ -6,21 +6,29 @@ import type { WebLink } from "./model.ts";
 import { noteOf } from "./kit.ts";
 import { keysKey } from "@fireflies/keyhelp";
 import Actions from "./actions.ts";
-import { TABS, isTabId } from "./window-chrome.ts";
+import { Array as Arr, Schema, String as Str } from "effect";
+import { TABS, TabIdSchema } from "./window-chrome.ts";
 import type { default as GitHub } from "./main.ts";
 import { actsOnCommands, leave, move, toPane, toWindow } from "./place.ts";
+
+/** A command naming a tab (github.prs, github.actions, github.projects). */
+const isTabId = Schema.is(TabIdSchema);
+
+/** A tab used the key (an Input's "typing" too). */
+const used = (r: boolean | "typing" | undefined): boolean => r === true || r === "typing";
 
 /** The window's keys: a confirm, a form or a composer first, then the picker, ?, the window's own, the shown tab's. */
 export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   const m = e.modifiers;
   const c = e.key_char;
-  const k = c && c.length === 1 && c.trim() && !m.platform && !m.control ? c : e.key;
+  const ch = c ?? "";
+  const k = ch.length === 1 && Str.trim(ch) !== "" && !m.platform && !m.control ? ch : e.key;
   const confirm = v.confirm;
 
-  if (confirm) {
+  if (confirm !== null) {
     v.confirm = null;
 
-    if (k === "y" || k === "enter") confirm.go();
+    if (k === "y" || k === "enter") confirm.go(cx);
 
     cx.stop_propagation();
     cx.notify();
@@ -29,9 +37,10 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   }
 
   const tab = v.shown();
-  const form = tab.form;
+  // A tab without a form leaves it out (a stand-in tab, too).
+  const form = tab.form ?? null;
 
-  if (form) {
+  if (form !== null) {
     if (form.key(k, e, cx) === true) {
       cx.stop_propagation();
       cx.notify();
@@ -40,7 +49,9 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  if (tab.composer) {
+  const composer = tab.composer ?? null;
+
+  if (composer !== null && composer !== false) {
     if (tab.key(k, e, cx) === true) {
       cx.stop_propagation();
       cx.notify();
@@ -51,7 +62,7 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
 
   if ((m.platform || m.alt) && k !== "enter") return;
 
-  if (v.picker) {
+  if (v.picker !== null) {
     pickerKey(v, k, cx);
     cx.stop_propagation();
     cx.notify();
@@ -61,8 +72,8 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
 
   const help = keysKey(e, v.help);
 
-  if (help || v.help) {
-    if (help) v.help = help === "toggle" ? !v.help : false;
+  if (help !== null || v.help) {
+    if (help !== null) v.help = help === "toggle" ? !v.help : false;
 
     cx.stop_propagation();
     cx.notify();
@@ -70,7 +81,7 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  const ids = TABS.map(([id]) => id);
+  const ids = Arr.map(TABS, ([id]) => id);
   const fork = Boolean(v.repo?.parent || v.repo?.child);
 
   if (k === "1" || k === "2" || k === "3") v.setTab(ids[Number(k) - 1] ?? v.tab, cx);
@@ -78,7 +89,7 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   else if (((k === "p" && v.tab !== "projects") || k === "F") && fork) v.switchFork(cx);
   else if (k === "L" && v.state === "ready") pickLink(v);
   else if (k === "r" && !m.control) v.refresh(cx, true);
-  else if (v.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
+  else if (v.state === "ready" && used(tab.key(k, e, cx))) { /* the tab's */ }
   else if (k === "t" && m.control) move(v, cx);
   else if (k === "escape" || k === "q") leave(v, k);
   else return;
@@ -92,20 +103,20 @@ export function pickLink(v: GitHub): void {
   const tab = v.shown();
   const links: WebLink[] = tab instanceof Actions ? [] : tab.links();
 
-  if (!links.length) {
-    v.note = noteOf("No links in what's shown.", "working");
+  if (links.length === 0) {
+    v.note = noteOf("No links in what's shown.", "working", v.now());
 
     return;
   }
 
-  v.picker = { title: "LINKS", at: 0, rows: links.map((l) => ({ label: l.label, sub: l.label === l.url ? "" : l.url, go: (cx) => v.openUrl(l.url, cx) })) };
+  v.picker = { title: "LINKS", at: 0, rows: Arr.map(links, (l) => ({ label: l.label, sub: l.label === l.url ? "" : l.url, go: (cx) => v.openUrl(l.url, cx) })) };
 }
 
 /** Keys while the picker is open: it keeps them all. */
 export function pickerKey(v: GitHub, k: string, cx: Context): void {
   const p = v.picker;
 
-  if (!p) return;
+  if (p === null) return;
 
   const n = p.rows.length;
 
@@ -139,7 +150,7 @@ export function runCommand(v: GitHub, c: string, cx: Context): void {
   else if (c === "diff") {
     const p = v.prs.current();
 
-    if (v.repo && p) v.openDiff(p.number);
+    if (v.repo !== null && p !== null) v.openDiff(p.number);
   } else if (c === "new-pr") {
     v.wantForm = "pr";
     v.openForm(cx);

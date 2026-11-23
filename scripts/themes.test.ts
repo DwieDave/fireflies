@@ -20,7 +20,6 @@ const CONVERTED = ["nocturne", ...NOCTURNE_MODS];
 const ALLOWED: Record<string, readonly string[]> = {
   // the veil under an in-window popup: black dims under any theme, as the layout's scrim does
   "databases/kit.ts": ["#0000008c"],
-  "github/kit.ts": ["#0000008c"],
   "git/draw.ts": ["#0000008c"],
   // @fireflies/look's veil(): nocturne's dithered #0000008c, upstream's flat black at 35% (#00000059)
   "../lib/@fireflies/look/paint.ts": ["#0000008c", "#00000059"],

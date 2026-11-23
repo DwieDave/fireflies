@@ -4,23 +4,21 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div } from "gpui-kit";
+import { Semaphore, Schema, Array as Arr, Option, String as Str } from "effect";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
-import { maybe } from "./guards.ts";
-import type { Repo } from "./gh.ts";
-import { ghJson, ghRun, api, graphql, slimmed } from "./gh.ts";
+import { pollPrs } from "./prs-reads.ts";
+import * as Gh from "./gh.ts";
 import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
-import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
+import { PrFilterSchema, PrRowSchema, PrViewSchema, ReviewCommentSchema, checkRows, maybe, rollupTone, readAgo, SLOW, linksIn } from "./model.ts";
 import type { Pieces } from "./cache.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "@fireflies/markdown";
 import { PrForm } from "./prForm.ts";
 import type { Hint } from "./kit.ts";
-import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";
+import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf, within } from "./kit.ts";
 import type { Host, ReadOptions } from "./host.ts";
 import { prMenu, prRowMenu } from "./pr-menu.ts";
 import type { KeyRow } from "@fireflies/keyhelp";
@@ -28,8 +26,6 @@ import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
 import { edge } from "@fireflies/tones";
 
-// What the right panel draws (no state, no mergeable: GitHub computes those slowly).
-const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
 const FILTERS: readonly PrFilter[] = ["all", "mine", "review"];
 const FILTER_WORD = { all: "open", mine: "mine", review: "to review" } as const satisfies { readonly [K in PrFilter]: string };
 
@@ -42,12 +38,9 @@ type Panel = "list" | "checks" | "main";
 const PANELS: readonly Panel[] = ["list", "checks", "main"];
 
 /** What the tab keeps in shared state between openings (main.ts STATE): the filter, the PR, the dragged sizes. */
-export const isPrsKept = object({}, {
-  filter: isPrFilter, sel: nullable(isNumber),
-  sizes: object({}, { left: isNumber, top: isNumber, checks: isNumber }),
-});
+import type { PrsKept } from "./kept.ts";
 
-export type PrsKept = Guarded<typeof isPrsKept>;
+export type { PrsKept };
 
 /** The splitters' sizes, once dragged. */
 interface Sizes {
@@ -71,10 +64,13 @@ interface Detail {
 }
 
 /** A filter's list as the cache keeps it. */
-const isListPiece = object({ list: arrayOf(isPrRow) }, { at: maybe(isNumber) });
+const isListPiece = Schema.is(Schema.Struct({ list: Schema.Array(PrRowSchema), at: maybe(Schema.Finite) }));
 
 /** A PR's view as the cache keeps it. */
-const isDetailPiece = object({ pr: isPrView }, { review: maybe(arrayOf(isReviewComment)), reviewTag: maybe(isString), at: maybe(isNumber) });
+const isDetailPiece = Schema.is(Schema.Struct({ pr: PrViewSchema, review: maybe(Schema.Array(ReviewCommentSchema)), reviewTag: maybe(Schema.String), at: maybe(Schema.Finite) }));
+
+/** A filter the list was read with. */
+const isPrFilter = Schema.is(PrFilterSchema);
 
 /** The cache's part for this tab (cache.ts entry.prs). */
 export interface PrsCached {
@@ -127,8 +123,8 @@ export default class Prs {
   /** A pull request just made: selected once the list has it. */
   want: number | null = null;
 
-  /** The other tab's read behind this one, while it runs. */
-  warming: Promise<void> | null = null;
+  /** One read of this tab at a time (the shown tab's, and the read behind it: window-reads.ts). */
+  readonly reading = Semaphore.makeUnsafe(1);
 
   constructor(app: Host, kept: PrsKept = {}) {
     this.app = app;
@@ -146,16 +142,16 @@ export default class Prs {
   newPr(cx: Context, { head = null }: { readonly head?: string | null } = {}): void {
     const repo = this.app.repo;
 
-    if (!repo) return;
+    if (repo === null) return;
 
     this.flow?.form.release();
     this.flow = new PrForm(this.app, this, repo, { head });
     this.flow.load(cx);
-    this.flow.form.go(head ? 2 : 0, cx); // from a branch: base and head are set, the title is next
+    this.flow.form.go(head === null || head === "" ? 0 : 2, cx); // from a branch: base and head are set, the title is next
   }
 
   closeForm(): void {
-    if (this.flow) this.flow.closed = true;
+    if (this.flow !== null) this.flow.closed = true;
 
     this.flow = null;
     this.app.focusSelf();
@@ -172,7 +168,7 @@ export default class Prs {
   /** Made: the form goes, the list shows every open pull request and selects the new one once GitHub lists it. */
   created(number: number | null, cx: Context): void {
     this.closeForm();
-    this.app.note = noteOf(number ? `Opened #${number}.` : "Opened the pull request.", "done");
+    this.app.note = noteOf(number === null || number === 0 ? "Opened the pull request." : `Opened #${number}.`, "done", this.app.now());
 
     if (number === null) {
       this.app.refresh(cx, true);
@@ -218,18 +214,18 @@ export default class Prs {
 
     this.useList();
 
-    if (this.list && (this.sel === null || !this.list.some((p) => p.number === this.sel))) this.sel = this.list[0]?.number ?? null;
+    if (this.list !== null && (this.sel === null || !Arr.some(this.list, (p) => p.number === this.sel))) this.sel = this.list[0]?.number ?? null;
   }
 
   /** What's worth keeping for the next opening (slim: only what's drawn). */
   snapshot(): PrsSnapshot {
     const lists = new Map<string, Listed>();
 
-    for (const [f, l] of this.lists) lists.set(f, { list: l.list.map(slimPrRow), at: l.at });
+    for (const [f, l] of this.lists) lists.set(f, { list: Arr.map(l.list, slimPrRow), at: l.at });
 
     const details = new Map<string, Detail>();
 
-    for (const [n, d] of this.details) details.set(String(n), { pr: slimPr(d.pr) ?? d.pr, review: d.review.map(slimReviewComment), reviewTag: d.reviewTag, at: d.at });
+    for (const [n, d] of this.details) details.set(String(n), { pr: slimPr(d.pr) ?? d.pr, review: Arr.map(d.review, slimReviewComment), reviewTag: d.reviewTag, at: d.at });
 
     return { lists, details: newest(details, LIMITS.details) };
   }
@@ -242,13 +238,13 @@ export default class Prs {
   // ---- data
 
   current(): PrRow | null {
-    return this.list?.find((p) => p.number === this.sel) ?? this.list?.[0] ?? null;
+    return Option.getOrNull(Arr.findFirst(this.list ?? [], (p) => p.number === this.sel)) ?? this.list?.[0] ?? null;
   }
 
   detail(): Detail | null {
     const p = this.current();
 
-    return p ? this.details.get(p.number) ?? null : null;
+    return p === null ? null : this.details.get(p.number) ?? null;
   }
 
   checks(): CheckRow[] {
@@ -257,107 +253,37 @@ export default class Prs {
 
   /** When the visible data wants reading again. */
   interval(): number {
-    const live = this.checks().some((c) => c.tone === "working" || c.tone === "queued");
+    const live = Arr.some(this.checks(), (c) => c.tone === "working" || c.tone === "queued");
 
     return live ? CHECKS_LIVE : SLOW;
   }
 
-  /** Reads GitHub: the list, and the shown PR's view beside it (both at once).
+  /** Reads GitHub (prs-reads.ts): the list, and the shown PR's view beside it (both at once).
    *  all: past the timers; fresh: past the ETags. */
-  async poll({ all = false, fresh = false }: ReadOptions, cx: Context | null): Promise<void> {
-    const repo = this.app.repo;
-
-    if (!repo) return;
-
-    const now = Date.now(), filter = this.filter;
-    const list = all || !this.list || now - this.listAt >= SLOW ? this.readList(repo, filter) : null;
-    // The PR shown now (a cached list's) is read while the list is.
-    const first = this.current();
-    const view = first && this.wantsDetail(first, all, now) ? this.readDetail(repo, first, fresh) : null;
-
-    view?.catch(() => {}); // awaited below; not unhandled if the list fails first
-
-    if (list) {
-      const rows = await list;
-
-      if (this.filter !== filter || this.app.repo !== repo) return;
-
-      const at = Date.now();
-
-      this.lists.set(filter, { list: rows, at });
-      this.list = rows;
-      this.listAt = at;
-
-      const want = this.want;
-
-      if (want !== null && rows.some((p) => p.number === want)) {
-        this.sel = want;
-        this.want = null;
-        this.focus = "list";
-        this.scrollY = 0;
-        this.checkSel = 0;
-        this.listScroll.scroll_to_item(rows.findIndex((p) => p.number === want));
-      }
-
-      if (this.sel === null || !rows.some((p) => p.number === this.sel)) this.sel = rows[0]?.number ?? null;
-
-      this.follow();
-      cx?.notify();
-    }
-
-    await view;
-
-    const p = this.current();
-
-    if (p && p.number !== first?.number && this.wantsDetail(p, all, now)) await this.readDetail(repo, p, fresh);
-
-    this.follow();
+  read(opts: ReadOptions) {
+    return pollPrs(this, opts);
   }
 
   wantsDetail(p: PrRow, all: boolean, now: number): boolean {
     const d = this.details.get(p.number);
 
-    return all || !d || now - d.at >= this.interval() - 500;
+    return all || d === undefined || now - d.at >= this.interval() - 500;
   }
 
-  async readList(repo: Repo, filter: PrFilter): Promise<PrRow[]> {
-    const { query, vars } = prListQuery(filter, repo.full);
 
-    return prRows(await graphql(repo, query, isPrList, vars));
-  }
-
-  async readDetail(repo: Repo, p: PrRow, fresh: boolean): Promise<void> {
-    const d = this.details.get(p.number);
-
-    const [pr, review] = await Promise.all([
-      ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW], isPrView),
-      api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`, slimmed(isReviewComments, (a) => a.map(slimReviewComment), isReviewComments), { fresh, prior: d?.reviewTag ? { etag: d.reviewTag, data: d.review } : null })
-        .catch(() => ({ data: d?.review ?? [], etag: d?.reviewTag ?? null })),
-    ]);
-
-    if (this.app.repo !== repo) return;
-
-    this.details.set(p.number, { pr, review: review.data ?? [], reviewTag: review.etag ?? null, at: Date.now() });
-
-    if (this.details.size > LIMITS.details * 2) {
-      const keep = new Set(newest(this.details, LIMITS.details).keys());
-
-      for (const n of this.details.keys()) if (!keep.has(n)) this.details.delete(n);
-    }
-  }
 
   /** The list's rows follow what their PR's view read (checks, review, title). */
   follow(): void {
     const list = this.list;
 
-    if (!list) return;
+    if (list === null) return;
 
     let changed = false;
 
-    const next = list.map((p) => {
+    const next = Arr.map(list, (p) => {
       const d = this.details.get(p.number);
 
-      if (!d || d.at < this.listAt - 1000) return p;
+      if (d === undefined || d.at < this.listAt - 1000) return p;
 
       const tone = rollupTone(checkRows(d.pr.statusCheckRollup)), reviewDecision = d.pr.reviewDecision ?? null, title = d.pr.title;
 
@@ -385,7 +311,7 @@ export default class Prs {
     for (const c of d.pr.comments ?? []) out.push({ kind: "comment", who: c.author?.login ?? null, body: c.body ?? "", at: c.createdAt ?? null, url: c.url ?? null });
 
     for (const r of d.pr.reviews ?? []) {
-      if (!r.body && r.state === "COMMENTED") continue;
+      if ((r.body ?? "") === "" && r.state === "COMMENTED") continue;
 
       out.push({ kind: "review", state: r.state ?? "", who: r.author?.login ?? null, body: r.body ?? "", at: r.submittedAt ?? null });
     }
@@ -405,12 +331,12 @@ export default class Prs {
   select(i: number, cx: Context): void {
     const list = this.list ?? [];
 
-    if (!list.length) return;
+    if (list.length === 0) return;
 
     const k = Math.max(0, Math.min(list.length - 1, i));
     const p = list[k];
 
-    if (p && p.number !== this.sel) {
+    if (p !== undefined && p.number !== this.sel) {
       this.sel = p.number;
       this.scrollY = 0;
       this.checkSel = 0;
@@ -434,10 +360,10 @@ export default class Prs {
   }
 
   openCheck(c: CheckRow | undefined, cx: Context): void {
-    if (!c) return;
+    if (c === undefined) return;
 
-    if (c.runId) this.app.showRun(c.runId, c.jobId, cx);
-    else if (c.url) this.app.openUrl(c.url, cx);
+    if (c.runId !== null && c.runId !== 0) this.app.showRun(c.runId, c.jobId, cx);
+    else if (c.url !== null && c.url !== "") this.app.openUrl(c.url, cx);
   }
 
   /** The PR's page on GitHub. */
@@ -447,17 +373,17 @@ export default class Prs {
 
   /** Keys while this tab shows; true when one was used. */
   key(k: string, e: KeyEvent, cx: Context): boolean | "typing" {
-    if (this.composer) return this.composeKey(this.composer, k, e, cx);
+    if (this.composer !== null) return this.composeKey(this.composer, k, e, cx);
 
-    const list = this.list ?? [], p = this.current(), i = p ? list.indexOf(p) : -1;
+    const list = this.list ?? [], p = this.current(), i = p === null ? -1 : list.indexOf(p);
     const checks = this.checks();
     const page = Math.max(80, this.viewH / 2);
     const at = PANELS.indexOf(this.focus);
     const panelAt = (n: number) => PANELS[n] ?? this.focus;
     const ctrl = e.modifiers.control;
 
-    if (k === "l" || k === "right") this.focus = panelAt(Math.min(PANELS.length - 1, at + 1 + (at === 0 && !checks.length ? 1 : 0)));
-    else if (k === "h" || k === "left") this.focus = panelAt(Math.max(0, at - 1 - (at === 2 && !checks.length ? 1 : 0)));
+    if (k === "l" || k === "right") this.focus = panelAt(Math.min(PANELS.length - 1, at + 1 + (at === 0 && checks.length === 0 ? 1 : 0)));
+    else if (k === "h" || k === "left") this.focus = panelAt(Math.max(0, at - 1 - (at === 2 && checks.length === 0 ? 1 : 0)));
     else if (k === "tab") this.focus = panelAt((at + (e.modifiers.shift ? PANELS.length - 1 : 1)) % PANELS.length);
     else if (k === "escape" && this.focus !== "list") this.focus = "list";
     else if (this.focus === "list" && (k === "j" || k === "down")) this.select(i + 1, cx);
@@ -476,11 +402,11 @@ export default class Prs {
     else if (k === "K" || k === "pageup" || (k === "u" && ctrl)) this.scroll(-page);
     else if (k === "f") this.cycleFilter(cx);
     else if (k === "n") this.newPr(cx);
-    else if (k === "d" && p) this.app.openDiff(p.number);
-    else if (k === "c" && p) this.startComment(cx);
-    else if (k === "C" && p) this.app.ask(`Check out #${p.number} (${p.headRefName ?? ""}) in ${this.app.repo?.root ?? ""}?`, () => this.checkout(p, cx));
-    else if (k === "o" && p) this.app.openUrl(this.urlOf(p), cx);
-    else if (k === "a" && p) this.app.showRuns({ branch: p.headRefName ?? "", label: `#${p.number}` }, cx);
+    else if (k === "d" && p !== null) this.app.openDiff(p.number);
+    else if (k === "c" && p !== null) this.startComment(cx);
+    else if (k === "C" && p !== null) this.app.ask(`Check out #${p.number} (${p.headRefName ?? ""}) in ${this.app.repo?.root ?? ""}?`, (cx) => this.checkout(p, cx));
+    else if (k === "o" && p !== null) this.app.openUrl(this.urlOf(p), cx);
+    else if (k === "a" && p !== null) this.app.showRuns({ branch: p.headRefName ?? "", label: `#${p.number}` }, cx);
     else return false;
 
     return true;
@@ -490,13 +416,13 @@ export default class Prs {
   links(): WebLink[] {
     const d = this.detail();
 
-    return d ? linksIn([d.pr.body, ...this.timeline(d).map((c) => c.body)]) : [];
+    return d === null ? [] : linksIn([d.pr.body, ...Arr.map(this.timeline(d), (c) => c.body)]);
   }
 
   checkout(p: PrRow, cx: Context): void {
     const repo = this.app.repo;
 
-    if (repo) this.app.act(ghRun(repo, ["pr", "checkout", String(p.number)], { timeout: 120000 }), `Checked out #${p.number}.`, cx);
+    if (repo !== null) this.app.act(Gh.ghRun(repo, ["pr", "checkout", String(p.number)], 120000), `Checked out #${p.number}.`, cx);
   }
 
   startComment(cx: Context): void {
@@ -516,14 +442,14 @@ export default class Prs {
     }
 
     if (k === "enter" && (e.modifiers.platform || e.modifiers.control)) {
-      const body = composer.value().trim(), p = this.current(), repo = this.app.repo;
+      const body = Str.trim(composer.value()), p = this.current(), repo = this.app.repo;
 
-      if (!body || !p || !repo) return true;
+      if (body === "" || p === null || repo === null) return true;
 
       composer.release();
       this.composer = null;
       this.app.focusSelf();
-      this.app.act(ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
+      this.app.act(Gh.ghRun(repo, ["pr", "comment", String(p.number), "--body", body]), `Commented on #${p.number}.`, cx, () => {
         this.details.delete(p.number);
         this.scroll(1e9);
       });
@@ -535,9 +461,9 @@ export default class Prs {
   }
 
   hints(): Hint[] {
-    if (this.form) return this.form.hints();
+    if (this.form !== null) return this.form.hints();
 
-    if (this.composer) return [["cmd-enter", "post"], ["esc", "cancel"]];
+    if (this.composer !== null) return [["cmd-enter", "post"], ["esc", "cancel"]];
 
     const base: Hint[] = [["j/k", "move"], ["h/l", "panel"]];
 
@@ -562,8 +488,8 @@ export default class Prs {
   listPanel(t: Theme): Element {
     const list = this.list ?? [], cur = this.current(), active = this.focus === "list";
 
-    const body = !this.list ? empty(t, "Reading pull requests…", null, { small: true })
-      : !list.length ? empty(t, `No ${FILTER_WORD[this.filter]} pull requests`, this.filter === "all" ? "A quiet night." : "f shows the others.", { moon: 2 })
+    const body = this.list === null ? empty(t, "Reading pull requests…", null, { small: true })
+      : list.length === 0 ? empty(t, `No ${FILTER_WORD[this.filter]} pull requests`, this.filter === "all" ? "A quiet night." : "f shows the others.", { moon: 2 })
       : div().size_full().pt(2)
         .on_mouse_down("left", (_e, cx) => {
           this.focus = "list";
@@ -571,10 +497,10 @@ export default class Prs {
           cx.stop_propagation();
         })
         .child(v_virtual_list("prs", list.length, ROW, (i) => String(list[i]?.number ?? i),
-          (range) => list.slice(range.start, range.end).map((p) => prRow(t, p, p === cur, active)))
+          (range) => Arr.map(within(list, range.start, range.end), (p) => prRow(t, p, p === cur, active, this.app.now())))
           .on_item_click((key, cx) => {
             this.focus = "list";
-            this.select(list.findIndex((p) => String(p.number) === key), cx);
+            this.select(Option.getOrElse(Arr.findFirstIndex(list, (p) => String(p.number) === key), () => -1), cx);
             cx.notify();
           })
           // A right-click on a row: that row's menu, at the pointer.
@@ -582,7 +508,7 @@ export default class Prs {
           .size_full().track_scroll(this.listScroll));
 
     const right = h_flex().gap(6).items_center()
-      .child(div().child(this.list ? `${list.length}` : ""))
+      .child(div().child(this.list === null ? "" : `${list.length}`))
       .child(chip(t, "pr-new", "+ new", false, (cx) => this.newPr(cx), t.accent));
 
     return panel(t, "pr-list", `Pull requests · ${FILTER_WORD[this.filter]}`, active, body, { right }).flex_1()
@@ -601,7 +527,7 @@ export default class Prs {
   checksPanel(t: Theme): Element | null {
     const checks = this.checks(), active = this.focus === "checks";
 
-    if (!checks.length) return null;
+    if (checks.length === 0) return null;
 
     this.checkSel = Math.min(this.checkSel, checks.length - 1);
 
@@ -613,15 +539,15 @@ export default class Prs {
       this.checksScroll.scroll_to_item(this.checkSel);
     }
 
-    const passed = checks.filter((c) => c.tone === "done").length;
+    const passed = Arr.filter(checks, (c) => c.tone === "done").length;
 
-    const rows = checks.map((c, i) => checkRow(t, c, i, active && i === this.checkSel, (cx) => {
+    const rows = Arr.map(checks, (c, i) => checkRow(t, c, i, active && i === this.checkSel, (cx) => {
       this.focus = "checks";
       this.checkSel = i;
       this.openCheck(c, cx);
       this.app.focusSelf();
       cx.notify();
-    }));
+    }, this.app.now()));
 
     const h = this.checksH ?? Math.min(checks.length, 8) * CHECK_ROW + 26;
 
@@ -634,14 +560,14 @@ export default class Prs {
   mainPanel(t: Theme): Element {
     const p = this.current(), d = this.detail(), active = this.focus === "main";
 
-    if (!p) return panel(t, "pr-main", "Pull request", active, empty(t, "Nothing selected", null, { moon: 0 })).flex_1().h_full();
+    if (p === null) return panel(t, "pr-main", "Pull request", active, empty(t, "Nothing selected", null, { moon: 0 })).flex_1().h_full();
 
     // Its view once read, else its row.
     const pr: PrView = d?.pr ?? p;
-    const head = prHead(t, pr);
+    const head = prHead(t, pr, this.app.now());
 
-    const md = (id: string, text: string | null | undefined) => markdown(t, id, text?.trim() ? text : "_No description._", { onLink: (url, cx) => this.app.openUrl(url, cx) });
-    const items = d ? this.timeline(d) : [];
+    const md = (id: string, text: string | null | undefined) => markdown(t, id, Str.trim(text ?? "") === "" ? "_No description._" : text ?? "", { onLink: (url, cx) => this.app.openUrl(url, cx) });
+    const items = d === null ? [] : this.timeline(d);
 
     const composer = this.composer;
 
@@ -656,12 +582,12 @@ export default class Prs {
         }
       })
       .child(head)
-      .child(md(`body-${pr.number}`, d ? pr.body : "_Reading…_"))
+      .child(md(`body-${pr.number}`, d === null ? "_Reading…_" : pr.body))
       .when(items.length > 0, (el) => el.child(h_flex().pt(18).pb(4).gap(8).items_center()
         .child(eyebrow(t, `Conversation · ${items.length}`))
         .child(div().flex_1().h(2).relative().child(dither(edge(t), 1)))))
-      .children(items.map((c, i) => saidCard(t, c, i, md)))
-      .when(composer !== null, (el) => (composer ? el.child(v_flex().mt(12).gap(6).p(8).border(1).border_color(t.accent)
+      .children(Arr.map(items, (c, i) => saidCard(t, c, i, md, this.app.now())))
+      .when(composer !== null, (el) => (composer !== null ? el.child(v_flex().mt(12).gap(6).p(8).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
         .child(eyebrow(t, "Your comment"))
         .child(Textarea.new(composer).w_full().text_size(12).text_color(t.foreground))) : el))
@@ -693,13 +619,13 @@ export default class Prs {
       .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3).top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
         .child(dither(active ? t.accent : t.muted, 1))));
 
-    const right = !d ? "reading…" : `read ${readAgo(d.at)}`;
+    const right = d === null ? "reading…" : `read ${readAgo(d.at, this.app.now())}`;
 
     return panel(t, "pr-main", "Pull request", active, view, { right }).flex_1().h_full();
   }
 
   render(t: Theme, size: Size): Element {
-    if (this.form) return this.form.render(t, size);
+    if (this.form !== null) return this.form.render(t, size);
 
     const app = this.app, wide = size.width >= 820;
     const clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
@@ -707,7 +633,7 @@ export default class Prs {
     const th = clamp(this.sizes.top ?? size.height * 0.45, 120, size.height - 140);
     const leftH = wide ? size.height : th;
 
-    this.checksH = this.sizes.checks ? clamp(this.sizes.checks, 60, leftH - 100) : null;
+    this.checksH = this.sizes.checks === undefined || this.sizes.checks === 0 ? null : clamp(this.sizes.checks, 60, leftH - 100);
 
     const checks = this.checksPanel(t);
 
@@ -715,7 +641,7 @@ export default class Prs {
       .when(wide, (el) => el.w(lw))
       .when(!wide, (el) => el.w_full())
       .child(this.listPanel(t))
-      .when(checks !== null, (el) => (checks ? el
+      .when(checks !== null, (el) => (checks !== null ? el
         .child(splitter(t, "pr-split-checks", "y", app.dragged("checks"), (e) => app.resize(e, "checks", "y", this.checksH ?? Math.min(this.checks().length, 8) * CHECK_ROW + 26,
           (v) => {
             this.sizes.checks = v;

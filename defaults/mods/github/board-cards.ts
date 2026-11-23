@@ -2,6 +2,7 @@
 // person's initials and slot, a value in words, the fields a card and its
 // editor list, text wrapped to the card. No herdr imports, so scripts/ tests it.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Layout } from "./board-layout.ts";
 import type { Board, Field, FieldType, FieldValue, Item, View } from "./board.ts";
 
@@ -13,17 +14,18 @@ export const OPTION_ANSI = new Map<string, number>([["GRAY", 8], ["BLUE", 4], ["
 /** Up to two letters for a login's square. */
 export const initials = (who: string | null | undefined): string => {
   const name = who ?? "?";
-  const parts = name.split(/[-_.\s]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
+  const parts = Arr.filter(Str.split(name, /[-_.\s]+|(?<=[a-z])(?=[A-Z])/), Str.isNonEmpty);
   const [first, second] = parts;
+  const two = parts.length > 1 && first !== undefined && second !== undefined ? Str.slice(0, 1)(first) + Str.slice(0, 1)(second) : Str.slice(0, 2)(name);
 
-  return ((parts.length > 1 && first && second ? (first[0] ?? "") + (second[0] ?? "") : name.slice(0, 2)) || "?").toUpperCase();
+  return Str.toUpperCase(two === "" ? "?" : two);
 };
 
 /** A login's stable color slot (1..6). */
 export function loginSlot(who: string | null | undefined): number {
   let h = 0;
 
-  for (const ch of who ?? "") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of who ?? "") h = (h * 31 + Option.getOrElse(Str.charCodeAt(ch, 0), () => 0)) >>> 0;
 
   return 1 + (h % 6);
 }
@@ -32,7 +34,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 /** A field value as a card prints it: "Sprint 4", "P1", "3", "Nov 14". */
 export function valueText(_field: Field | null, v: FieldValue | null | undefined): string {
-  if (!v) return "";
+  if (v === null || v === undefined) return "";
 
   if ("name" in v) return v.name;
 
@@ -41,11 +43,11 @@ export function valueText(_field: Field | null, v: FieldValue | null | undefined
   if ("number" in v) return String(v.number);
 
   if ("date" in v) {
-    if (!v.date) return "";
+    if (v.date === "") return "";
 
     const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(v.date);
 
-    return m ? `${MONTHS[Number(m[2]) - 1] ?? ""} ${Number(m[3])}` : v.date;
+    return m === null ? v.date : `${MONTHS[Number(m[2]) - 1] ?? ""} ${Number(m[3])}`;
   }
 
   if ("names" in v) return v.names;
@@ -58,13 +60,10 @@ const SKIP = new Set<FieldType>(["title", "assignees", "labels", "repo", "linked
 /** The fields a card shows under its title: the view's visible ones that aren't the title, the columns,
  *  the lanes or drawn elsewhere (assignees, labels, repo). */
 export function cardFields(board: Board, view: View | null | undefined, lay: Layout): Field[] {
-  const ids = view?.visible.length ? view.visible : board.fields.map((f) => f.id);
+  const ids = view !== null && view !== undefined && view.visible.length > 0 ? view.visible : Arr.map(board.fields, (f) => f.id);
 
-  return ids.flatMap((id) => {
-    const f = board.fields.find((x) => x.id === id);
-
-    return f && !SKIP.has(f.type) && f.id !== lay.field?.id && f.id !== lay.lane?.id ? [f] : [];
-  });
+  return Arr.flatMap(ids, (id) => Arr.filter(Arr.fromOption(Arr.findFirst(board.fields, (x) => x.id === id)),
+    (f) => !SKIP.has(f.type) && f.id !== lay.field?.id && f.id !== lay.lane?.id));
 }
 
 /** The fields the menu edits, in the board's order. */
@@ -73,16 +72,16 @@ export function editableFields(board: Board, item: Item | null | undefined): Fie
     ? ["single", "iteration", "text", "number", "date", "assignees", "title"]
     : ["single", "iteration", "text", "number", "date", "assignees", "labels"];
 
-  return board.fields.filter((f) => kinds.includes(f.type));
+  return Arr.filter(board.fields, (f) => kinds.includes(f.type));
 }
 
 /** A title in at most `lines` lines of `width` characters (monospace), the last one cut with an ellipsis. */
 export function wrap(text: string | null | undefined, width: number, lines = 2): string[] {
-  const words = (text ?? "").split(/\s+/).filter(Boolean), out: string[] = [];
+  const words = Arr.filter(Str.split(text ?? "", /\s+/), Str.isNonEmpty), out: string[] = [];
   let line = "";
 
   for (const [i, w] of words.entries()) {
-    const next = line ? `${line} ${w}` : w;
+    const next = line === "" ? w : `${line} ${w}`;
 
     if (next.length <= width) {
       line = next;
@@ -90,22 +89,22 @@ export function wrap(text: string | null | undefined, width: number, lines = 2):
       continue;
     }
 
-    if (line) out.push(line);
+    if (line !== "") out.push(line);
 
-    line = w.length > width ? w.slice(0, width) : w;
+    line = w.length > width ? Str.slice(0, width)(w) : w;
 
     if (out.length === lines - 1) {
-      const rest = [line, ...words.slice(i + 1)].join(" ");
+      const rest = Arr.join([line, ...Arr.drop(words, i + 1)], " ");
 
-      out.push(rest.length > width ? `${rest.slice(0, Math.max(1, width - 1))}…` : rest);
+      out.push(rest.length > width ? `${Str.slice(0, Math.max(1, width - 1))(rest)}…` : rest);
 
       return out;
     }
   }
 
-  if (line) out.push(line);
+  if (line !== "") out.push(line);
 
-  return out.length ? out : [""];
+  return out.length > 0 ? out : [""];
 }
 
 // ---- a card's words (projects.ts and its parts)
@@ -121,9 +120,10 @@ export const numW = (item: Item): number => (item.content.kind === "draft" ? 6 :
 
 /** Where o opens a card: its issue or PR, or the draft in the project's view. */
 export function itemUrl(b: Board, view: View | null, item: Item): string | null {
-  if (item.content.url) return item.content.url;
+  if (item.content.url !== null && item.content.url !== "") return item.content.url;
 
-  const base = `${b.project.url ?? ""}${view?.number ? `/views/${view.number}` : ""}`;
+  const n = view?.number ?? null;
+  const base = `${b.project.url ?? ""}${n === null || n === 0 ? "" : `/views/${n}`}`;
 
-  return item.db ? `${base}?pane=issue&itemId=${item.db}` : base;
+  return item.db === null || item.db === 0 ? base : `${base}?pane=issue&itemId=${item.db}`;
 }

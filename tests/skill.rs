@@ -7,6 +7,6 @@ fn skill_prints_the_window_manual() {
     let skill = String::from_utf8(output.stdout).unwrap();
     assert_eq!(skill, include_str!("../src/SKILL.md"));
     assert!(skill.lines().count() < 500, "skill must stay under 500 lines");
-    assert!(skill.starts_with("# herdr-app:"));
-    assert!(skill.contains("hc --skill"));
+    assert!(skill.starts_with("# fireflies:"));
+    assert!(skill.contains("fireflies core --skill"));
 }

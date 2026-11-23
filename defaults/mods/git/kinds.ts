@@ -1,6 +1,8 @@
 // Which changed files are tests, config, assets or docs, so review can hide
 // them and leave the business code. Decided by path alone (diff's).
 
+import { Array as Arr } from "effect";
+
 const TEST_DIR = /(^|\/)(__tests__|__mocks__|tests?|specs?|e2e|cypress|playwright|fixtures|testdata)\//i;
 const TEST_FILE = /(\.|_|-)(test|spec)s?\.[^/]+$|(^|\/)test_[^/]+\.py$|(^|\/)[^/]+Tests?\.(swift|kt|java|cs|m)$|(^|\/)conftest\.py$/i;
 
@@ -11,7 +13,7 @@ const DOC_FILE = /\.(md|mdx|markdown|rst|adoc|asciidoc|txt|org)$|(^|\/)(README|C
 // .json and source languages (.nix included) stay code: they often are.
 const CONFIG_DIR = /(^|\/)(\.github|\.gitlab|\.circleci|\.husky|\.vscode|\.idea|\.devcontainer)\//i;
 
-const CONFIG_FILE = new RegExp([
+const CONFIG_FILE = new RegExp(Arr.join(Arr.map([
   /(^|\/)\.[^/]*rc(\.(js|cjs|mjs|ts|json|ya?ml))?$/,           // .eslintrc, .prettierrc.json, .npmrc
   /(^|\/)\.(editorconfig|gitignore|gitattributes|gitmodules|dockerignore|npmignore|prettierignore|eslintignore|env[^/]*|nvmrc|tool-versions|envrc)$/,
   /\.(ya?ml|toml|ini|cfg|conf|properties)$/,
@@ -20,7 +22,7 @@ const CONFIG_FILE = new RegExp([
   /(^|\/)(package|composer|deno|biome|turbo|nx|lerna|vercel|netlify|renovate|app)\.json$/,
   /(^|\/)(Dockerfile|Containerfile|docker-compose[^/]*|compose\.ya?ml|Makefile|Justfile|Procfile|Gemfile|Pipfile|requirements[^/]*\.txt|pyproject\.toml|setup\.cfg|Cargo\.toml|go\.mod)$/,
   /(^|\/)[^/]*\.lock$|(^|\/)(package-lock\.json|go\.sum|pnpm-lock\.yaml|npm-shrinkwrap\.json)$/,
-].map((r) => r.source).join("|"), "i");
+], (r) => r.source), "|"), "i");
 
 // Assets go by extension only: a folder named assets/ can hold code.
 const ASSET = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|ico|icns|svg|heic|psd|ai|sketch|fig|woff2?|ttf|otf|eot|mp3|wav|ogg|flac|aac|m4a|mp4|mov|webm|mkv|avi|pdf|zip|gz|tar|lottie)$/i;
@@ -47,7 +49,7 @@ export function kind(f: { readonly path: string; readonly binary?: boolean }): K
 
   if (DOC_DIR.test(p) || DOC_FILE.test(p)) return "docs";
 
-  if (ASSET.test(p) || f.binary) return "assets";
+  if (ASSET.test(p) || f.binary === true) return "assets";
 
   return null;
 }

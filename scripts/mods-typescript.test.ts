@@ -13,7 +13,7 @@ const sources = (m: string) => readdirSync(`${MODS}/${m}`).filter((f) => /\.(js|
 const imports = (m: string, file: string) => sources(m).some((f) => readFileSync(`${MODS}/${m}/${f}`, "utf8").includes(`from "./${file}"`));
 
 /** Mods converted to Effect (docs/effect-mods.md): they decode with Schema through @fireflies/kit, and carry no guard.ts. */
-const ON_THE_KIT = ["usage"];
+const ON_THE_KIT = ["usage", "git", "github"];
 
 test("every copy of guard.ts is the same file: nocturne and each of its mods has one, but those on the Effect kit", () => {
   const source = readFileSync(`${MODS}/pip/guard.ts`, "utf8");

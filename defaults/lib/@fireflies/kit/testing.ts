@@ -8,12 +8,12 @@
 //   await Effect.runPromise(refreshUsage("force").pipe(Effect.provide(Layer.mergeAll(shared.layer, exec.layer, …))));
 //   expect(shared.store.get("usage.last")).toEqual(…);
 
-import { Effect, Layer, Option, Schema } from "effect";
+import { Array as Arr, Effect, Layer, Option, Order, Schema, String as Str } from "effect";
 import { HttpClient } from "effect/http";
-import type { ExecResult, Settings, panes, spaces, window as appWindow } from "herdr";
+import type { ExecResult, Settings, agents, focused, panes, spaces, window as appWindow } from "herdr";
 import { fetchClient } from "./http.ts";
 import type { Fetch } from "./http.ts";
-import { Commands, Exec, Files, Notify, Shared, Workspace, execError, writeError } from "./services.ts";
+import { Commands, Exec, Files, Hc, Notify, Shared, Workspace, execError, fileError, writeError } from "./services.ts";
 import type { CommandArgs, ExecOptions, Note } from "./services.ts";
 
 /** One program the code ran. */
@@ -41,6 +41,24 @@ export function execTest(handler: (command: string, args: readonly string[], opt
   return { layer, calls };
 }
 
+/** Hc answering with `handler` (a thrown error or a rejection is an `ExecError`); `calls` records each run's args. */
+export function hcTest(handler: (args: readonly string[]) => ExecResult | Promise<ExecResult>) {
+  const calls: (readonly string[])[] = [];
+
+  const layer = Layer.succeed(Hc, Hc.of({
+    run: (args) => Effect.tryPromise({
+      try: () => {
+        calls.push(args);
+
+        return Promise.resolve().then(() => handler(args));
+      },
+      catch: execError(args.length === 0 ? "hc" : `hc ${args[0]}`),
+    }),
+  }));
+
+  return { layer, calls };
+}
+
 /** Shared state in a Map of JSON values, as shared.json holds them. */
 export function sharedTest(store = new Map<string, Schema.Json>()) {
   // What setShared keeps is JSON: the encoded value, proven to be JSON (as the
@@ -57,9 +75,32 @@ export function sharedTest(store = new Map<string, Schema.Json>()) {
   return { layer, store };
 }
 
-/** Files in a Map by path; `write` honors `expected` as the app does. */
-export function filesTest(files = new Map<string, string>()) {
+/** The names directly in folder `dir` among `paths` (each path's next segment), sorted; none when nothing is under it. */
+const namesIn = (paths: Iterable<string>, dir: string): Option.Option<readonly string[]> => {
+  const prefix = Str.endsWith("/")(dir) ? dir : `${dir}/`;
+  const names = new Set<string>();
+
+  for (const path of paths) {
+    if (Str.startsWith(prefix)(path) && path.length > prefix.length) names.add(Arr.headNonEmpty(Str.split("/")(Str.slice(prefix.length)(path))));
+  }
+
+  return names.size === 0 ? Option.none() : Option.some(Arr.sort([...names], Order.String));
+};
+
+/**
+ * Files in a Map by path; `write` honors `expected` as the app does. `list`
+ * answers from the paths (a folder is there when a file is under it, or
+ * when it is in `folders`); listing a file's path is a `FileError`.
+ */
+export function filesTest(files = new Map<string, string>(), folders: ReadonlySet<string> = new Set()) {
   const layer = Layer.succeed(Files, Files.of({
+    list: (dir) => Effect.suspend(() => {
+      if (files.has(dir)) return Effect.fail(fileError(dir)(new Error("not a directory")));
+
+      const listed = namesIn([...files.keys(), ...folders], dir);
+
+      return Effect.succeed(Option.isNone(listed) && folders.has(dir) ? Option.some([]) : listed);
+    }),
     read: (path) => Effect.sync(() => Option.fromUndefinedOr(files.get(path))),
     write: (path, text, expected) => Effect.suspend(() => {
       if ((files.get(path) ?? null) !== expected) return Effect.fail(writeError(path)(new Error("stale: the file changed since it was read")));
@@ -80,6 +121,8 @@ export interface Look {
   panes?: () => ReturnType<typeof panes>;
   terminals?: () => readonly unknown[];
   settings?: () => Settings;
+  agents?: () => ReturnType<typeof agents>;
+  focused?: () => ReturnType<typeof focused>;
 }
 
 const WINDOW: ReturnType<typeof appWindow> = { platform: "macos", titlebar: "none", buttons: false, maximized: false, fullscreen: false, active: true };
@@ -95,6 +138,8 @@ export function workspaceTest(look: Look = {}) {
 
       return settings === undefined ? Effect.die(new Error("workspaceTest: no settings given")) : Effect.sync(settings);
     }),
+    agents: Effect.sync(() => look.agents?.() ?? []),
+    focused: Effect.sync(() => Option.fromNullOr(look.focused?.() ?? null)),
   }));
 
   return { layer, look };

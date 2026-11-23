@@ -2,8 +2,10 @@
 // stashing, ignoring, conflicts, the Review tab's marks, a commit's files, the
 // stash's entries and staging single lines.
 
+import { Array as Arr, Effect, String as Str } from "effect";
 import { partialPatch } from "./patch.ts";
-import { shq } from "./git.ts";
+import { shell, shq } from "./git.ts";
+import type { StatusFile } from "./parse.ts";
 import type { Action } from "./keys.ts";
 import type { MenuItem } from "./popups.ts";
 import type { default as GitView } from "./main.ts";
@@ -12,18 +14,21 @@ import { pickedKeys, startStaging, stepFile, stepHunk, stepLine, switchSide } fr
 import { collapseAll, toggleDir } from "./navigate.ts";
 import { editFile, openFile, terminal } from "./elsewhere.ts";
 import type { Handler } from "./acting.ts";
-import { filesOf, git, commit, upstreamResetMenu, stashOf, spawn, it } from "./acting.ts";
+import { answered, filesOf, git, commit, upstreamResetMenu, stashOf, spawn, it } from "./acting.ts";
 import { short } from "./draw.ts";
+
+/** A file's paths a command takes: a rename's old one too. */
+const pathsOf = (f: StatusFile): readonly string[] => (f.from === null ? [f.path] : [f.path, f.from]);
 
 export const FILE_ACTIONS = {
   // ---- files
   stage: (v) => {
     const files = filesOf(v.pickedRows());
 
-    if (!files.length) return;
+    if (!Arr.isReadonlyArrayNonEmpty(files)) return;
 
-    const allStaged = files.every((f) => f.staged && !f.unstaged);
-    const paths = files.flatMap((f) => (f.from ? [f.path, f.from] : [f.path]));
+    const allStaged = Arr.every(files, (f) => f.staged && !f.unstaged);
+    const paths = Arr.flatMap(files, pathsOf);
 
     if (allStaged) return git(v, "Unstage", ["reset", "-q", "--", ...paths]);
 
@@ -32,7 +37,7 @@ export const FILE_ACTIONS = {
   "stage-all": (v) => {
     const files = v.data.status?.files ?? [];
 
-    if (files.length && files.every((f) => f.staged && !f.unstaged)) return git(v, "Unstage all", ["reset", "-q"]);
+    if (Arr.isReadonlyArrayNonEmpty(files) && Arr.every(files, (f) => f.staged && !f.unstaged)) return git(v, "Unstage all", ["reset", "-q"]);
 
     return git(v, "Stage all", ["add", "-A"]);
   },
@@ -45,7 +50,7 @@ export const FILE_ACTIONS = {
 
     const f = statusFileOf(r);
 
-    if (!f) return;
+    if (f === null) return;
 
     if (f.conflict) return conflictMenu(v);
 
@@ -82,7 +87,7 @@ export const FILE_ACTIONS = {
   edit: (v) => {
     const p = v.itemPath();
 
-    if (!p) return false;
+    if (p === null) return false;
 
     editFile(v, p);
 
@@ -91,7 +96,7 @@ export const FILE_ACTIONS = {
   open: (v) => {
     const p = v.itemPath();
 
-    if (!p) return false;
+    if (p === null) return false;
 
     openFile(v, p);
 
@@ -100,7 +105,7 @@ export const FILE_ACTIONS = {
   "ignore-menu": (v) => {
     const p = v.itemPath();
 
-    if (!p) return false;
+    if (p === null) return false;
 
     const add = (file: string, what: string) => git(v, what, [], { env: { NOCTURNE_GIT_LINE: `/${p}` }, shell: `printf '%s\\n' "$NOCTURNE_GIT_LINE" >> "${file}"`, shown: `echo /${p} >> ${file}` });
 
@@ -123,7 +128,7 @@ export const FILE_ACTIONS = {
   "copy-path": (v, cx) => {
     const p = v.itemPath();
 
-    if (!p) return false;
+    if (p === null) return false;
 
     v.copy(p, cx);
 
@@ -153,7 +158,7 @@ export const FILE_ACTIONS = {
   "checkout-file": (v) => {
     const path = v.itemPath(), s = v.sub();
 
-    if (!path || s?.kind !== "commitFiles") return;
+    if (path === null || s?.kind !== "commitFiles") return;
 
     v.ask({ title: "Checkout file", text: `Replace ${path} in your work tree with its version in ${short(s.hash)}?`, danger: true, go: () => git(v, "Checkout file", ["checkout", s.hash, "--", path]) });
   },
@@ -163,42 +168,42 @@ export const FILE_ACTIONS = {
   "stash-apply": (v) => {
     const s = stashOf(v);
 
-    if (s) git(v, "Apply stash", ["stash", "apply", s.ref]);
+    if (s !== null) git(v, "Apply stash", ["stash", "apply", s.ref]);
   },
   "stash-pop": (v) => {
     const s = stashOf(v);
 
-    if (s) v.ask({ title: "Pop stash", text: `Apply ${s.ref} and drop it from the stash?`, go: () => git(v, "Pop stash", ["stash", "pop", s.ref]) });
+    if (s !== null) v.ask({ title: "Pop stash", text: `Apply ${s.ref} and drop it from the stash?`, go: () => git(v, "Pop stash", ["stash", "pop", s.ref]) });
   },
   "stash-drop": (v) => {
     const s = stashOf(v);
 
-    if (s) v.ask({ title: "Drop stash", text: `Drop ${s.ref} (${s.subject})?`, danger: true, go: () => git(v, "Drop stash", ["stash", "drop", s.ref]) });
+    if (s !== null) v.ask({ title: "Drop stash", text: `Drop ${s.ref} (${s.subject})?`, danger: true, go: () => git(v, "Drop stash", ["stash", "drop", s.ref]) });
   },
   "stash-branch": (v) => {
     const s = stashOf(v);
 
-    if (s) v.prompt({ title: `New branch from ${s.ref}`, placeholder: "name", ok: (n) => { if (n.trim()) git(v, "Branch from stash", ["stash", "branch", n.trim(), s.ref]); } });
+    if (s !== null) v.prompt({ title: `New branch from ${s.ref}`, placeholder: "name", ok: (n) => answered(n, (name) => git(v, "Branch from stash", ["stash", "branch", name, s.ref])) });
   },
   "stash-rename": (v) => {
     const s = stashOf(v);
 
-    if (!s) return;
+    if (s === null) return;
 
     v.prompt({
-      title: `Rename ${s.ref}`, value: s.subject.replace(/^On [^:]+: /, ""),
+      title: `Rename ${s.ref}`, value: Str.replace(/^On [^:]+: /, "")(s.subject),
       ok: (m) => git(v, "Rename stash", [], { env: { NOCTURNE_GIT_MSG: m }, shell: `h=$(git rev-parse ${shq(s.ref)}) && git stash drop -q ${shq(s.ref)} && git stash store -m "$NOCTURNE_GIT_MSG" "$h"`, shown: `git stash drop ${s.ref} && git stash store -m <message> <hash>` }),
     });
   },
 
 
   // ---- staging lines
-  "line-down": (v) => (v.staging ? stepLine(v, 1) : v.scrollMain(1, 1)),
-  "line-up": (v) => (v.staging ? stepLine(v, -1) : v.scrollMain(-1, 1)),
+  "line-down": (v) => (v.staging === null ? v.scrollMain(1, 1) : stepLine(v, 1)),
+  "line-up": (v) => (v.staging === null ? v.scrollMain(-1, 1) : stepLine(v, -1)),
   "hunk-next": (v) => stepHunk(v, 1),
   "hunk-prev": (v) => stepHunk(v, -1),
   "hunk-mode": (v) => {
-    if (v.staging) {
+    if (v.staging !== null) {
       v.staging.hunkMode = !v.staging.hunkMode;
       v.staging.anchor = null;
     }
@@ -209,10 +214,10 @@ export const FILE_ACTIONS = {
   "copy-lines": (v, cx) => {
     const s = v.staging;
 
-    if (!s) return;
+    if (s === null) return;
 
     const keys = pickedKeys(v);
-    const text = s.rows.flatMap((r) => (keys.has(`${r.hunk}:${r.line}`) ? [r.text] : [])).join("\n");
+    const text = Arr.join(Arr.flatMap(s.rows, (r) => (keys.has(`${r.hunk}:${r.line}`) ? [r.text] : [])), "\n");
 
     v.copy(text, cx);
   },
@@ -225,40 +230,40 @@ export function discardMenu(v: GitView) {
   const g = v.git;
   const first = files[0];
 
-  if (!first || !g) return;
+  if (first === undefined || g === null) return;
 
   const what = files.length === 1 ? first.path : `${files.length} files`;
 
-  const all = () => spawn(v, async () => {
-    const untracked = files.flatMap((f) => (f.untracked ? [f.path] : []));
-    const added = files.flatMap((f) => (!f.untracked && f.x === "A" ? [f.path] : []));
-    const tracked = files.flatMap((f) => (f.untracked || f.x === "A" ? [] : f.from ? [f.path, f.from] : [f.path]));
+  const all = () => spawn(v, Effect.gen(function* () {
+    const untracked = Arr.flatMap(files, (f) => (f.untracked ? [f.path] : []));
+    const added = Arr.flatMap(files, (f) => (!f.untracked && f.x === "A" ? [f.path] : []));
+    const tracked = Arr.flatMap(files, (f) => (f.untracked || f.x === "A" ? [] : pathsOf(f)));
 
-    if (tracked.length) {
-      const r = await g.run("Discard changes", ["checkout", "HEAD", "--", ...tracked]);
-
-      if (!r.ok) return v.error(r.err);
-    }
-
-    if (added.length) {
-      const r = await g.run("Discard new files", [], { shell: `git rm -q -f --cached -- ${added.map(shq).join(" ")} && rm -f -- ${added.map(shq).join(" ")}`, shown: `git rm --cached ${added.join(" ")} && rm ${added.join(" ")}` });
+    if (Arr.isReadonlyArrayNonEmpty(tracked)) {
+      const r = yield* g.run("Discard changes", ["checkout", "HEAD", "--", ...tracked]);
 
       if (!r.ok) return v.error(r.err);
     }
 
-    if (untracked.length) {
-      const r = await g.run("Discard untracked", ["clean", "-fd", "--", ...untracked]);
+    if (Arr.isReadonlyArrayNonEmpty(added)) {
+      const r = yield* g.run("Discard new files", [], { shell: `git rm -q -f --cached -- ${shell(added)} && rm -f -- ${shell(added)}`, shown: `git rm --cached ${Arr.join(added, " ")} && rm ${Arr.join(added, " ")}` });
 
       if (!r.ok) return v.error(r.err);
     }
 
-    await v.reloadNow();
-  });
+    if (Arr.isReadonlyArrayNonEmpty(untracked)) {
+      const r = yield* g.run("Discard untracked", ["clean", "-fd", "--", ...untracked]);
+
+      if (!r.ok) return v.error(r.err);
+    }
+
+    yield* v.reloadNow();
+  }));
 
   const items: MenuItem[] = [{ key: "x", label: "Discard all changes", danger: true, go: () => v.ask({ title: "Discard", text: `Discard every change to ${what}?`, danger: true, go: all }) }];
 
-  if (files.some((f) => f.staged && f.unstaged)) {
-    items.push({ key: "u", label: "Discard unstaged changes", danger: true, go: () => v.ask({ title: "Discard unstaged", text: `Discard the unstaged changes to ${what}?`, danger: true, go: () => git(v, "Discard unstaged", ["checkout", "--", ...files.flatMap((f) => (f.unstaged && !f.untracked ? [f.path] : []))]) }) });
+  if (Arr.some(files, (f) => f.staged && f.unstaged)) {
+    items.push({ key: "u", label: "Discard unstaged changes", danger: true, go: () => v.ask({ title: "Discard unstaged", text: `Discard the unstaged changes to ${what}?`, danger: true, go: () => git(v, "Discard unstaged", ["checkout", "--", ...Arr.flatMap(files, (f) => (f.unstaged && !f.untracked ? [f.path] : []))]) }) });
   }
 
   v.menu({ title: `Discard ${what}`, items });
@@ -267,7 +272,7 @@ export function discardMenu(v: GitView) {
 export function conflictMenu(v: GitView) {
   const f = statusFileOf(it(v));
 
-  if (!f?.conflict) return v.error("No merge conflict in this file.");
+  if (f === null || !f.conflict) return v.error("No merge conflict in this file.");
 
   v.menu({
     title: `Conflict in ${f.path}`,
@@ -281,9 +286,13 @@ export function conflictMenu(v: GitView) {
 }
 
 export function stashPrompt(v: GitView, flags: readonly string[], title: string) {
-  if (!(v.data.status?.files ?? []).length) return v.error("Nothing to stash.");
+  if (!Arr.isReadonlyArrayNonEmpty(v.data.status?.files ?? [])) return v.error("Nothing to stash.");
 
-  v.prompt({ title, placeholder: "message (optional)", ok: (m) => git(v, title, ["stash", "push", ...flags, ...(m.trim() ? ["-m", m.trim()] : [])]) });
+  v.prompt({ title, placeholder: "message (optional)", ok: (m) => {
+    const said = Str.trim(m);
+
+    git(v, title, ["stash", "push", ...flags, ...(Str.isEmpty(said) ? [] : ["-m", said])]);
+  } });
 }
 
 // ---- staging lines
@@ -292,20 +301,20 @@ export function stagePick(v: GitView) {
   const g = v.git;
   const diff = s?.diff;
 
-  if (!s || !diff || !g) return;
+  if (s === null || diff === null || diff === undefined || g === null) return;
 
   const keys = pickedKeys(v);
 
-  if (!keys.size) return;
+  if (keys.size === 0) return;
 
   const reverse = s.side === "staged";
   const patch = partialPatch(diff, keys, { reverse });
 
-  if (!patch) return;
+  if (patch === null || Str.isEmpty(patch)) return;
 
-  spawn(v, async () => {
+  spawn(v, Effect.gen(function* () {
     if (!reverse && s.file.untracked) {
-      const r = await g.run("Intent to add", ["add", "-N", "--", s.file.path]);
+      const r = yield* g.run("Intent to add", ["add", "-N", "--", s.file.path]);
 
       if (!r.ok) return v.error(r.err);
 
@@ -313,40 +322,40 @@ export function stagePick(v: GitView) {
       s.diff = { ...diff, status: "added" };
     }
 
-    const r = await g.apply(reverse ? "Unstage lines" : "Stage lines", patch, reverse ? ["--cached", "-R", "--recount"] : ["--cached", "--recount"]);
+    const r = yield* g.apply(reverse ? "Unstage lines" : "Stage lines", patch, reverse ? ["--cached", "-R", "--recount"] : ["--cached", "--recount"]);
 
     if (!r.ok) v.error(r.err);
 
     s.anchor = null;
-    await v.reloadNow();
-  });
+    yield* v.reloadNow();
+  }));
 }
 
 export function discardPick(v: GitView) {
   const s = v.staging;
   const g = v.git;
 
-  if (!s?.diff || !g) return;
+  if (s === null || s.diff === null || g === null) return;
 
   if (s.side === "staged") return stagePick(v); // lazygit: d on the staged side unstages
 
   const keys = pickedKeys(v);
 
-  if (!keys.size) return;
+  if (keys.size === 0) return;
 
   const patch = partialPatch(s.diff, keys, { reverse: true });
 
-  if (!patch) return;
+  if (patch === null || Str.isEmpty(patch)) return;
 
   v.ask({
     title: "Discard lines", text: `Discard ${keys.size} changed line${keys.size === 1 ? "" : "s"} from ${s.file.path}?`, danger: true,
-    go: () => spawn(v, async () => {
-      const r = await g.apply("Discard lines", patch, ["-R", "--recount"]);
+    go: () => spawn(v, Effect.gen(function* () {
+      const r = yield* g.apply("Discard lines", patch, ["-R", "--recount"]);
 
       if (!r.ok) v.error(r.err);
 
       s.anchor = null;
-      await v.reloadNow();
-    }),
+      yield* v.reloadNow();
+    })),
   });
 }

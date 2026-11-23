@@ -13,7 +13,7 @@ const chipW = (label: string, cut: number): number => 8 + 11 + (label ? 4 + labe
 export const KEYS: readonly KeyRow[] = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
   ["space", "preview on / off"], ["J K", "scroll the preview"], ["< >", "preview smaller / bigger"],
   ["t", "mark · unmark"], ["V", "mark a range (V ends)"], ["⇧↑ ⇧↓", "mark while moving"],
-  ["v", "Neovim"], ["w", "HTML: in a web pane"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
+  ["v", "Neovim"], ["w", "HTML: in a web pane"], ["o", "new pane"], ["y Y", "copy path / relative"], ["f", "show in Finder / file manager"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["tab ⇧tab", "switches, + file"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],

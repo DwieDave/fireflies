@@ -67,8 +67,37 @@ export function dropBelow(e: Pick<MouseButtonEvent, "position" | "local_position
  *  to another pane or tab, and ends with it. */
 export const NAME_LABEL = "nocturne.name";
 
+/** The listing kept while the sidebar draws (oneListing): a draw asks for a
+ *  terminal's labels once per agent and again in every comparison of its
+ *  sort, and each terminals() hands the whole listing over (every terminal
+ *  with its argv: an agent started with a brief carries kilobytes). Asked
+ *  afresh each time, a sidebar with a dozen such agents ran past the render's
+ *  budget and stopped drawing ("could not be re-rendered"). `at` ends it by
+ *  itself if a draw was cut off before it could. */
+const LISTING_MS = 100;
+let listing: { readonly at: number; readonly list: Terminal[] } | null = null;
+
+const listed = (): Terminal[] => terminals().filter((t) => isTerminal(t));
+
 /** Every terminal herdr-core lists, as Nocturne reads them (the listing parsed). */
-export const terminalsNow = (): Terminal[] => terminals().filter((t) => isTerminal(t));
+export function terminalsNow(): Terminal[] {
+  if (listing === null) return listed();
+
+  const age = Date.now() - listing.at;
+
+  return age >= 0 && age < LISTING_MS ? listing.list : listed();
+}
+
+/** Runs a draw with one listing of the terminals for all of it. */
+export function oneListing<A>(draw: () => A): A {
+  listing = { at: Date.now(), list: listed() };
+
+  try {
+    return draw();
+  } finally {
+    listing = null;
+  }
+}
 
 /** A terminal (an address) as listed now, or undefined. */
 const terminalAt = (terminal: string | null | undefined): Terminal | undefined => (terminal ? terminalsNow().find((x) => x.address === terminal) : undefined);
@@ -99,7 +128,12 @@ export function pin(terminal: string | null | undefined, on = !pinned(terminal))
 }
 
 /** The sidebar's agent order (pins.ts sortAgents): { pinned, rest, all }. */
-export const sortedAgents = (): SortedAgents<AgentInfo> => sortAgents([...agents()], agentRank, labelsOf);
+export function sortedAgents(): SortedAgents<AgentInfo> {
+  // The labels by address, looked up once: the sort asks for them in every comparison.
+  const labels = new Map(terminalsNow().map((x): readonly [string, Labels] => [x.address, x.labels ?? {}]));
+
+  return sortAgents([...agents()], agentRank, (terminal) => (terminal ? labels.get(terminal) : undefined) ?? {});
+}
 
 /** The mod panes' pins (pins.ts PANES_KEY), as stored. */
 export const paneRecordsNow = (): PaneRecord[] => paneRecords(shared);

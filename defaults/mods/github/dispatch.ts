@@ -5,8 +5,7 @@
 // turns its inputs into form fields, checks the answers, builds
 // `gh workflow run` and finds the run it started.
 
-import type { Guarded } from "./guard.ts";
-import { isString, literal } from "./guard.ts";
+import { Array as Arr, Predicate, Schema, String as Str } from "effect";
 import type { Run } from "./model.ts";
 
 // ---- a small YAML reader (what workflow files use)
@@ -22,16 +21,16 @@ export type YamlMap = ReadonlyMap<string, Yaml>;
 
 export const isYamlMap = (v: Yaml | undefined): v is YamlMap => v instanceof Map;
 
-export const isYamlList = (v: Yaml | undefined): v is readonly Yaml[] => Array.isArray(v);
+export const isYamlList = (v: Yaml | undefined): v is readonly Yaml[] => Arr.isArray(v);
 
 /** Splits a line at its comment (a # after a space, outside quotes). */
 function uncomment(line: string): string {
   let q: string | null = null;
 
   for (let i = 0; i < line.length; i++) {
-    const c = line.charAt(i), before = line.charAt(i - 1);
+    const c = (line[i] ?? ""), before = (line[i - 1] ?? "");
 
-    if (q) {
+    if (q !== null) {
       if (c === q && (q === "'" || before !== "\\")) q = null;
 
       continue;
@@ -43,25 +42,29 @@ function uncomment(line: string): string {
       continue;
     }
 
-    if (c === "#" && (i === 0 || /\s/.test(before))) return line.slice(0, i).replace(/\s+$/, "");
+    if (c === "#" && (i === 0 || /\s/.test(before))) return Str.trimEnd(Str.slice(0, i)(line));
   }
 
-  return line.replace(/\s+$/, "");
+  return Str.trimEnd(line);
 }
 
 const ESCAPES = new Map([["n", "\n"], ["t", "\t"]]);
 
+/** `s` written between two `q`s. */
+const quoted = (s: string, q: string): boolean => s.length >= 2 && Str.startsWith(q)(s) && Str.endsWith(q)(s);
+
+/** A double-quoted scalar's text with its escapes (\\n, \\t, \\", \\\\, \\/) read. */
+const unescaped = (s: string): string => Arr.join(Arr.map(Str.split(s, /(\\["\\/nt])/), (part) => (/^\\["\\/nt]$/.test(part) ? ESCAPES.get(part[1] ?? "") ?? part[1] ?? "" : part)), "");
+
 /** A plain or quoted scalar as YAML 1.2's core schema reads it. */
 export function scalar(raw: string | null | undefined): Scalar {
-  const s = (raw ?? "").trim();
+  const s = Str.trim(raw ?? "");
 
-  if (!s) return null;
+  if (s === "") return null;
 
-  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
-    return s.slice(1, -1).replace(/\\(["\\/nt])/g, (_m, c: string) => ESCAPES.get(c) ?? c);
-  }
+  if (quoted(s, '"')) return unescaped(Str.slice(1, -1)(s));
 
-  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) return s.slice(1, -1).replace(/''/g, "'");
+  if (quoted(s, "'")) return Str.replaceAll("''", "'")(Str.slice(1, -1)(s));
 
   if (/^(true|True|TRUE)$/.test(s)) return true;
 
@@ -81,20 +84,20 @@ function flow(s: string): Yaml {
   let i = 0;
 
   const ws = () => {
-    while (i < s.length && /\s/.test(s.charAt(i))) i++;
+    while (i < s.length && /\s/.test((s[i] ?? ""))) i++;
   };
 
   const atom = (stops: string): Scalar => {
     ws();
 
-    const q = s.charAt(i);
+    const q = (s[i] ?? "");
 
     if (q === '"' || q === "'") {
       let j = i + 1;
 
-      while (j < s.length && !(s.charAt(j) === q && (q === "'" ? s.charAt(j + 1) !== "'" : s.charAt(j - 1) !== "\\"))) j += q === "'" && s.charAt(j) === "'" ? 2 : 1;
+      while (j < s.length && !((s[j] ?? "") === q && (q === "'" ? (s[j + 1] ?? "") !== "'" : (s[j - 1] ?? "") !== "\\"))) j += q === "'" && (s[j] ?? "") === "'" ? 2 : 1;
 
-      const raw = s.slice(i, j + 1);
+      const raw = Str.slice(i, j + 1)(s);
 
       i = j + 1;
 
@@ -103,9 +106,9 @@ function flow(s: string): Yaml {
 
     let j = i;
 
-    while (j < s.length && !stops.includes(s.charAt(j))) j++;
+    while (j < s.length && !Str.includes(s[j] ?? "")(stops)) j++;
 
-    const raw = s.slice(i, j);
+    const raw = Str.slice(i, j)(s);
 
     i = j;
 
@@ -115,7 +118,7 @@ function flow(s: string): Yaml {
   const value = (): Yaml => {
     ws();
 
-    if (s.charAt(i) === "[") {
+    if ((s[i] ?? "") === "[") {
       i++;
 
       const out: Yaml[] = [];
@@ -123,7 +126,7 @@ function flow(s: string): Yaml {
       for (;;) {
         ws();
 
-        if (s.charAt(i) === "]" || i >= s.length) {
+        if ((s[i] ?? "") === "]" || i >= s.length) {
           i++;
 
           return out;
@@ -132,11 +135,11 @@ function flow(s: string): Yaml {
         out.push(value());
         ws();
 
-        if (s.charAt(i) === ",") i++;
+        if ((s[i] ?? "") === ",") i++;
       }
     }
 
-    if (s.charAt(i) === "{") {
+    if ((s[i] ?? "") === "{") {
       i++;
 
       const out = new Map<string, Yaml>();
@@ -144,7 +147,7 @@ function flow(s: string): Yaml {
       for (;;) {
         ws();
 
-        if (s.charAt(i) === "}" || i >= s.length) {
+        if ((s[i] ?? "") === "}" || i >= s.length) {
           i++;
 
           return out;
@@ -156,7 +159,7 @@ function flow(s: string): Yaml {
 
         let v: Yaml = null;
 
-        if (s.charAt(i) === ":") {
+        if ((s[i] ?? "") === ":") {
           i++;
           v = value();
         }
@@ -164,7 +167,7 @@ function flow(s: string): Yaml {
         out.set(String(k), v);
         ws();
 
-        if (s.charAt(i) === ",") i++;
+        if ((s[i] ?? "") === ",") i++;
       }
     }
 
@@ -185,10 +188,10 @@ interface Line {
 export function parseYaml(text: string | null | undefined): Yaml {
   const lines: Line[] = [];
 
-  for (const raw of (text ?? "").replace(/\t/g, "  ").split(/\r?\n/)) {
+  for (const raw of Str.split(Str.replaceAll("\t", "  ")(text ?? ""), /\r?\n/)) {
     if (/^\s*(---|\.\.\.)\s*$/.test(raw)) continue;
 
-    lines.push({ raw, pad: raw.length - raw.trimStart().length, text: uncomment(raw).trim() });
+    lines.push({ raw, pad: raw.length - Str.trimStart(raw).length, text: Str.trim(uncomment(raw)) });
   }
 
   const reader = new YamlLines(lines);
@@ -198,17 +201,20 @@ export function parseYaml(text: string | null | undefined): Yaml {
 
     const first = lines[reader.at];
 
-    return first ? reader.node(first.pad) : null;
+    return first === undefined ? null : reader.node(first.pad);
   } catch {
     return null;
   }
 }
 
+/** A list item's line: `-` alone or `- ` and its value. */
+const isItem = (text: string): boolean => text === "-" || Str.startsWith("- ")(text);
+
 /** A key line: `key:` (quoted or not), then what follows on the line. */
 const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s"'#][^:]*?)\s*:(?:\s+(.*)|$)/;
 
 /** A flow value (`[…]`, `{…}`) or a scalar, as written on one line. */
-const inline = (text: string): Yaml => (text.startsWith("[") || text.startsWith("{") ? flow(text) : scalar(text));
+const inline = (text: string): Yaml => (Str.startsWith("[")(text) || Str.startsWith("{")(text) ? flow(text) : scalar(text));
 
 /** parseYaml's walk over the file's lines, block by block: `at` is the line it reads next. */
 class YamlLines {
@@ -221,7 +227,7 @@ class YamlLines {
 
   /** Past blank and comment-only lines. */
   skip(): void {
-    while (this.at < this.lines.length && !this.lines[this.at]?.text) this.at++;
+    while (this.at < this.lines.length && (this.lines[this.at]?.text ?? "") === "") this.at++;
   }
 
   /** A block scalar's lines (| keeps newlines, > folds them), from the next line deeper than `pad`. */
@@ -229,26 +235,29 @@ class YamlLines {
     const out: string[] = [];
     let indent: number | null = null;
 
-    for (let l = this.lines[this.at]; l; l = this.lines[this.at]) {
-      if (l.raw.trim() && l.pad <= pad) break;
+    for (let l = this.lines[this.at]; l !== undefined; l = this.lines[this.at]) {
+      const blank = Str.trim(l.raw) === "";
 
-      if (l.raw.trim()) indent ??= l.pad;
+      if (!blank && l.pad <= pad) break;
 
-      out.push(l.raw.trim() ? l.raw.slice(indent ?? 0) : "");
+      if (!blank) indent ??= l.pad;
+
+      out.push(blank ? "" : Str.slice(indent ?? 0)(l.raw));
       this.at++;
     }
 
-    while (out.length && !out[out.length - 1]) out.pop();
+    while (out.length > 0 && (out[out.length - 1] ?? "") === "") out.pop();
 
-    const keep = style.includes("+"), strip = style.includes("-");
-    const body = style.startsWith(">") ? out.join("\n").replace(/([^\n])\n(?=[^\n])/g, "$1 ") : out.join("\n");
+    const keep = Str.includes("+")(style), strip = Str.includes("-")(style);
+    const joined = Arr.join(out, "\n");
+    const body = Str.startsWith(">")(style) ? Str.replace(/([^\n])\n(?=[^\n])/g, "$1 ")(joined) : joined;
 
-    return strip ? body : body + (keep ? "\n" : body ? "\n" : "");
+    return strip ? body : body + (keep || body !== "" ? "\n" : "");
   }
 
   /** The value after `key:` or `- ` on the same line, or the block under it. */
   after(rest: string, pad: number): Yaml {
-    const r = rest.trim();
+    const r = Str.trim(rest);
 
     if (/^[|>][-+0-9]*$/.test(r)) {
       this.at++;
@@ -258,13 +267,13 @@ class YamlLines {
 
     this.at++;
 
-    if (r) return inline(r);
+    if (r !== "") return inline(r);
 
     this.skip();
 
     const next = this.lines[this.at];
 
-    if (next && (next.pad > pad || (next.pad === pad && next.text.startsWith("- ")))) return this.node(next.pad);
+    if (next !== undefined && (next.pad > pad || (next.pad === pad && Str.startsWith("- ")(next.text)))) return this.node(next.pad);
 
     return null;
   }
@@ -275,9 +284,9 @@ class YamlLines {
 
     const first = this.lines[this.at];
 
-    if (!first) return null;
+    if (first === undefined) return null;
 
-    if (first.text === "-" || first.text.startsWith("- ")) return this.list(pad);
+    if (isItem(first.text)) return this.list(pad);
 
     if (KEY.test(first.text)) return this.map(pad);
 
@@ -295,11 +304,11 @@ class YamlLines {
 
       const l = this.lines[this.at];
 
-      if (!l || l.pad !== pad || !(l.text === "-" || l.text.startsWith("- "))) break;
+      if (l === undefined || l.pad !== pad || !isItem(l.text)) break;
 
-      const rest = l.text.slice(1).trimStart();
+      const rest = Str.trimStart(Str.slice(1)(l.text));
 
-      if (KEY.test(rest) && !rest.startsWith("[") && !rest.startsWith("{")) {
+      if (KEY.test(rest) && !Str.startsWith("[")(rest) && !Str.startsWith("{")(rest)) {
         // `- key: v` starts a map whose keys sit where `key` does.
         const inner = pad + (l.text.length - rest.length);
 
@@ -322,7 +331,7 @@ class YamlLines {
 
       const l = this.lines[this.at];
 
-      if (!l || l.pad !== pad) break;
+      if (l === undefined || l.pad !== pad) break;
 
       const [, key, rest] = KEY.exec(l.text) ?? [];
 
@@ -349,9 +358,11 @@ function triggers(doc: Yaml): Yaml {
 }
 
 /** The kinds of input a workflow_dispatch declares. */
-export const isInputType = literal("string", "choice", "boolean", "number", "environment");
+export const InputTypeSchema = Schema.Literals(["string", "choice", "boolean", "number", "environment"]);
 
-export type InputType = Guarded<typeof isInputType>;
+export const isInputType = Schema.is(InputTypeSchema);
+
+export type InputType = typeof InputTypeSchema.Type;
 
 /** A workflow_dispatch input as the file declares it. */
 export interface Input {
@@ -379,8 +390,8 @@ function inputOf(name: string, spec: Yaml): Input {
 
   return {
     name, type,
-    options: type === "choice" && isYamlList(options) ? options.map((o) => String(o)) : [],
-    description: description === undefined || description === null ? "" : String(description).trim(),
+    options: type === "choice" && isYamlList(options) ? Arr.map(options, (o) => String(o)) : [],
+    description: description === undefined || description === null ? "" : Str.trim(String(description)),
     required: required === true || required === "true",
     default: s.get("default") ?? null,
   };
@@ -399,7 +410,7 @@ export function dispatchOf(yaml: string): Dispatch | null {
   const dispatch = on.get("workflow_dispatch");
   const raw = isYamlMap(dispatch) ? dispatch.get("inputs") : undefined;
 
-  return { inputs: isYamlMap(raw) ? [...raw].map(([name, spec]) => inputOf(name, spec)) : [] };
+  return { inputs: isYamlMap(raw) ? Arr.map(Arr.fromIterable(raw), ([name, spec]) => inputOf(name, spec)) : [] };
 }
 
 /** An input's starting answer: its default, else what GitHub's form starts with (a choice's first option, off, empty). */
@@ -415,7 +426,7 @@ export function startValue(input: Input): string | boolean {
 
 /** What's wrong with an answer, or "" (required ones filled, numbers numeric, choices among the options). */
 export function inputError(input: Input, value: string | boolean | null | undefined, envs: readonly string[] | null = null): string {
-  const v = isString(value) ? value.trim() : value;
+  const v = Predicate.isString(value) ? Str.trim(value) : value;
 
   if (input.type === "boolean") return "";
 
@@ -427,15 +438,15 @@ export function inputError(input: Input, value: string | boolean | null | undefi
 
   if (input.type === "number" && !/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return "A number.";
 
-  if (input.type === "choice" && !input.options.includes(s)) return `One of: ${input.options.join(", ")}.`;
+  if (input.type === "choice" && !Arr.contains(input.options, s)) return `One of: ${Arr.join(input.options, ", ")}.`;
 
-  if (input.type === "environment" && envs && envs.length && !envs.includes(s)) return `An environment of the repo: ${envs.join(", ")}.`;
+  if (input.type === "environment" && envs !== null && envs.length > 0 && !Arr.contains(envs, s)) return `An environment of the repo: ${Arr.join(envs, ", ")}.`;
 
   return "";
 }
 
 /** The file name gh's workflow run takes (`.github/workflows/ci.yml` -> `ci.yml`). */
-export const workflowFile = (path: string | null | undefined): string => (path ?? "").split("/").pop() ?? "";
+export const workflowFile = (path: string | null | undefined): string => Arr.lastNonEmpty(Str.split(path ?? "", "/"));
 
 /** What dispatchArgs reads of a workflow. */
 export interface Runnable {
@@ -450,7 +461,7 @@ export function dispatchArgs(workflow: Runnable, ref: string, inputs: readonly I
   for (const i of inputs) {
     const v = values.get(i.name);
 
-    args.push("-f", `${i.name}=${i.type === "boolean" ? (v ? "true" : "false") : String(v ?? "").trim()}`);
+    args.push("-f", `${i.name}=${i.type === "boolean" ? (v === true ? "true" : "false") : Str.trim(String(v ?? ""))}`);
   }
 
   return args;
@@ -471,8 +482,8 @@ const when = (v: string | null | undefined) => Date.parse(v ?? "0");
 export function newRun(runs: readonly Run[] | null | undefined, { ref, since, known = [] }: Sent): Run | null {
   const seen = new Set(known);
 
-  const fresh = (runs ?? []).filter((r) => !seen.has(r.id) && (r.event ?? "workflow_dispatch") === "workflow_dispatch"
-    && (!ref || r.head_branch === ref) && when(r.created_at ?? r.run_started_at) >= since - 15000);
+  const fresh = Arr.filter(runs ?? [], (r) => !seen.has(r.id) && (r.event ?? "workflow_dispatch") === "workflow_dispatch"
+    && (ref === "" || r.head_branch === ref) && when(r.created_at ?? r.run_started_at) >= since - 15000);
 
   fresh.sort((a, b) => when(b.created_at) - when(a.created_at));
 
@@ -483,7 +494,7 @@ export function newRun(runs: readonly Run[] | null | undefined, { ref, since, kn
 
 /** One argv as a shell line a person can read and paste. */
 export function shellLine(cmd: string, args: readonly string[]): string {
-  const q = (a: string) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`);
+  const q = (a: string) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(a) ? a : `'${Str.replaceAll("'", "'\\''")(a)}'`);
 
-  return [cmd, ...args].map(q).join(" ");
+  return Arr.join(Arr.map([cmd, ...args], q), " ");
 }

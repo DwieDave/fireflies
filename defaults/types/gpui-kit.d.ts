@@ -523,12 +523,10 @@ declare module "gpui-kit" {
     context?: string;
   }
 
-  /** What an `on_scroll_wheel` handler receives. */
-  export interface ScrollWheelEvent {
-    /** The scroll distance in pixels, whichever unit the device reported. */
-    delta: Point;
-    /** The same distance in lines, when the device reported lines. */
-    delta_lines?: Point;
+  /** What an `on_pinch` handler receives. */
+  export interface PinchEvent {
+    /** The change in scale for this step: 0.1 is 10% larger, negative is smaller. */
+    delta: number;
     touch_phase: "started" | "moved" | "ended" | "cancelled";
     position: Point;
     local_position?: Point;
@@ -536,10 +534,12 @@ declare module "gpui-kit" {
     modifiers: Modifiers;
   }
 
-  /** What an `on_pinch` handler receives: a trackpad pinch. */
-  export interface PinchEvent {
-    /** The change in magnification: 0.1 is ten percent larger, -0.1 smaller. */
-    delta: number;
+  /** What an `on_scroll_wheel` handler receives. */
+  export interface ScrollWheelEvent {
+    /** The scroll distance in pixels, whichever unit the device reported. */
+    delta: Point;
+    /** The same distance in lines, when the device reported lines. */
+    delta_lines?: Point;
     touch_phase: "started" | "moved" | "ended" | "cancelled";
     position: Point;
     local_position?: Point;
@@ -801,6 +801,12 @@ declare module "gpui-kit" {
      * for any button.
      */
     on_mouse_down_out<Self extends Element>(this: Self, handler: (event: MouseButtonEvent, cx: Context) => void): Self;
+    /**
+     * Makes a plain layout element a native file/folder drag source. Paths are
+     * absolute on `on` (a host-owned machine name); omitted/null means local.
+     * The payload keeps its source machine, and an ordinary click still works.
+     */
+    drag_paths<Self extends Element>(this: Self, paths: string[], options?: { on?: string | null }): Self;
     /** Files dropped from outside the app, as absolute paths. Use on a plain layout element. */
     on_drop<Self extends Element>(this: Self, handler: (event: { paths: string[] }, cx: Context) => void): Self;
     /**
@@ -813,8 +819,8 @@ declare module "gpui-kit" {
      */
     on_scroll_wheel<Self extends Element>(this: Self, handler: (event: ScrollWheelEvent, cx: Context) => void): Self;
     /**
-     * GPUI `InteractiveElement::on_pinch`: a trackpad pinch over this element
-     * (macOS), for a zoom. Use on a plain layout element.
+     * GPUI `InteractiveElement::on_pinch`: a two-finger trackpad pinch over
+     * this element, on platforms that report one.
      */
     on_pinch<Self extends Element>(this: Self, handler: (event: PinchEvent, cx: Context) => void): Self;
     /**
@@ -1059,6 +1065,11 @@ declare module "gpui-kit" {
      * Optional. Without one the list keeps a position of its own, filed under
      * the id it was built with — which is the same place a `Scrollbar` named
      * after that id looks, so the bar works either way.
+     *
+     * `list` and `uniform_list` always keep their own position: a handle
+     * passed to them is ignored (the app logs a warning), so pair a
+     * `Scrollbar` of the same name instead. `v_virtual_list` and
+     * `h_virtual_list` use the handle.
      */
     track_scroll<Self extends Element>(this: Self, handle: import("gpui-base").VirtualListScrollHandle | import("gpui-base").ScrollHandle): Self;
     /**
@@ -20330,6 +20341,11 @@ declare module "gpui-kit" {
   /**
    * GPUI's own lazy list: rows of any height, measured as they are drawn.
    *
+   * Exported from `gpui-kit`, where `div` is — not from `gpui-base`. The
+   * `gpui-base` pair is `v_virtual_list` / `h_virtual_list`. Like every lazy
+   * list, it needs a definite height from its container: a `flex_1()` chain
+   * with no explicit height anywhere lays out at zero and draws nothing.
+   *
    * Where `v_virtual_list` places rows by the sizes the script states, `list`
    * asks nothing about size. `render(index, cx)` is called for each item that
    * is on screen, from inside layout as a virtual list's renderer is, and the
@@ -20378,6 +20394,10 @@ declare module "gpui-kit" {
   /**
    * GPUI's own uniform list: one row is measured and every row takes its
    * height.
+   *
+   * Exported from `gpui-kit`, same as `list`; the `gpui-base` pair is
+   * `v_virtual_list` / `h_virtual_list`. It needs a definite height from its
+   * container too.
    *
    * The same contract as `v_virtual_list` with a single size, without the
    * size: the first row (or the one `with_item_to_measure_index` names) is
@@ -21354,6 +21374,10 @@ declare module "gpui-base" {
      * default) brings it to the near edge, `"center"` to the middle.
      */
     scroll_to_item(index: number, strategy?: "top" | "center"): void;
+    /**
+     * Puts the last item on screen before the next frame: the last of the items
+     * that frame draws, so it can be called in `init()` or right after adding items.
+     */
     scroll_to_bottom(): void;
     /**
      * Where the list is scrolled to after its last layout: the content's
@@ -21391,6 +21415,8 @@ declare module "gpui-base" {
     replace_with_token(token: InlineToken): void;
     replace_range_with_token(range: InputRange, token: InlineToken): void;
     set_selected_range(range: InputRange): void;
+    /** The selection (UTF-16 offsets); start equals end at a plain cursor. */
+    selected_range(): InputRange;
     replace(text: string): void;
     value(): string;
     /** Plain text, or a content snapshot to restore its tokens as well. */
@@ -21460,6 +21486,8 @@ declare module "gpui-base" {
     replace_with_token(token: InlineToken): void;
     replace_range_with_token(range: InputRange, token: InlineToken): void;
     set_selected_range(range: InputRange): void;
+    /** The selection (UTF-16 offsets); start equals end at a plain cursor. */
+    selected_range(): InputRange;
     replace(text: string): void;
     value(): string;
     /** Plain text, or a content snapshot to restore its tokens as well. */
@@ -21496,6 +21524,11 @@ declare module "gpui-base" {
     value(): string;
     /** Programmatic replacement works even in readonly mode; it resets undo and the caret. */
     set_value(value: string): void;
+    /** The selection (UTF-16 offsets); start equals end at a plain cursor. */
+    selected_range(): InputRange;
+    set_selected_range(range: InputRange): void;
+    /** Replaces the selection with `text`, as typing would (one undo step). */
+    replace(text: string): void;
     on(event: "change" | "submit" | "focus" | "blur" | "paste_other", handler: (event: InputEvent, cx: Context) => void): boolean;
     on(event: "hover", handler: (event: EditorHoverEvent, cx: Context) => void): boolean;
     /** The text scrolled up or down (wheel, caret, `scroll_to_line`): `top_line()` says where. */
@@ -21504,6 +21537,8 @@ declare module "gpui-base" {
      *  the app's keys see it; return true to take it (nothing else sees it, nothing is typed).
      *  For a modal scheme (vim); return false for text in insert mode, so IME keeps working. */
     on(event: "key", handler: (event: KeyEvent, cx: Context) => boolean): boolean;
+    /** Moves the keyboard onto the editor. */
+    focus(): void;
     release(): boolean;
     /** The caret. */
     cursor(): EditorPosition;
@@ -21519,8 +21554,9 @@ declare module "gpui-base" {
     find_state(): EditorFindState;
     /** Ends the search and its highlights; the query is kept. */
     find_close(): void;
-    /** Replaces the current match (and moves on), or every match. */
-    replace(text: string, all?: boolean): EditorFindState;
+    /** With `all` given: replaces the search's current match (and moves on), or every match.
+     *  `replace(text)` alone replaces the selection (above). */
+    replace(text: string, all: boolean): EditorFindState;
     /** Applies text edits as one undoable change (a formatter's, a server's). */
     edit(edits: { start: EditorPosition; end: EditorPosition; text: string }[]): void;
     /** Replaces the underlined problems (the hover over them is yours to draw). */

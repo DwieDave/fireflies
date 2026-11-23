@@ -1,16 +1,18 @@
 // The bar on top of a peeked agent (an overlay the agents list opens for a
 // sub-agent, or a terminal address link) or a floating terminal
 // (terminal.open {place: "float"}, pane.float): who it is and how it's doing,
-// ↗ to go to its pane (or, without one, keep it as a tab of the shown space),
-// ⇥ to dock it as a split right of the focused pane, ✕ to close (it keeps
-// running); a float also has ⏻ to end it. A float with a second view
-// (terminal.open {place: "float", view}) gets a switch between its views
-// (float.view; the shown one is terminals()' floating_view).
+// ↗ to go to its pane (or, without one, keep it as a tab in a space on its
+// machine: the shown one, else its nearest ancestor's, else the first),
+// ⇥ to dock it as a split right of the focused pane (when the shown space is
+// on its machine), ✕ to close (it keeps running); a float also has ⏻ to end
+// it. A float with a second view (terminal.open {place: "float", view}) gets a
+// switch between its views (float.view; the shown one is terminals()'
+// floating_view).
 // Props: { terminal, float, views, overlay }.
 
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { agents, terminals, panes, run, theme, props, closeOverlay } from "herdr";
+import { agents, terminals, panes, spaces, run, theme, props, closeOverlay } from "herdr";
 
 const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 // The icon from the app's program table: a one-color glyph or a picture.
@@ -31,6 +33,27 @@ export default class Peek extends View {
   status() {
     const addr = props()?.terminal;
     return agents().find((a) => a.address === addr)?.status ?? this.term()?.status ?? null;
+  }
+
+  // A pane stays on its terminal's machine (terminal.keep refuses another one's space).
+  keepSpace(terminal, parent) {
+    const machine = terminal?.includes("/") ? terminal.split("/")[0] : null;
+    const all = spaces();
+    const shown = all.find((s) => s.active) ?? all[0];
+    if ((shown?.machine ?? null) === machine) return shown;
+    const there = all.filter((s) => (s.machine ?? null) === machine);
+    if (there.length < 2) return there[0];
+    const allPanes = panes();
+    const allTerminals = terminals();
+    const seen = new Set();
+    while (parent && !seen.has(parent)) {
+      seen.add(parent);
+      const tab = allPanes.find((p) => p.terminal === parent)?.tab;
+      const space = there.find((s) => s.tabs.some((c) => c.id === tab));
+      if (space) return space;
+      parent = allTerminals.find((t) => t.address === parent)?.parent;
+    }
+    return there[0];
   }
 
   button(t, id, label, onClick) {
@@ -79,6 +102,7 @@ export default class Peek extends View {
     const pic = icon(k?.program, 14, t.foreground);
     const parent = k?.parent ? terminals().find((p) => p.address === k.parent) : null;
     const home = panes().some((p) => p.terminal === terminal);
+    const space = home ? null : this.keepSpace(terminal, k?.parent);
     const glyph = st === "working" ? SPIN[0] : st === "idle" ? "○" : st ? "●" : "·";
     return h_flex()
       .size_full()
@@ -96,13 +120,17 @@ export default class Peek extends View {
       .when(Boolean(parent), (el) => el.child(div().truncate().text_color(t.dim).child(`from ${parent.name || parent.address}`)))
       .child(div().flex_1())
       .when(Array.isArray(views) && views.length > 1, (el) => el.child(this.views(t, views, k?.floating_view ?? 0)))
-      .child(
-        this.button(t, "keep", home ? "↗ go to" : "↗ keep", () => {
-          run(home ? "pane.focus" : "terminal.keep", { terminal });
-          closeOverlay(overlay);
-        }),
+      .when(home || Boolean(space), (el) =>
+        el.child(
+          this.button(t, "keep", home ? "↗ go to" : "↗ keep", () => {
+            if (space && !space.active) run("space.select", { id: space.id });
+            run(home ? "pane.focus" : "terminal.keep", { terminal });
+            closeOverlay(overlay);
+          }),
+        ),
       )
-      .when(!home, (el) =>
+      // terminal.keep refuses a pane of another machine's space.
+      .when(!home && Boolean(space?.active), (el) =>
         el.child(
           this.button(t, "dock", "⇥ dock", () => {
             run("terminal.keep", { terminal, place: "right" });

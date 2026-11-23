@@ -17,7 +17,7 @@
 // - reports what failed the mod's own way (`report`: its `say`, a toast),
 //   and redraws the copy when an effect it started ends.
 
-import { Array as Arr, Cause, Clock, Context, Duration, Effect, Exit, Fiber, ManagedRuntime } from "effect";
+import { Array as Arr, Cause, Clock, Context, Duration, Effect, Exit, Fiber, ManagedRuntime, String as Str } from "effect";
 import type { Layer } from "effect";
 import type { AsyncContext } from "gpui-kit";
 
@@ -166,12 +166,20 @@ export function modRuntime<R>(layer: Layer.Layer<R>): ModRuntime<R> {
   return { attach, now: (effect) => runtime.runSync(effect), runtime };
 }
 
-/** A moment's local wall-clock fields: what a view prints ("14:05", "Tue"). */
+/** A moment's local wall-clock fields: what a view prints ("14:05", "Tue", "2026-11-16"). */
 export interface LocalTime {
+  readonly year: number;
+  /** 1 January … 12 December. */
+  readonly month: number;
+  /** The day of the month, 1 … 31. */
+  readonly day: number;
   readonly hours: number;
   readonly minutes: number;
+  readonly seconds: number;
   /** 0 Sunday … 6 Saturday. */
   readonly weekday: number;
+  /** The zone's offset from UTC at that moment, in minutes (east positive: 60 for CET). */
+  readonly offset: number;
 }
 
 /**
@@ -183,5 +191,29 @@ export function localTime(ms: number): LocalTime {
   // oxlint-disable-next-line effecttsgo/global-date
   const d = new Date(ms);
 
-  return { hours: d.getHours(), minutes: d.getMinutes(), weekday: d.getDay() };
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+    hours: d.getHours(),
+    minutes: d.getMinutes(),
+    seconds: d.getSeconds(),
+    weekday: d.getDay(),
+    offset: -d.getTimezoneOffset(),
+  };
+}
+
+const two = (n: number): string => Str.padStart(2, "0")(String(n));
+
+/**
+ * `ms` as a plain local stamp: "2026-11-16 14:05" (`seconds`: "2026-11-16
+ * 14:05:09"; `zone`: "… +0100", as git prints one).
+ */
+export function localStamp(ms: number, show: { readonly seconds?: boolean; readonly zone?: boolean } = {}): string {
+  const t = localTime(ms);
+  const time = `${two(t.hours)}:${two(t.minutes)}${show.seconds === true ? `:${two(t.seconds)}` : ""}`;
+  const off = Math.abs(t.offset);
+  const zone = show.zone === true ? ` ${t.offset < 0 ? "-" : "+"}${two(Math.floor(off / 60))}${two(off % 60)}` : "";
+
+  return `${t.year}-${two(t.month)}-${two(t.day)} ${time}${zone}`;
 }

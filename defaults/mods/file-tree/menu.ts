@@ -6,9 +6,10 @@
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import type { Theme } from "herdr";
+import { window as appWindow } from "herdr";
 import { h_flex, v_flex } from "gpui-base";
 import type { Row, TreeRow, Act } from "./logic.ts";
-import { ROW_H, keyColumn, menuItems, setMenuItems, treeTop } from "./logic.ts";
+import { ROW_H, keyColumn, menuItems, revealLabel, setMenuItems, treeTop } from "./logic.ts";
 import type { Menu } from "./state.ts";
 import type { Anchor, Rect } from "@fireflies/menu-place";
 import { placeMenu } from "@fireflies/menu-place";
@@ -16,7 +17,7 @@ import { viewerFor, tilde, MENU_ROW } from "./state.ts";
 import { stop, dither } from "./paint.ts";
 import { toggleLook } from "./look.ts";
 import { openWeb, reveal } from "./search.ts";
-import { closePane, copyPath, copySet, nvim, openPane, openViewer, terminalEdit } from "./opening.ts";
+import { closePane, copyPath, copySet, nvim, openPane, openViewer, revealRow, terminalEdit } from "./opening.ts";
 import type { default as Files } from "./main.ts";
 import { askDelete, clipNow, cutRow, paste, startDraft, startRename } from "./file-ops.ts";
 import { scrolled, setOf, treeBox } from "./drag.ts";
@@ -46,9 +47,11 @@ export function openMenu(v: Files, row: Row, cx: Context | null, at: Anchor = ro
   // On a marked row (with others marked): the set's entries first.
   const set = row.path && v.marked.has(row.path) ? setOf(v, row) : [];
   const clip = Boolean(clipNow(v));
+  // Another machine's files have no file manager here.
+  const reveal = v.on ? null : revealLabel(appWindow().platform);
 
-  const all = set.length > 1 ? setMenuItems(row, set.length, { pane: v.alone, clip, look: v.lookState.on })
-    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: !v.on, viewer: !row.dir && Boolean(viewerFor(row.path)), databases: !v.on && v.dbMod });
+  const all = set.length > 1 ? setMenuItems(row, set.length, { pane: v.alone, clip, look: v.lookState.on, reveal })
+    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: !v.on, viewer: !row.dir && Boolean(viewerFor(row.path)), databases: !v.on && v.dbMod, reveal });
 
   const items = row.head ? all.filter((x) => x.act !== "root") : all;
 
@@ -82,6 +85,8 @@ export function runAct(v: Files, act: Act, row: Row, cx: Context): void {
     case "web": openWeb(v, p, cx); break;
     case "databases": openInDatabases(`${v.root}/${p}`, "the files pane"); break;
     case "copy": copyPath(v, p, cx); break;
+    case "copy-rel": copyPath(v, p, cx, true); break;
+    case "reveal": revealRow(v, row); break;
     case "close": closePane(v); break;
     case "new-file": startDraft(v, "file", row, cx); break;
     case "new-folder": startDraft(v, "folder", row, cx); break;

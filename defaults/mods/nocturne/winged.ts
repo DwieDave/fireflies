@@ -15,6 +15,7 @@ import type { Color, Element } from "gpui-kit";
 import type { Status, Theme } from "herdr";
 import { ART, LOGO, statusColor } from "./kit.ts";
 import { calm } from "./flight.ts";
+import { CHECK } from "./sky-plan.ts";
 
 /** What the mark is drawn from: an agent's program (its key, its own icon and
  *  whether to tint it) and the app it reports. AgentInfo and a terminal's
@@ -82,16 +83,28 @@ export function wingedMark(a: Winged, color: Color, size = 16, beat: Beat | null
     .child(div().absolute().left(4 * s).top(2 * s).size(size).child(flyMark(a, color, size)));
 }
 
+/** A check on a dark plate, `size` px, set on a done agent's mark: the
+ *  sidebar's firefly and rail cell (12), its tab and pane header (CHROME_DONE). */
+export function doneBadge(t: Theme, size = 12): Element {
+  return div().size(size).flex().items_center().justify_center().bg(t.background).border(1).border_color(t.done)
+    .child(svg(CHECK).size(Math.round((size * 2) / 3)).text_color(t.done));
+}
+
+/** The done check's plate on a tab's or a header's mark (layout px). */
+export const CHROME_DONE = 8;
+
 /**
  * An agent's one mark on its tab and in its pane header: the sidebar's
  * winged mark (CHROME_MARK px) in the colour the sidebar gives its status.
  * Working, its wings beat a little and slowly (CHROME_BEAT; held still when
  * the window is in the back or less motion is asked for); blocked, it blinks;
- * done and resting, it holds still.
+ * done and resting, it holds still; done also wears the sidebar's check
+ * (doneBadge) on the mark's lower right corner, as its firefly does.
  */
 export function statusMark(t: Theme, a: Winged, status: Status, id: string): Element {
-  const el = div().id(id).flex_none()
-    .child(wingedMark(a, statusColor(t, status), CHROME_MARK, status === "working" && !calm() ? CHROME_BEAT : null));
+  const el = div().id(id).relative().flex_none()
+    .child(wingedMark(a, statusColor(t, status), CHROME_MARK, status === "working" && !calm() ? CHROME_BEAT : null))
+    .when(status === "done", (x) => x.child(doneBadge(t, CHROME_DONE).absolute().top(7).left(9)));
 
   return status === "blocked" ? el.loop("opacity", { from: 0.15, to: 1, period: 700, easing: "linear" }) : el;
 }

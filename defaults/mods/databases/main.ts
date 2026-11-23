@@ -48,7 +48,7 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Alive, Ask, Catalog, ForwardAsk, ServerDbs, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
+import type { ConnectArgs, KeptCopy, Alive, Ask, Catalog, ForwardAsk, ServerDbs, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
@@ -65,7 +65,9 @@ import { loadQueries, saveQueries } from "./queries.ts";
 import { frame } from "./chrome.ts";
 import type { ConnForm } from "./conn-form.ts";
 import type { ExportForm } from "./export-form.ts";
-import { here, start, command, handoverOut, newSlot } from "./opening.ts";
+import { here, start, command, handoverOut, newSlot, restoreFound } from "./opening.ts";
+import type { SpacePlace } from "./lastview.ts";
+import { shownSpace } from "./lastview.ts";
 import { IO, clientOf, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import type { FolderEnv } from "./folderenv.ts";
@@ -97,6 +99,12 @@ export default class Databases extends View {
   slot: string | null = null;
   folder: string | null = null;
   on: string | null = null;
+  /** The space it opened in: where it's kept (lastview.ts). */
+  space: string | null = null;
+  /** What each sent connection was sent with (kept for its space: never a secret). */
+  sentArgs = new Map<string, ConnectArgs>();
+  /** A kept place whose connection isn't listed yet (one the folder's discovery may find). */
+  lateKept: KeptCopy | SpacePlace | null = null;
   size: Size = { width: 1100, height: 720 };
   handle: FocusHandle | null = null;
   closed = false;
@@ -214,6 +222,7 @@ export default class Databases extends View {
     this.dividers = new Dividers(keptSizes(this.overlay !== null), (sizes) => keepSizes(this.overlay !== null, sizes));
     this.folder = h.folder;
     this.on = h.on;
+    this.space = shownSpace();
     this.handle = cx.focus_handle();
     bindTab(cx);
     this.handle.focus();
@@ -235,6 +244,7 @@ export default class Databases extends View {
 
       await start(this, pr, cx);
       await discover(this, cx, env);
+      restoreFound(this, cx);
       // Each listed kind's client looked for once the folder's environment is known: a row whose
       // client is missing says so before it's connected to.
       await env;

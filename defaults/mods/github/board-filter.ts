@@ -2,7 +2,8 @@
 // filter syntax, the part the tab speaks, parsed and matched against a card;
 // a field's value read by what it is. No herdr imports, so scripts/ tests it.
 
-import type { Board, Content, Field, FieldType, FieldValue, Item, Iteration } from "./board.ts";
+import { Array as Arr, Option, String as Str } from "effect";
+import type { Board, Content, Field, FieldValue, Item, Iteration } from "./board.ts";
 
 // ---- the filter: GitHub's syntax, the part the tab speaks
 
@@ -25,19 +26,15 @@ export function parseFilter(text: string | null | undefined): Filter {
   const terms: Term[] = [], words: string[] = [];
   const re = /(-?)([A-Za-z][\w-]*):((?:"[^"]*"|[^\s"]+)(?:,(?:"[^"]*"|[^\s",]+))*)|"([^"]*)"|(\S+)/g;
 
-  for (const [, neg, key, list, quoted, word] of (text ?? "").matchAll(re)) {
-    if (key) {
-      const values = [...(list ?? "").matchAll(/"([^"]*)"|([^,]+)/g)].flatMap((v) => {
-        const value = (v[1] ?? v[2] ?? "").trim();
+  for (const [, neg, key, list, quoted, word] of Str.matchAll(re)(text ?? "")) {
+    if (key !== undefined && key !== "") {
+      const values = Arr.filter(Arr.map(Arr.fromIterable(Str.matchAll(/"([^"]*)"|([^,]+)/g)(list ?? "")), (v) => Str.trim(v[1] ?? v[2] ?? "")), Str.isNonEmpty);
 
-        return value === "" ? [] : [value];
-      });
-
-      terms.push({ key: key.toLowerCase(), values, neg: neg === "-" });
+      terms.push({ key: Str.toLowerCase(key), values, neg: neg === "-" });
     } else {
-      const w = (quoted ?? word ?? "").trim();
+      const w = Str.trim(quoted ?? word ?? "");
 
-      if (w) words.push(w.toLowerCase());
+      if (w !== "") words.push(Str.toLowerCase(w));
     }
   }
 
@@ -55,76 +52,89 @@ export function filterTokens(text: string | null | undefined): FilterToken[] {
   const out: FilterToken[] = [];
   const f = parseFilter(text);
 
-  for (const t of f.terms) out.push({ kind: "key", text: `${t.neg ? "-" : ""}${t.key}:` }, { kind: "value", text: t.values.map((v) => (/\s/.test(v) ? `"${v}"` : v)).join(",") });
+  for (const t of f.terms) out.push({ kind: "key", text: `${t.neg ? "-" : ""}${t.key}:` }, { kind: "value", text: Arr.join(Arr.map(t.values, (v) => (/\s/.test(v) ? `"${v}"` : v)), ",") });
 
   for (const w of f.words) out.push({ kind: "word", text: w });
 
   return out;
 }
 
-export const lower = (s: string | null | undefined) => (s ?? "").toLowerCase();
+export const lower = (s: string | null | undefined): string => Str.toLowerCase(s ?? "");
 
 // A field by the name a filter gives it: GitHub writes "Target date" as target-date.
-const dashed = (s: string) => lower(s).trim().replace(/\s+/g, "-");
-const fieldByName = (board: Board, name: string) => board.fields.find((f) => dashed(f.name) === dashed(name)) ?? null;
+const dashed = (s: string) => Str.replace(/\s+/g, "-")(Str.trim(lower(s)));
+const fieldByName = (board: Board, name: string) => Option.getOrNull(Arr.findFirst(board.fields, (f) => dashed(f.name) === dashed(name)));
 
 // ---- a field's value, by what it is
 
-export const selectOf = (v: FieldValue | undefined) => (v && "optionId" in v ? v : null);
+export const selectOf = (v: FieldValue | undefined) => (v !== undefined && "optionId" in v ? v : null);
 
-export const iterationOf = (v: FieldValue | undefined) => (v && "iterationId" in v ? v : null);
+export const iterationOf = (v: FieldValue | undefined) => (v !== undefined && "iterationId" in v ? v : null);
 
-export const textOf = (v: FieldValue | undefined) => (v && "text" in v ? v.text : null);
+export const textOf = (v: FieldValue | undefined) => (v !== undefined && "text" in v ? v.text : null);
 
-export const numberOf = (v: FieldValue | undefined) => (v && "number" in v ? v.number : null);
+export const numberOf = (v: FieldValue | undefined) => (v !== undefined && "number" in v ? v.number : null);
 
-export const dateOf = (v: FieldValue | undefined) => (v && "date" in v ? v.date : null);
+export const dateOf = (v: FieldValue | undefined) => (v !== undefined && "date" in v ? v.date : null);
 
-export const namesOf = (v: FieldValue | undefined) => (v && "names" in v ? v.names : null);
+export const namesOf = (v: FieldValue | undefined) => (v !== undefined && "names" in v ? v.names : null);
 
-/** Which iteration `@current`, `@next` or `@previous` means today (or null). */
-export function iterationAt(field: Field | null | undefined, word: string, now = Date.now()): Iteration | null {
+/** Where `word` (`@current`, `@next`, `@previous`) points from `at`, the index of the iteration running now
+ *  (half way between two when none runs); NaN for another word. */
+function iterationStep(word: string, at: number): number {
+  switch (word) {
+    case "@current": return at;
+    case "@next": return Math.floor(at) + 1;
+    case "@previous": return Math.ceil(at) - 1;
+    default: return NaN;
+  }
+}
+
+/** The index of the first iteration `test` takes, or -1. */
+const indexOf = (list: readonly Iteration[], test: (it: Iteration) => boolean): number => Option.getOrElse(Arr.findFirstIndex(list, test), () => -1);
+
+/** Which iteration `@current`, `@next` or `@previous` means at `now` (ms), or null. */
+export function iterationAt(field: Field | null | undefined, word: string, now: number): Iteration | null {
   const list = field?.type === "iteration" ? field.iterations : [];
   const day = 86400000;
 
-  const i = list.findIndex((it) => {
+  const i = indexOf(list, (it) => {
     const s = Date.parse(it.startDate);
 
     return now >= s && now < s + it.duration * day;
   });
 
-  const at = i >= 0 ? i : list.findIndex((it) => Date.parse(it.startDate) > now) - 0.5;
-  const k = word === "@current" ? at : word === "@next" ? Math.floor(at) + 1 : word === "@previous" ? Math.ceil(at) - 1 : NaN;
+  const k = iterationStep(word, i >= 0 ? i : indexOf(list, (it) => Date.parse(it.startDate) > now) - 0.5);
 
   return Number.isInteger(k) ? list[k] ?? null : null;
 }
 
 /** An item's words for one field, lowercased (what `field:value` compares against). */
-export function valuesOf(_board: Board, item: Item, field: Field, _now = Date.now()): string[] {
+export function valuesOf(_board: Board, item: Item, field: Field): string[] {
   const c = item.content, v = item.values.get(field.id);
 
   switch (field.type) {
     case "title": return [lower(c.title)];
-    case "assignees": return c.assignees.map((a) => lower(a.login));
-    case "labels": return c.labels.map((l) => lower(l.name));
-    case "repo": return c.repo ? [lower(c.repo), lower(c.repo.split("/")[1])] : [];
-    case "milestone": return c.milestone ? [lower(c.milestone)] : [];
+    case "assignees": return Arr.map(c.assignees, (a) => lower(a.login));
+    case "labels": return Arr.map(c.labels, (l) => lower(l.name));
+    case "repo": return repoWords(c.repo);
+    case "milestone": return c.milestone === null || c.milestone === "" ? [] : [lower(c.milestone)];
     case "single": {
       const s = selectOf(v);
 
-      return s ? [lower(s.name)] : [];
+      return s === null ? [] : [lower(s.name)];
     }
 
     case "iteration": {
       const it = iterationOf(v);
 
-      return it ? [lower(it.title)] : [];
+      return it === null ? [] : [lower(it.title)];
     }
 
     case "text": {
       const t = textOf(v);
 
-      return t ? [lower(t)] : [];
+      return t === null || t === "" ? [] : [lower(t)];
     }
 
     case "number": {
@@ -136,13 +146,13 @@ export function valuesOf(_board: Board, item: Item, field: Field, _now = Date.no
     case "date": {
       const d = dateOf(v);
 
-      return d ? [d] : [];
+      return d === null || d === "" ? [] : [d];
     }
 
     case "multi": {
       const names = namesOf(v);
 
-      return names ? names.split(",").map((s) => lower(s.trim())) : [];
+      return names === null || names === "" ? [] : Arr.map(Str.split(names, ","), (s) => lower(Str.trim(s)));
     }
 
     default: return [];
@@ -157,7 +167,8 @@ export interface FilterContext {
 
 const TYPE_WORDS = new Map<string, Content["kind"]>([["issue", "issue"], ["pr", "pr"], ["pullrequest", "pr"], ["draft", "draft"], ["draftissue", "draft"]]);
 
-const fieldOfType = (board: Board, type: FieldType) => board.fields.find((f) => f.type === type) ?? null;
+/** A repo's words: owner/name and the name alone. */
+const repoWords = (repo: string | null): string[] => (repo === null || repo === "" ? [] : [lower(repo), lower(Str.split(repo, "/")[1])]);
 
 function isWord(item: Item, word: string): boolean {
   const c = item.content;
@@ -180,44 +191,45 @@ function isWord(item: Item, word: string): boolean {
   return false;
 }
 
-function termMatches(board: Board, item: Item, t: Term, me: string | null, now: number): boolean {
+function termMatches(board: Board, item: Item, t: Term, me: string | null, now: number | null): boolean {
   const c = item.content;
-  const mine = (v: string) => (v === "@me" && me ? lower(me) : lower(v));
-  const any = (have: readonly string[], wanted: readonly string[]) => wanted.some((w) => have.includes(w));
+  const mine = (v: string) => (v === "@me" && me !== null && me !== "" ? lower(me) : lower(v));
+  const any = (have: readonly string[], wanted: readonly string[]) => Arr.some(wanted, (w) => have.includes(w));
 
   switch (t.key) {
-    case "is": return t.values.some((v) => isWord(item, v));
+    case "is": return Arr.some(t.values, (v) => isWord(item, v));
     // GitHub's own spelling is pull_request; underscores, dashes and spaces are dropped before the lookup.
-    case "type": return t.values.some((v) => TYPE_WORDS.get(lower(v).replace(/[\s_-]/g, "")) === c.kind);
-    case "assignee": return any(c.assignees.map((a) => lower(a.login)), t.values.map(mine));
-    case "label": return any(c.labels.map((l) => lower(l.name)), t.values.map(lower));
-    case "repo": return any(c.repo ? [lower(c.repo), lower(c.repo.split("/")[1])] : [], t.values.map(lower));
+    case "type": return Arr.some(t.values, (v) => TYPE_WORDS.get(Str.replace(/[\s_-]/g, "")(lower(v))) === c.kind);
+    case "assignee": return any(Arr.map(c.assignees, (a) => lower(a.login)), Arr.map(t.values, mine));
+    case "label": return any(Arr.map(c.labels, (l) => lower(l.name)), Arr.map(t.values, lower));
+    case "repo": return any(repoWords(c.repo), Arr.map(t.values, lower));
     case "no": case "has": {
       const has = (v: string) => {
-        const f = fieldByName(board, v) ?? (v === "assignee" ? fieldOfType(board, "assignees") : v === "label" ? fieldOfType(board, "labels") : null);
-
         if (v === "assignee") return c.assignees.length > 0;
 
         if (v === "label") return c.labels.length > 0;
 
-        return f ? valuesOf(board, item, f, now).length > 0 : false;
+        const f = fieldByName(board, v);
+
+        return f === null ? false : valuesOf(board, item, f).length > 0;
       };
 
-      return t.values.some((v) => (t.key === "has") === has(lower(v)));
+      return Arr.some(t.values, (v) => (t.key === "has") === has(lower(v)));
     }
 
     default: {
       const f = fieldByName(board, t.key);
 
-      if (!f) return true; // unknown qualifiers don't hide anything
+      if (f === null) return true; // unknown qualifiers don't hide anything
 
-      const have = valuesOf(board, item, f, now);
+      const have = valuesOf(board, item, f);
 
-      return t.values.some((v) => {
-        if (f.type === "iteration" && v.startsWith("@")) {
-          const it = iterationAt(f, lower(v), now);
+      return Arr.some(t.values, (v) => {
+        if (f.type === "iteration" && Str.startsWith("@")(v)) {
+          // Without the time, no iteration is the current one.
+          const it = now === null ? null : iterationAt(f, lower(v), now);
 
-          return Boolean(it) && have.includes(lower(it?.title));
+          return it !== null && have.includes(lower(it.title));
         }
 
         if (f.type === "number" || f.type === "date") return compare(have[0], v);
@@ -236,27 +248,32 @@ function compare(have: string | undefined, v: string): boolean {
   const h = num(have);
   const range = /^(.+)\.\.(.+)$/.exec(v);
 
-  if (range) return h >= num(range[1] ?? "") && h <= num(range[2] ?? "");
+  if (range !== null) return h >= num(range[1] ?? "") && h <= num(range[2] ?? "");
 
   const op = /^(>=|<=|>|<)(.+)$/.exec(v);
 
-  if (!op) return h === num(v);
+  if (op === null) return h === num(v);
 
   const x = num(op[2] ?? "");
 
-  return op[1] === ">" ? h > x : op[1] === "<" ? h < x : op[1] === ">=" ? h >= x : h <= x;
+  switch (op[1]) {
+    case ">": return h > x;
+    case "<": return h < x;
+    case ">=": return h >= x;
+    default: return h <= x;
+  }
 }
 
-/** Whether an item passes a parsed filter. ctx: { me, now }. */
+/** Whether an item passes a parsed filter. ctx: { me, now } (without `now`, `@current` and its kin match nothing). */
 export function matches(board: Board, item: Item, filter: Filter, ctx: FilterContext = {}): boolean {
-  const me = ctx.me ?? null, now = ctx.now ?? Date.now();
+  const me = ctx.me ?? null, now = ctx.now ?? null;
 
   for (const t of filter.terms) if (termMatches(board, item, t, me, now) === t.neg) return false;
 
-  if (!filter.words.length) return true;
+  if (filter.words.length === 0) return true;
 
   const c = item.content;
-  const hay = lower([c.title, c.number === null ? "" : `#${c.number}`, c.repo, ...c.labels.map((l) => l.name), ...c.assignees.map((a) => a.login)].join(" "));
+  const hay = lower(Arr.join([c.title, c.number === null ? "" : `#${c.number}`, c.repo ?? "", ...Arr.map(c.labels, (l) => l.name), ...Arr.map(c.assignees, (a) => a.login)], " "));
 
-  return filter.words.every((w) => hay.includes(w));
+  return Arr.every(filter.words, (w) => Str.includes(w)(hay));
 }

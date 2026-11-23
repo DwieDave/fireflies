@@ -383,7 +383,7 @@ export function lookAction(pending: string, e: KeyEvent): LookKey {
 // ---- the tab's menu (a right-click on a tab, space b m, the tab-menu command)
 
 /** What the tab menu does. */
-export type MenuAct = "pop-out" | "pop-out-tab" | "pop-in" | "move-left" | "move-right" | "close" | "close-others";
+export type MenuAct = "pop-out" | "pop-out-tab" | "pop-in" | "move-left" | "move-right" | "copy-path" | "close" | "close-others";
 
 /** An entry of the tab menu: its letter, what it does, its words. */
 export interface MenuItem {
@@ -419,6 +419,7 @@ export function tabMenuItems({ count, index, others = false, scratch = false }: 
     ...(others && !scratch ? [item("i", "pop-in", "Move into the editor beside")] : []),
     ...(index > 0 ? [item("h", "move-left", "Move left")] : []),
     ...(index < count - 1 ? [item("l", "move-right", "Move right")] : []),
+    item("y", "copy-path", "Copy its path"),
     item("d", "close", "Close"),
     ...(count > 1 ? [item("D", "close-others", "Close the others")] : []),
   ];

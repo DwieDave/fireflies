@@ -304,7 +304,7 @@ fn a_folder_with_main_ts_is_a_mod() {
         std::fs::create_dir_all(tree.0.join(name)).unwrap();
         std::fs::write(tree.0.join(name).join(entry), "").unwrap();
     }
-    let mut found: Vec<_> = scan_dir(&tree.0, "").into_iter().map(|f| f.id).collect();
+    let mut found: Vec<_> = scan_dir(&tree.0, "", &std::collections::BTreeMap::new()).into_keys().collect();
     found.sort();
     assert_eq!(found, ["plain", "typed"]);
     assert_eq!(gpui_shell::typescript::default_entry(&tree.0.join("typed")), "main.ts");

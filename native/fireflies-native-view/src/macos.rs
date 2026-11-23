@@ -1042,6 +1042,11 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                 ("browser.reload", Renderer::Web { view, .. }) => {
                     Ok(json!(view.reload().is_some()))
                 }
+                ("browser.scroll", Renderer::Web { view, .. }) => {
+                    let script = crate::scroll_script(args)?;
+                    view.evaluateJavaScript_completionHandler(&NSString::from_str(&script), None);
+                    Ok(Value::Null)
+                }
                 ("browser.stop", Renderer::Web { view, .. }) => {
                     view.stopLoading();
                     Ok(Value::Null)

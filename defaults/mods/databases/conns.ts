@@ -28,6 +28,7 @@ import { gridStart, noteOf } from "./state.ts";
 import { counted } from "./edits.ts";
 import { withDatabase } from "./dbs.ts";
 import { beforeLeaving } from "./cell-edit.ts";
+import { keepCopy } from "./opening.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The list the Connections panel shows, in order. */
@@ -89,14 +90,14 @@ function setFound(v: DbView, list: readonly Found[]): void {
 /** A connection another mod sent (databases.connect): listed and connected, not saved. A
  *  cluster's secret named in it is checked first (kube.ts), and its sslmode: a bad one refuses the
  *  request. */
-export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
+export function receive(v: DbView, a: ConnectArgs, cx: Context, go = true): Conn | null {
   const problem = (a.secret ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward ? forwardProblem(a.forward, a.kind, a.host, a.port) : null)
     ?? (a.sslmode !== undefined ? sslProblem(a.sslmode) : null);
 
   if (problem) {
     v.say(`databases.connect: ${problem}`, "failed");
 
-    return;
+    return null;
   }
 
   const secret = a.secret ? "kubernetes" : a.kind === "sqlite" ? "none" : "ask";
@@ -112,9 +113,13 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
   const kept = picked === undefined ? conn : withDatabase(conn, picked);
 
   v.sent = [kept, ...v.sent.filter((c) => c.id !== conn.id)];
+  v.sentArgs.set(conn.id, a);
   v.connAt = v.saved.length;
   v.panel = "conns";
-  void connect(v, kept, cx);
+
+  if (go) void connect(v, kept, cx);
+
+  return kept;
 }
 
 /** Where a connection is and how it asks for TLS: the fields a connect request may carry. */
@@ -304,6 +309,9 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
   v.history = [];
 
   const tables = loadTables(v, cx).then(() => {
+    // Connected: kept as where the view is (its space's place, a pane's own).
+    if (v.active?.id === c.id && v.catalog.error === null) keepCopy(v);
+
     // A sent one refused without a password: ask for it, then again.
     const e = v.catalog.error ?? "";
     const refused = v.active === c && /password|authentication/i.test(e);
@@ -466,7 +474,9 @@ export function askPassword(v: DbView, c: Conn, keychain: boolean, cx: Context, 
     done: () => {
       const pw = input.value();
 
+      // Its input had the keyboard: back to the view (else enter on a table went nowhere after).
       v.password = null;
+      v.focusShown();
       v.secrets.set(c.id, pw);
 
       const go = then ?? (() => void connect(v, keychain ? { ...c, secret: "ask" } : c, cx));

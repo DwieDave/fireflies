@@ -98,6 +98,13 @@ test("a Databases pane: the database mark, Databases, databases", () => {
   expect(header.modKind(DB)).toBe("databases");
 });
 
+// Upstream Herdr's pane.rename (panes()[i].name) shows in Nocturne too, after a name given to the terminal.
+test("a pane named with pane.rename goes by that name; a terminal's own given name still comes first", () => {
+  expect(header.paneName({ ...DB, name: "prod db" })).toBe("prod db");
+  expect(header.paneName({ ...DB, name: null })).toBe("Databases");
+  expect(header.paneName({ ...ODD, name: "" })).toBe("odd");
+});
+
 test("a launcher's pane: its mod.json's icon and title; one without a plain icon the stock mark", () => {
   expect(header.markPath(K8S)).toBe("mods/k8s/icon.svg");
   expect(header.paneName(K8S)).toBe("Kubernetes");

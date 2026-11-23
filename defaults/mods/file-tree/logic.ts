@@ -196,7 +196,7 @@ export function nvimLaunch(abs: string, dir: boolean): Launch {
 
 /** What a menu entry does (the pane's `act`). */
 export type Act = "toggle" | "pane" | "root" | "edit" | "nvim" | "open" | "viewer" | "web" | "databases" | "other" | "terminal"
-  | "new-file" | "new-folder" | "rename" | "cut" | "paste" | "delete" | "copy" | "look" | "close"
+  | "new-file" | "new-folder" | "rename" | "cut" | "paste" | "delete" | "copy" | "copy-rel" | "reveal" | "look" | "close"
   | "delete-set" | "cut-set" | "copy-set" | "unmark";
 
 /** A menu entry: its key, what it says, what it does. */
@@ -221,6 +221,8 @@ export interface MenuOptions {
   readonly viewer?: boolean;
   /** The Databases mod is installed (a database file offers it). */
   readonly databases?: boolean;
+  /** The reveal entry's label (revealLabel), null on another machine. */
+  readonly reveal?: string | null;
 }
 
 /** The right-click menu for a row: [{ key, label, act }], `act` naming the
@@ -228,8 +230,9 @@ export interface MenuOptions {
  *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
  *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
  *  split is open (its entry hides it); `viewer`: the file has a viewer pane
- *  (Markdown, the preview's kinds). */
-export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false, databases = false }: MenuOptions = {}): MenuItem[] {
+ *  (Markdown, the preview's kinds); `reveal`: the label of the entry that
+ *  shows the row in the system's file manager (none on another machine). */
+export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false, databases = false, reveal = null }: MenuOptions = {}): MenuItem[] {
   const root = row.dir && !row.path;
 
   const items: MenuItem[] = row.dir
@@ -261,12 +264,41 @@ export function menuItems(row: MenuTarget, { pane = false, clip = false, look = 
 
   if (!root) items.push({ key: "d", label: "Delete…", act: "delete" });
 
-  items.push({ key: "y", label: "Copy path", act: "copy" });
+  items.push({ key: "y", label: "Copy path", act: "copy" }, { key: "Y", label: "Copy relative path", act: "copy-rel" });
+
+  if (reveal) items.push({ key: "f", label: reveal, act: "reveal" });
+
   items.push({ key: "space", label: look ? "Hide the preview" : "Show the preview", act: "look" });
 
   if (pane) items.push({ key: "q", label: "Close this pane", act: "close" });
 
   return items;
+}
+
+// ---- paths: relative, and shown in the system's file manager
+
+/** The menu's entry that shows a row in the system's file manager, by the app's platform. */
+export function revealLabel(platform: string): string {
+  if (platform === "macos") return "Reveal in Finder";
+
+  return platform === "windows" ? "Reveal in Explorer" : "Show in the file manager";
+}
+
+/** `abs` relative to the first of `bases` it is in ("." for the base itself); else `abs`. */
+export function relativeTo(abs: string, bases: readonly string[]): string {
+  for (const b of bases) {
+    const base = b.length > 1 ? b.replace(/\/+$/, "") : b;
+
+    if (!base) continue;
+
+    if (abs === base) return ".";
+
+    const prefix = base === "/" ? "/" : `${base}/`;
+
+    if (abs.startsWith(prefix)) return abs.slice(prefix.length);
+  }
+
+  return abs;
 }
 
 // ---- a page in the web pane
@@ -472,14 +504,15 @@ export function cutItems(c: Clip | null): readonly CutItem[] {
 
 /** The right-click menu for a set of `n` marked rows: what acts on all of
  *  them first, then the clicked row's own entries that act on it alone. */
-export function setMenuItems(row: MenuTarget, n: number, { pane = false, clip = false, look = false }: MenuOptions = {}): MenuItem[] {
-  const alone: readonly Act[] = ["delete", "cut", "copy", "paste", "rename", "new-file", "new-folder"];
-  const own = menuItems(row, { pane, clip: false, look }).filter((x) => !alone.includes(x.act));
+export function setMenuItems(row: MenuTarget, n: number, { pane = false, clip = false, look = false, reveal = null }: MenuOptions = {}): MenuItem[] {
+  const alone: readonly Act[] = ["delete", "cut", "copy", "copy-rel", "paste", "rename", "new-file", "new-folder"];
+  const own = menuItems(row, { pane, clip: false, look, reveal }).filter((x) => !alone.includes(x.act));
 
   return [
     { key: "d", label: `Delete ${n} items…`, act: "delete-set" },
     { key: "x", label: `Cut ${n} items`, act: "cut-set" },
     { key: "y", label: `Copy ${n} paths`, act: "copy-set" },
+    { key: "Y", label: `Copy ${n} relative paths`, act: "copy-rel" },
     ...(clip ? [{ key: "P", label: row.dir ? "Paste in it" : "Paste beside it", act: "paste" } as const] : []),
     { key: "esc", label: "Unmark all", act: "unmark" },
     ...own,

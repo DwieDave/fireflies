@@ -6,7 +6,8 @@ import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
-import { dither, stop, band, sweep, empty, unzoom } from "./kit.ts";
+import { Array as Arr, String as Str } from "effect";
+import { dither, stop, lit, sweep, empty, unzoom, within } from "./kit.ts";
 import { submitKey } from "@fireflies/form-keys";
 import type { Cell, Layout, Row as LayoutRow } from "./form-layout.ts";
 import { cellOf, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, FOOTER, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.ts";
@@ -31,7 +32,7 @@ export function body<R>(f: Form<R>, t: Theme): Element {
 
     const [a] = r.cells;
 
-    if (r.join && r.cells.length === 2 && a) {
+    if (r.join !== null && r.join !== undefined && r.join !== "" && r.cells.length === 2 && a !== undefined) {
       parts.push(div().absolute().left(a.x + a.w).top(r.y + LABEL + LABEL_GAP).w(JOIN).h(CONTROL).flex().items_center().justify_center()
         .text_size(12).text_color(t.dim).child(r.join));
     }
@@ -79,7 +80,7 @@ function footer<R>(f: Form<R>, t: Theme, pad: number, summary: string, buttons: 
 /** A section's eyebrow over a dithered rule. */
 function section(t: Theme, r: LayoutRow<Field> & { readonly kind: "section" }, lay: Layout<Field>): Element {
   return h_flex().absolute().left(lay.pad).top(r.y).w(lay.inner).h(r.h).gap(8).items_center()
-    .child(div().flex_none().text_size(10).text_color(t.muted).child(r.title.toUpperCase()))
+    .child(div().flex_none().text_size(10).text_color(t.muted).child(Str.toUpperCase(r.title)))
     .child(div().relative().flex_1().h(1).child(dither(edgeTone(t), 1)));
 }
 
@@ -88,7 +89,7 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
   const f = c.field, i = c.index;
   const on = i === form.at && form.stage === "edit";
   const err = form.errors.get(f.id) ?? "";
-  const edge = err ? t.blocked : on ? t.accent : edgeTone(t);
+  const edge = err !== "" ? t.blocked : on ? t.accent : edgeTone(t);
 
   const click = (_e: MouseButtonEvent, cx: Context) => {
     cx.stop_propagation();
@@ -97,7 +98,7 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
     if (f.kind === "toggle") form.flip(f, cx);
     else if (isList(f)) form.openPicker(f, "", cx);
 
-    if (!form.picker) form.focusField(cx);
+    if (form.picker === null) form.focusField(cx);
 
     cx.notify();
   };
@@ -137,21 +138,21 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
       : box.h(CONTROL).flex().items_center().child(Input.new(form.inputOf(f)).relative().w_full().text_size(12).text_color(t.foreground));
   } else {
     const list = f.kind === "multi" ? f.value : null;
-    const shownAs = (v: string) => (f.display ? f.display(v) : v);
+    const shownAs = (v: string) => (f.display === undefined ? v : f.display(v));
     const text = f.kind === "multi" ? "" : shownAs(f.value);
     const open = form.picker?.field === f;
-    const shown = list?.length ? null : text || f.placeholder || (list ? "none" : "pick one");
+    const shown = list !== null && list.length > 0 ? null : text !== "" ? text : f.placeholder !== undefined && f.placeholder !== "" ? f.placeholder : list === null ? "pick one" : "none";
 
     control = h_flex().id(`ff-${f.id}`).relative().w_full().h(CONTROL).px(7).gap(6).items_center().border(1).border_color(open ? t.accent : edge).cursor_pointer()
       .hover((s) => s.border_color(on ? t.accent : t.muted))
       .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(edgeTone(t), 1))))
       .on_mouse_down("left", click)
       .when(Boolean(list?.length), (el) => el.child(h_flex().relative().flex_1().min_w(0).gap(6).overflow_hidden()
-        .children((list ?? []).map((v, k) => chipOf(t, `fc-${f.id}-${k}`, shownAs(v))))))
+        .children(Arr.map(list ?? [], (v, k) => chipOf(t, `fc-${f.id}-${k}`, shownAs(v))))))
       .when(shown !== null, (el) => el.child(div().relative().flex_1().min_w(0).truncate().text_size(12)
-        .text_color(text ? t.foreground : t.dim).child(shown ?? "")))
+        .text_color(text === "" ? t.dim : t.foreground).child(shown ?? "")))
       .child(div().relative().flex_none().text_size(10).text_color(on || open ? t.accent : t.dim)
-        .child(list ? `${list.length || ""} ▾` : on ? "‹ › ▾" : "▾"));
+        .child(list === null ? (on ? "‹ › ▾" : "▾") : `${list.length === 0 ? "" : list.length} ▾`));
   }
 
   return cell.child(label).child(div().h(LABEL_GAP)).child(control).when(Boolean(err), (el) => el.child(errLine()));
@@ -163,7 +164,7 @@ export function reviewBody<R>(f: Form<R>, t: Theme): Element {
   const sending = f.stage === "sending";
   const pad = f.lay().pad;
 
-  const lines = cmds.map((c, i) => v_flex().id(`fc-${i}`).relative().gap(4)
+  const lines = Arr.map(cmds, (c, i) => v_flex().id(`fc-${i}`).relative().gap(4)
     .child(h_flex().gap(8).text_size(10).text_color(t.muted)
       .child(div().flex_none().text_color(t.accent).child(String(i + 1)))
       .child(div().flex_1().min_w(0).truncate().child(c.label)))
@@ -181,7 +182,7 @@ export function reviewBody<R>(f: Form<R>, t: Theme): Element {
       .child(div().flex_1().min_w(0).text_color(t.blocked).child(f.sendError))));
 
   const foot = footer(f, t, pad, sending ? "sending…" : `${cmds.length} command${cmds.length === 1 ? "" : "s"}, in this order`, [
-    button(t, "form-send", f.sendError ? "Try again" : f.spec.sendWord ?? "Send", submitKey(f.stops(), f.confirmAt, f.mac), true, (cx) => {
+    button(t, "form-send", f.sendError === "" ? f.spec.sendWord ?? "Send" : "Try again", submitKey(f.stops(), f.confirmAt, f.mac), true, (cx) => {
       if (!sending) f.send(cx);
     }, sending, !sending && f.confirmAt === 0),
     button(t, "form-back", "Back", "esc", false, (cx) => f.back(cx), sending, !sending && f.confirmAt === 1),
@@ -194,7 +195,7 @@ export function reviewBody<R>(f: Form<R>, t: Theme): Element {
 export function pickerSpot<R>(f: Form<R>, lay: Layout<Field> = f.lay()): PickerSpot | null {
   const p = f.picker;
 
-  if (!p) return null;
+  if (p === null) return null;
 
   const field = p.field;
   const rows = f.rows(field, p.query.value());
@@ -204,13 +205,13 @@ export function pickerSpot<R>(f: Form<R>, lay: Layout<Field> = f.lay()): PickerS
 
   const cell = cellOf(lay, f.fields.indexOf(field));
 
-  if (!cell) return null;
+  if (cell === null) return null;
 
   const place = pickerPlace(cell, { scrollY: f.scrollY, viewH: f.viewH, want: pickerHeight(rows), width: f.width });
 
   // The rows that fit, scrolled so the one with the keyboard shows.
   const room = place.h - PICK_HEAD - 8;
-  const hOf = (r: Choice) => (r.sub ? PICK_ROW_SUB : PICK_ROW);
+  const hOf = (r: Choice) => (r.sub === undefined || r.sub === "" ? PICK_ROW : PICK_ROW_SUB);
 
   const fits = (from: number) => {
     let h = 0, k = from;
@@ -225,7 +226,7 @@ export function pickerSpot<R>(f: Form<R>, lay: Layout<Field> = f.lay()): PickerS
 
   let top = 0;
 
-  if (n) {
+  if (n > 0) {
     top = Math.min(p.top, p.at);
 
     while (fits(top) <= p.at && top < p.at) top++;
@@ -233,7 +234,7 @@ export function pickerSpot<R>(f: Form<R>, lay: Layout<Field> = f.lay()): PickerS
     p.top = top;
   }
 
-  return { rows, n, place, top, end: n ? Math.max(fits(top), top + 1) : 0, hOf };
+  return { rows, n, place, top, end: n > 0 ? Math.max(fits(top), top + 1) : 0, hOf };
 }
 
 /** The open list, under its field at the field's width (form-layout.ts pickerPlace: upward without room below,
@@ -242,7 +243,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
   const spot = pickerSpot(form, lay);
   const p = form.picker;
 
-  if (!spot || !p) return [];
+  if (spot === null || p === null) return [];
 
   const f = p.field;
   const { rows, n, place, top, end, hOf } = spot;
@@ -250,7 +251,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
 
   const row = (r: Choice, i: number) => h_flex().id(`fp-${i}`).relative().h(hOf(r)).flex_none().px(8).gap(8).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edgeTone(t)}55`))
-    .when(i === p.at, (el) => el.children(band(t, true)))
+    .when(i === p.at, (el) => lit(t, el, true))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       p.at = i;
@@ -260,15 +261,15 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
     .when(f.kind === "multi", (el) => el.child(div().relative().size(10).flex_none().border(1).border_color(chosen(r) ? t.accent : t.muted)
       .when(chosen(r), (e2) => e2.child(div().absolute().top(2).left(2).size(4).bg(t.accent)))))
     .child(v_flex().relative().flex_1().min_w(0)
-      .child(div().truncate().text_size(12).text_color(i === p.at ? t.foreground : r.typed ? t.accent : t.muted).child(r.label))
+      .child(div().truncate().text_size(12).text_color(i === p.at ? t.foreground : r.typed === true ? t.accent : t.muted).child(r.label))
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? ""))))
     .when(Boolean(r.right) || (f.kind === "choice" && chosen(r)), (el) => el.child(div().relative().flex_none().text_size(10).text_color(t.dim).child(r.right || "current")));
 
   const body = rows === null ? div().h(60).child(empty(t, "Reading…", null, { small: true }))
-    : !n ? div().px(8).py(9).text_size(11).text_color(t.dim).child(f.free ? "Nothing matches: type a name." : "Nothing matches.")
-    : v_flex().py(4).children(rows.slice(top, end).map((r, k) => row(r, top + k)));
+    : n === 0 ? div().px(8).py(9).text_size(11).text_color(t.dim).child(f.free === true ? "Nothing matches: type a name." : "Nothing matches.")
+    : v_flex().py(4).children(Arr.map(within(rows, top, end), (r, k) => row(r, top + k)));
 
-  const count = f.kind === "multi" ? `${f.value.length} chosen` : rows ? `${n}` : "";
+  const count = f.kind === "multi" ? `${f.value.length} chosen` : rows === null ? "" : `${n}`;
 
   return [
     div().id("form-picker").absolute().inset_0()

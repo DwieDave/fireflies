@@ -3,9 +3,12 @@
 // values read back, the spec of a form, and what it asks of the window.
 
 import type { Context, Element, Size } from "gpui-kit";
+import type { Effect } from "effect";
+import type { RunOptions } from "@fireflies/kit";
+import type { GithubServices } from "./fx.ts";
 import type { InputState, TextareaState } from "gpui-base";
 import type { Theme } from "herdr";
-import { isString } from "./guard.ts";
+import { Predicate } from "effect";
 
 /** A row of a list field's picker: the value it stands for, its words; `typed`: what was typed, taken as it is. */
 export interface Choice {
@@ -92,7 +95,7 @@ export type Values = ReadonlyMap<string, FieldValue>;
 export function textIn(values: Values, id: string): string {
   const v = values.get(id);
 
-  return isString(v) ? v : "";
+  return Predicate.isString(v) ? v : "";
 }
 
 /** A toggle's value, false when missing. */
@@ -102,7 +105,7 @@ export const flagIn = (values: Values, id: string): boolean => values.get(id) ==
 export function listIn(values: Values, id: string): readonly string[] {
   const v = values.get(id);
 
-  return Array.isArray(v) ? v : [];
+  return v === undefined || Predicate.isString(v) || Predicate.isBoolean(v) ? [] : v;
 }
 
 /** A command the review shows before anything runs. */
@@ -122,7 +125,7 @@ export interface FormSpec<R> {
   readonly summary?: () => string;
   readonly check?: (values: Values) => ReadonlyMap<string, string>;
   readonly commands?: () => readonly Command[];
-  readonly send: (cx: Context) => Promise<Outcome<R>>;
+  readonly send: (cx: Context) => Effect.Effect<Outcome<R>, never, GithubServices>;
   readonly done?: (r: R & { readonly ok: true }, cx: Context) => void;
   readonly cancel?: () => void;
   readonly sendWord?: string;
@@ -133,7 +136,10 @@ export interface FormSpec<R> {
 /** What a form asks of the window: the keyboard back, and work in the background. */
 export interface FormHost {
   focusSelf(): void;
-  spawn(cx: Context, fn: () => Promise<void>): void;
+  /** The window's own cx (init's): good after the handler that asked has returned. */
+  readonly acx?: Context | null;
+  /** Runs `effect` for the window (interrupted when it closes); a failure is shown as its note. */
+  run<A, E>(effect: Effect.Effect<A, E, GithubServices>, options?: RunOptions): void;
 }
 
 export const isText = (f: Field): f is TextField | AreaField => f.kind === "text" || f.kind === "number" || f.kind === "area";
@@ -148,7 +154,7 @@ export function keep(f: Field, old: Field): void {
       if (old.kind === f.kind) {
         f.value = old.value;
 
-        if (old.input) f.input = old.input;
+        if (old.input !== undefined) f.input = old.input;
       }
 
       break;
@@ -156,7 +162,7 @@ export function keep(f: Field, old: Field): void {
       if (old.kind === "area") {
         f.value = old.value;
 
-        if (old.input) f.input = old.input;
+        if (old.input !== undefined) f.input = old.input;
       }
 
       break;

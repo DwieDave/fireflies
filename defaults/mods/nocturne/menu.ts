@@ -538,7 +538,7 @@ function paneItems(t: Theme, tg: Guarded<typeof isMenuTarget>): PopupItem[] {
     // Or kept in the dock (dock.ts: the space tied to no folder), pinned to the shelf.
     ...(dockable(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane }),
-    item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane }),
+    item(t, "split-down", "panel-bottom", "Split down", "pane.split", { direction: "down", pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane }),
     ...(ps.filter((x) => x.tab === ps.find((y) => y.pane === pane)?.tab).length > 1
       ? [{ id: "equalize", mark: svg("mods/equalize-panes/equalize.svg").size(14).flex_none().text_color(t.accent), name: "Even out panes…", hint: "", go: () => openEqualize(pane) }] : []),

@@ -9,11 +9,18 @@
 // with the keyboard in it, moves the keyboard into an open one, and closes
 // it once the keyboard is there, back to the pane it came from (FROM; esc
 // in the panel goes back there too and leaves it open).
+//
+// Paths for every mod (pathCommand, from the sidebar's command loop):
+//   nocturne.copy-path:{"path"}  the path on the clipboard, as given
+//   nocturne.reveal:{"path"}     the path in the system's file manager, selected
+// A bare path (`nocturne.reveal:/abs/x`) works too; `~/` is the home; this
+// computer's paths only. The files pane's menu runs nocturne.reveal.
 
-import { spaces, panes, focused, run, shared, setShared } from "herdr";
+import { spaces, panes, focused, run, shared, setShared, exec, notify, home, window as appWindow } from "herdr";
 import type { PaneInfo } from "herdr";
 import { isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import { folderCandidates } from "./folders.ts";
+import { tilde } from "./folderlist.ts";
 
 const MOD = "file-tree";
 const WIDTH = 280;
@@ -87,4 +94,92 @@ export function focusFiles(): void {
   run("pane.focus", { pane: open.pane });
   // pane.focus leaves the keys with the window; the panel takes them.
   run("file-tree.take-panel");
+}
+
+// ---- paths for every mod: nocturne.copy-path, nocturne.reveal
+
+/** How the system's file manager shows `abs` selected, the path one argument: macOS
+ *  `open -R`, Windows `explorer /select,`, elsewhere `xdg-open` on its folder. */
+export function revealArgv(platform: string, abs: string): readonly [string, string[]] {
+  if (platform === "macos") return ["open", ["-R", abs]];
+
+  if (platform === "windows") return ["explorer", [`/select,${abs.replace(/\//g, "\\")}`]];
+
+  return ["xdg-open", [abs.replace(/\/[^/]+\/*$/, "") || "/"]];
+}
+
+const isPathArg = object({ path: isString });
+
+/** The path a command names (`{"path"}` or the bare path), `~/` the home; null unless absolute. */
+function pathOf(value: string): string | null {
+  let path = value.trim();
+
+  if (path.startsWith("{")) {
+    try {
+      const v: unknown = JSON.parse(path);
+
+      path = isPathArg(v) ? v.path : "";
+    } catch {
+      path = "";
+    }
+  }
+
+  if (path === "~" || path.startsWith("~/")) path = `${home()}${path.slice(1)}`;
+
+  return /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(path) ? path : null;
+}
+
+/** A toast, if one can show. */
+function tell(level: "success" | "error", title: string, body: string): void {
+  try {
+    notify({ title, body, level });
+  } catch {
+    /* said nothing */
+  }
+}
+
+async function reveal(path: string): Promise<void> {
+  const platform = appWindow().platform;
+  const [cmd, args] = revealArgv(platform, path);
+  const failed = (why: string) => tell("error", "couldn't show it in the file manager", why);
+
+  try {
+    const r = await exec(cmd, args);
+
+    // explorer answers 1 when it worked.
+    if (r.code !== 0 && platform !== "windows") failed(r.stderr.trim() || `${cmd} exited with ${r.code}`);
+  } catch (cause) {
+    failed(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
+/** nocturne.copy-path:<path> and nocturne.reveal:<path> (true: it was one of them). */
+export function pathCommand(c: string, cx: { write_to_clipboard(text: string): void }): boolean {
+  const m = /^(copy-path|reveal):([\s\S]*)$/.exec(c);
+
+  if (!m) return false;
+
+  const [, what, value = ""] = m;
+  const path = pathOf(value);
+
+  if (!path) {
+    tell("error", `nocturne.${what}`, "give an absolute path: {\"path\": \"/…\"}");
+
+    return true;
+  }
+
+  if (what === "reveal") {
+    void reveal(path);
+
+    return true;
+  }
+
+  try {
+    cx.write_to_clipboard(path);
+    tell("success", "copied the path", tilde(path, home()));
+  } catch (cause) {
+    tell("error", "couldn't copy the path", cause instanceof Error ? cause.message : String(cause));
+  }
+
+  return true;
 }

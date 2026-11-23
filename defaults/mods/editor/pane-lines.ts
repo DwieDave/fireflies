@@ -15,6 +15,7 @@ import type { Answer } from "./pane-kit.ts";
 import { codeAndSource, dither, FIND, focusOn, GUTTER_INSET, HINTS, serverId, severityColors } from "./pane-kit.ts";
 import { lookHints } from "./drawn-tabs.ts";
 import { renderedView } from "./md-pane.ts";
+import { editorPress } from "./cmd-click.ts";
 import { answerClose } from "./pane-tabs.ts";
 import { previewView } from "./preview-pane.ts";
 import { edge } from "@fireflies/tones";
@@ -253,6 +254,8 @@ export function bodyView(ed: EditorPane, t: Theme, code: string): Element {
     .min_w(0)
     .pl(GUTTER_INSET)
     .when(ed.state === "missing", (el) => el.child(div().absolute().top(6).right(14).text_color(t.dim).child("new file: cmd-s creates it")))
+    // cmd+click: the editor has put the caret there; the link there opens, else go to definition.
+    .on_mouse_down("left", (e, cx) => editorPress(ed, e, cx))
     .child(Editor.new(ed.editor).size_full().font_family(code));
 
   const d = ed.shown();

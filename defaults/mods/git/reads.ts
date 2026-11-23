@@ -1,148 +1,165 @@
 // Reading the repo into the git window: opening it, everything at once, a
 // drill-in's list, again on changes (the folder watched) and on a timer.
+// Each is a run on the copy's reads lane (main.ts `read`), so it ends with
+// the window and never overlaps another read.
 
-import { watchFolder } from "herdr";
+import { Array as Arr, Effect, Option, Record as Rec } from "effect";
 import { Git, LOG_LIMIT } from "./git.ts";
+import type { GitError } from "./git.ts";
 import { layoutGraph } from "./graph.ts";
 import * as WT from "./worktrees.ts";
 import type { Sub } from "./state.ts";
 import { loadStaging } from "./staging.ts";
 import { loadMain } from "./content.ts";
 import { worktreeIntent } from "./checkouts.ts";
+import type { GitServices } from "./fx.ts";
+import { FolderWatch } from "./watch.ts";
 import type { default as GitView } from "./main.ts";
 
-export function start(v: GitView) {
-  v.reads.push(async () => {
-    if (!v.folder) {
+/** Opens the repo holding the window's folder: everything read, the folder watched, where worktrees go. */
+export function start(v: GitView): void {
+  v.read(Effect.gen(function* () {
+    const folder = v.folder;
+
+    if (folder === null) {
       v.state = "norepo";
 
       return;
     }
 
-    v.git = await Git.open(v.folder, v.on, (e) => v.logged(e));
+    const opened = yield* Git.open(folder, v.on, (e) => v.logged(e)).pipe(
+      // git that couldn't run at all: "not a repo", with why beside it.
+      Effect.catchTag("ExecError", (e) => Effect.sync(() => { v.openError = e.message; }).pipe(Effect.as(Option.none<Git>()))),
+    );
 
-    if (!v.git) {
+    if (Option.isNone(opened)) {
       v.state = "norepo";
 
       return;
     }
 
+    v.git = opened.value;
     v.state = "ready";
-    await loadAll(v);
+    yield* loadAll(v);
     watch(v);
 
-    if (v.on && !v.userHome) v.userHome = await WT.userHomeOn(v.on).catch(() => null);
+    // Where new worktrees go only words a dialog's note: a machine or a settings.json that can't say leaves the default there.
+    if (v.on !== null && v.userHome === null) v.userHome = yield* WT.userHomeOn(v.on).pipe(Effect.orElseSucceed(() => null));
+
+    if (v.userHome !== null) v.wtRoot = yield* WT.rootFor(v.userHome).pipe(Effect.orElseSucceed(() => null));
 
     worktreeIntent(v);
-  });
+  }));
 }
 
-export function watch(v: GitView) {
+/** Reads again whenever the repo's folder changes (a local repo; a remote one has the timer only). */
+export function watch(v: GitView): void {
   const g = v.git;
 
-  if (v.on || v.watching || !g) return;
+  if (v.on !== null || v.watching || g === null) return;
+
+  const change = FolderWatch.use((w) => w.next(g.root));
 
   v.watching = true;
-  v.reads.push(async (cx) => {
-    cx.spawn(async () => {
-      try {
-        for (;;) {
-          const paths = await watchFolder(g.root);
-
-          if (v.closed) return;
-
-          // Our own index writes show up too; a refresh is cheap and idempotent.
-          if (paths.length) reload(v);
-        }
-      } catch { v.watching = false; }
-    });
-  });
+  v.run$(Effect.forever(Effect.flatMap(change, (paths) => Effect.sync(() => {
+    // Our own index writes show up too; a refresh is cheap and idempotent.
+    if (Arr.isReadonlyArrayNonEmpty(paths)) reload(v);
+  }))).pipe(
+    // A folder that can't be watched (gone, not allowed): the timer still reads it.
+    Effect.catchTag("FileError", () => Effect.sync(() => { v.watching = false; })),
+  ), { redraw: false });
 }
 
-export function reload(v: GitView, loud = false) {
+/** Everything again (`loud`: says so on the options bar); one waiting reload is enough. */
+export function reload(v: GitView, loud = false): void {
   if (v.state !== "ready" || v.reloadQueued) return;
 
   v.reloadQueued = true;
-  v.reads.push(async () => {
+  v.read(Effect.gen(function* () {
     v.reloadQueued = false;
-    await loadAll(v);
+    yield* loadAll(v);
 
     if (loud) v.note("Refreshed");
-  });
+  }));
 }
 
-export async function reloadNow(v: GitView) { await loadAll(v); }
-
-export function reloadReview(v: GitView) {
-  v.reads.push(async () => {
-    await v.review.load();
+/** The review tab's changes again. */
+export function reloadReview(v: GitView): void {
+  v.read(Effect.gen(function* () {
+    yield* v.review.load();
     pickShownPath(v);
     v.clampAll();
     loadMain(v);
-  });
+  }));
 }
 
 /** A review pane opened on a file starts on it. */
-export function pickShownPath(v: GitView) {
+export function pickShownPath(v: GitView): void {
   const path = v.show?.kind === "review" ? v.show.path : undefined;
 
   if (path === undefined || v.pickedPath) return;
 
-  const i = v.review.shown().findIndex((f) => f.path === path);
+  const i = Arr.findFirstIndex(v.review.shown(), (f) => f.path === path);
 
-  if (i >= 0) {
-    v.sel.review = i;
+  if (Option.isSome(i)) {
+    v.sel.review = i.value;
     v.follow.review = true;
     v.pickedPath = true;
   }
 }
 
-export async function loadAll(v: GitView) {
-  const g = v.git;
+/** Every list of the repo, the open drill-ins, the review and the staging view. */
+export function loadAll(v: GitView): Effect.Effect<void, GitError, GitServices> {
+  return Effect.gen(function* () {
+    const g = v.git;
 
-  if (!g) return;
+    if (g === null) return;
 
-  const [status, branches, remotes, remoteBranches, tags, stash, worktrees, state] = await Promise.all([
-    g.status(), g.branches(), g.remotes(), g.remoteBranches(), g.tags(), g.stash(), WT.listWorktrees(g), g.state(),
-  ]);
+    const [status, branches, remotes, remoteBranches, tags, stash, worktrees, state] = yield* Effect.all([
+      g.status(), g.branches(), g.remotes(), g.remoteBranches(), g.tags(), g.stash(), WT.listWorktrees(g), g.state(),
+    ], { concurrency: "unbounded" });
 
-  if (v.data.main === null) v.data.main = (await g.mainBranch()) ?? undefined;
+    if (v.data.main === null) v.data.main = (yield* g.mainBranch()) ?? undefined;
 
-  const main = v.data.main || null;
-  const limit = v.commitLimit;
-  const commits = await g.log("HEAD", { all: v.allBranches, limit });
+    const main = v.data.main ?? null;
+    const limit = v.commitLimit;
+    const commits = yield* g.log("HEAD", { all: v.allBranches, limit });
 
-  const [unpushed, notMain] = await Promise.all([
-    status.upstream ? g.only("HEAD", "@{u}", limit) : Promise.resolve(new Set(commits.map((c) => c.hash))),
-    main && status.head !== main ? g.only("HEAD", main, limit) : Promise.resolve(new Set<string>()),
-  ]);
+    const [unpushed, notMain] = yield* Effect.all([
+      status.upstream === null ? Effect.succeed<ReadonlySet<string>>(new Set(Arr.map(commits, (c) => c.hash))) : g.only("HEAD", "@{u}", limit),
+      main !== null && status.head !== main ? g.only("HEAD", main, limit) : Effect.succeed<ReadonlySet<string>>(new Set<string>()),
+    ], { concurrency: "unbounded" });
 
-  v.data = { ...v.data, status, branches, remotes, remoteBranches, tags, stash, worktrees, state, commits, unpushed, notMain };
-  v.graph = layoutGraph(commits);
+    v.data = { ...v.data, status, branches, remotes, remoteBranches, tags, stash, worktrees, state, commits, unpushed, notMain };
+    v.graph = layoutGraph(commits);
 
-  if (v.ctxOf(v.panel) === "reflog" || v.data.reflog.length) v.data.reflog = await g.reflog();
+    if (v.ctxOf(v.panel) === "reflog" || Arr.isReadonlyArrayNonEmpty(v.data.reflog)) v.data.reflog = yield* g.reflog();
 
-  for (const s of Object.values(v.subs).flat()) await loadSub(v, s);
+    yield* Effect.forEach(Arr.flatten(Rec.values(v.subs)), (s) => loadSub(v, s), { concurrency: 1, discard: true });
 
-  if (v.tabOf.files === "review" || v.review.files.length) {
-    await v.review.load();
-    pickShownPath(v);
-  }
+    if (v.tabOf.files === "review" || Arr.isReadonlyArrayNonEmpty(v.review.files)) {
+      yield* v.review.load();
+      pickShownPath(v);
+    }
 
-  if (v.staging) await loadStaging(v);
+    if (v.staging !== null) yield* loadStaging(v);
 
-  v.clampAll();
-  loadMain(v);
+    v.clampAll();
+    loadMain(v);
+  });
 }
 
-export async function loadSub(v: GitView, s: Sub) {
-  const g = v.git;
+/** A drill-in's list: a ref's commits, a remote's branches, a commit's files. */
+export function loadSub(v: GitView, s: Sub): Effect.Effect<void, GitError, GitServices> {
+  return Effect.gen(function* () {
+    const g = v.git;
 
-  if (!g) return;
+    if (g === null) return;
 
-  if (s.kind === "subCommits") {
-    s.items = await g.log(s.ref, { limit: s.limit ?? LOG_LIMIT });
-    s.graph = layoutGraph(s.items);
-  } else if (s.kind === "remoteBranches") s.items = v.data.remoteBranches.filter((r) => r.remote === s.remote);
-  else s.items = await g.commitFiles(s.hash);
+    if (s.kind === "subCommits") {
+      s.items = yield* g.log(s.ref, { limit: s.limit ?? LOG_LIMIT });
+      s.graph = layoutGraph(s.items);
+    } else if (s.kind === "remoteBranches") s.items = Arr.filter(v.data.remoteBranches, (r) => r.remote === s.remote);
+    else s.items = yield* g.commitFiles(s.hash);
+  });
 }
