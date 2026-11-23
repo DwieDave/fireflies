@@ -2,12 +2,13 @@
 // stops (tab) and what fits on it (labels full, short or icons; one row or
 // two), and the toolbar's parts by priority.
 
+import { Array as Arr } from "effect";
 import type { KeyRow } from "@fireflies/keyhelp";
 
 /** About how wide a character is at the header's size 11 (logical px). */
 export const CH = 7;
 
-const chipW = (label: string, cut: number): number => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
+const chipW = (label: string, cut: number): number => 8 + 11 + (label !== "" ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
 
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS: readonly KeyRow[] = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
@@ -40,7 +41,7 @@ export const ADDS = {
 export function lensStops(add: Adds = "both"): Stop[] {
   const adds: readonly (readonly [NewKind, string])[] = ADDS[add];
 
-  return ["hidden", "ignored", ...adds.map(([kind]): Stop => (kind === "file" ? "add-file" : "add-folder")), "keys"];
+  return ["hidden", "ignored", ...Arr.map(adds, ([kind]): Stop => (kind === "file" ? "add-file" : "add-folder")), "keys"];
 }
 
 /** tab (+1) / shift-tab (-1) from stop `at` (null: the list) over `stops`;
@@ -140,7 +141,7 @@ export function chipsFit(w: number, cut: Cut = { hidden: 0, ignored: 0 }): Chips
   for (const [chips, cuts, add] of variants) {
     const [h, i] = LABELS[chips];
     const adds: readonly (readonly [NewKind, string])[] = ADDS[add];
-    const parts = [chipW(h, cuts ? cut.hidden : 0), chipW(i, cuts ? cut.ignored : 0), ...adds.map(([, l]) => addW(l)), KEYS_CHIP];
+    const parts = [chipW(h, cuts ? cut.hidden : 0), chipW(i, cuts ? cut.ignored : 0), ...Arr.map(adds, ([, l]) => addW(l)), KEYS_CHIP];
     let sum = 0;
 
     for (const p of parts) sum += p;
@@ -154,9 +155,9 @@ export function chipsFit(w: number, cut: Cut = { hidden: 0, ignored: 0 }): Chips
 /** How wide the filter line is with `fit` (logical px); the ? chip ends it. */
 function lensWidth(fit: LensFit, cut: Cut, count: number | null): number {
   const [h, i] = fit.labels;
-  const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
+  const find = CH + (fit.find !== "" ? 5 + fit.find.length * CH : 0);
   const adds: readonly (readonly [NewKind, string])[] = ADDS[fit.add];
-  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...adds.map(([, l]) => addW(l)), KEYS_CHIP];
+  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...Arr.map(adds, ([, l]) => addW(l)), KEYS_CHIP];
 
   if (fit.count) parts.push(String(count).length * CH);
 
@@ -223,7 +224,7 @@ export function toolbarFit(w: number, { alone = false, branch = null, changed = 
   take("look", 20);
   take("edit", 12 + 4 * CH);
 
-  if (branch) take("branch", Math.min(140, branch.length * CH));
+  if (branch !== null && branch !== "") take("branch", Math.min(140, branch.length * CH));
 
   take("eyebrow", 5 * CH);
   take("path", 80);

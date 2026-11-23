@@ -2,6 +2,7 @@
 // the folders listed so far elsewhere), its hits, a hit shown in the tree,
 // enter on a row, the line's stops (tab), a page in the browser.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context } from "gpui-kit";
 import { run, panes, findFiles } from "herdr";
 import type { Found, Range } from "./logic.ts";
@@ -17,10 +18,10 @@ import type { NewKind, Stop } from "./fit.ts";
  *  (findFiles); where it can't go (home, /, another machine), the folders
  *  listed so far. */
 export function runSearch(v: Files, cx: Context): void {
-  const q = v.query.trim();
+  const q = Str.trim(v.query);
   const seq = ++v.seq;
 
-  if (!q) {
+  if (q === "") {
     v.hits = null;
     v.note = null;
     cx.notify();
@@ -33,8 +34,8 @@ export function runSearch(v: Files, cx: Context): void {
   const done = (files: readonly Found[], note: string | null): void => {
     if (seq !== v.seq) return;
 
-    const hits = grouped(files.filter((f) => lists(f.path, v.filters, v.ignored)).slice(0, HITS));
-    const i = hits.findIndex((r) => !r.head);
+    const hits = grouped(Arr.filter(files, (f) => lists(f.path, v.filters, v.ignored)).slice(0, HITS));
+    const i = Option.getOrElse(Arr.findFirstIndex(hits, (r) => r.head !== true), () => -1);
 
     v.hits = hits;
     v.note = note;
@@ -45,7 +46,7 @@ export function runSearch(v: Files, cx: Context): void {
     cx.notify();
   };
 
-  if (v.on) {
+  if (v.on !== null && v.on !== "") {
     done(loaded(v, q), "searching the folders listed so far");
 
     return;
@@ -78,10 +79,10 @@ export function loaded(v: Files, q: string): Found[] {
     for (const e of entries) {
       if (e.dir) continue;
 
-      const path = prefix ? `${prefix}/${e.name}` : e.name;
+      const path = prefix !== "" ? `${prefix}/${e.name}` : e.name;
       const ranges = fuzzy(q, path);
 
-      if (ranges) out.push({ path, ranges });
+      if (ranges !== null) out.push({ path, ranges });
     }
   }
 
@@ -116,16 +117,16 @@ export function openWeb(v: Files, path: string, cx: Context): void {
     return;
   }
 
-  if (v.on) {
+  if (v.on !== null && v.on !== "") {
     v.say("A page on another machine can't open in the web pane", cx);
 
     return;
   }
 
   const tab = v.shownTab();
-  const browsers = panes().filter((p) => p.tab === tab && p.mod === "browser");
+  const browsers = Arr.filter(panes(), (p) => p.tab === tab && p.mod === "browser");
   const from = (ownPane(v) ?? (v.alone ? null : v.panel()))?.pane ?? null;
-  const slot = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const slot = Date.now().toString(36) + Str.slice(2, 6)(Math.random().toString(36));
   const [name, args] = webOpen(fileUrl(`${v.root}/${path}`), { browsers, from, slot });
 
   if (args === undefined) run(name);
@@ -145,7 +146,7 @@ export function pressStop(v: Files, stop: Stop, cx: Context): void {
 export function addNew(v: Files, kind: NewKind, cx: Context): void {
   v.stop = null;
 
-  const row = v.shown().find((r) => r.path === v.sel && !r.head) ?? null;
+  const row = Option.getOrUndefined(Arr.findFirst(v.shown(), (r) => r.path === v.sel && r.head !== true)) ?? null;
 
   startDraft(v, kind, row, cx);
 }
@@ -165,10 +166,10 @@ export function clearSearch(v: Files, cx: Context | null): void {
 export function reveal(v: Files, path: string, cx: Context): void {
   clearSearch(v, cx);
 
-  const parts = path.split("/");
+  const parts = Str.split(path, "/");
 
   for (let n = 1; n <= parts.length; n++) {
-    const p = parts.slice(0, n).join("/");
+    const p = Arr.join(parts.slice(0, n), "/");
 
     if (!v.folders.has(p)) v.toggle(p, cx);
   }
@@ -180,9 +181,9 @@ export function reveal(v: Files, path: string, cx: Context): void {
 export function enterRow(v: Files, cx: Context): void {
   const row = rowAt(v, v.sel);
 
-  if (!row) return;
+  if (row === null) return;
 
-  if (row.head) reveal(v, row.path, cx);
+  if (row.head === true) reveal(v, row.path, cx);
   else if (row.dir) v.toggle(row.path, cx);
   else v.openFile(row.path, cx);
 }

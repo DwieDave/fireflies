@@ -2,6 +2,7 @@
 // chip), the filter line (the lens with its filters and + new), and the
 // footer's hint line and keys strip.
 
+import { Array as Arr, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
 import type { Context, Element } from "gpui-kit";
 import type { Theme } from "herdr";
@@ -39,7 +40,7 @@ export function drawToolbar(v: Files, t: Theme, w: number, focused: boolean): El
 
   for (const m of v.marks.values()) if (m !== "•") changed++;
 
-  const name = v.root === "/" ? "/" : v.root.split("/").pop() ?? "";
+  const name = v.root === "/" ? "/" : Str.split(v.root, "/").pop() ?? "";
   const fit = toolbarFit(w, { alone: v.alone, branch: v.branch, changed, name });
   const branch = v.branch;
 
@@ -50,7 +51,7 @@ export function drawToolbar(v: Files, t: Theme, w: number, focused: boolean): El
     .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
       .child(div().flex_shrink(1).min_w(fit.name).truncate().text_color(t.foreground).child(name))
       .when(fit.path, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(v.root))))))
-    .children(fit.branch && branch ? [div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(branch)] : [])
+    .children(fit.branch && (branch !== null && branch !== "") ? [div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(branch)] : [])
     .when(fit.changed, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
     .when(fit.look, (el) => el.child(lookChip(v, t)))
     .when(fit.edit, (el) => el.child(toolChip(v, t, "nf-edit", "edit", (cx) => v.edit("", cx))))
@@ -93,7 +94,7 @@ export function filterChip(v: Files, t: Theme, id: string, label: string, on: bo
 
 /** + file / + folder (or a bare +): `a` / `A`'s name row; the accent +, a muted word. */
 export function addChip(v: Files, t: Theme, kind: NewKind, label: string, ringed: boolean): Element {
-  const word = label.replace(/^\+\s*/, "");
+  const word = Str.replace(/^\+\s*/, "")(label);
 
   return h_flex().id(`nf-add-${kind}`).relative().h(20).px(4).gap(7).flex_none().items_center().text_color(t.muted)
     .hover((s) => s.bg(`${edge(t)}55`).text_color(t.foreground))
@@ -114,7 +115,7 @@ export function addChip(v: Files, t: Theme, kind: NewKind, label: string, ringed
 export function drawLens(v: Files, t: Theme, w: number, found: number): Element {
   const live = v.typing || v.finding || Boolean(v.query);
   const cut = v.cut;
-  const searching = Boolean(v.query.trim());
+  const searching = Boolean(Str.trim(v.query));
   // What fits this width: the placeholder shortens, then the switches' labels; then two rows.
   const fit = lensLayout(w, { cut: { hidden: v.filters.hidden ? 0 : cut.hidden, ignored: v.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
   const [hLabel, iLabel] = fit.labels;
@@ -130,7 +131,7 @@ export function drawLens(v: Files, t: Theme, w: number, found: number): Element 
       cx.stop_propagation();
       startFind(v, cx);
     })
-    .child(live && v.input
+    .child(live && v.input !== null
       ? Input.new(v.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
       : h_flex().min_w(0).gap(5).text_color(t.dim)
         .child(div().flex_none().text_color(t.accent).child("/"))
@@ -143,7 +144,7 @@ export function drawLens(v: Files, t: Theme, w: number, found: number): Element 
   const chips = [
     filterChip(v, t, "nf-hidden", hLabel, v.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => v.setFilter("hidden", cx), at === "hidden"),
     filterChip(v, t, "nf-ignored", iLabel, v.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => v.setFilter("ignored", cx), at === "ignored"),
-    ...adds.map(([kind, label]) => addChip(v, t, kind, label, at === `add-${kind}`)),
+    ...Arr.map(adds, ([kind, label]) => addChip(v, t, kind, label, at === `add-${kind}`)),
   ];
 
   // ? keys: the line's last item (keyhelp.ts).
@@ -198,20 +199,20 @@ export function footer(v: Files, t: Theme, searching: boolean): Element | null {
   const keys = (...ks: Element[]): Element => h_flex().flex_wrap().gap_x(12).gap_y(2).children(ks);
   const d = v.drag;
 
-  if (d) {
+  if (d !== null) {
     return line().child(div().text_color(d.ok ? t.foreground : t.dim)
       .child(d.into === null ? `Drop on a folder, or below the rows for ${tilde(v.root)} · esc cancels`
-        : d.ok ? `Drop: ${dragLabel(v, d)} into ${d.into ? `${base(d.into)}/` : tilde(v.root)}${d.moving.length < d.paths.length ? ` (${d.paths.length - d.moving.length} already there)` : ""}`
+        : d.ok ? `Drop: ${dragLabel(v, d)} into ${d.into !== "" ? `${base(d.into)}/` : tilde(v.root)}${d.moving.length < d.paths.length ? ` (${d.paths.length - d.moving.length} already there)` : ""}`
         : d.why ?? ""));
   }
 
   const a = v.ask;
 
-  if (a) {
+  if (a !== null) {
     return line()
-      .child(div().text_color(a.trash ? t.foreground : t.ansi1).child(a.set ? deleteManyQuestion(a.set, Boolean(a.trash)) : deleteQuestion(a.name, a.dir, Boolean(a.trash))))
+      .child(div().text_color(a.trash !== "" ? t.foreground : t.ansi1).child(a.set !== undefined ? deleteManyQuestion(a.set, Boolean(a.trash)) : deleteQuestion(a.name, a.dir, Boolean(a.trash))))
       .child(keys(
-        hintKey(v, t, "nf-ask-yes", "y", a.trash ? "move to the Trash" : "delete", (cx) => {
+        hintKey(v, t, "nf-ask-yes", "y", a.trash !== "" ? "move to the Trash" : "delete", (cx) => {
           v.ask = null;
           removeAsked(v, a, cx);
         }),
@@ -222,31 +223,31 @@ export function footer(v: Files, t: Theme, searching: boolean): Element | null {
 
   const draft = v.draft;
 
-  if (draft) {
+  if (draft !== null) {
     const rename = draft.kind === "rename";
 
     const what = draft.kind === "rename" ? `Rename “${draft.name}”: a path moves it`
-      : `New ${draft.kind} in ${draft.dir ? `${base(draft.dir)}/` : tilde(v.root)}${draft.kind === "file" ? ": end with / for a folder" : ""}`;
+      : `New ${draft.kind} in ${draft.dir !== "" ? `${base(draft.dir)}/` : tilde(v.root)}${draft.kind === "file" ? ": end with / for a folder" : ""}`;
 
     const msg = v.msg;
 
     return line()
-      .children(msg ? [div().text_color(msg.error ? t.ansi1 : t.foreground).child(msg.text)] : [])
+      .children(msg !== null ? [div().text_color(msg.error ? t.ansi1 : t.foreground).child(msg.text)] : [])
       .child(div().text_color(t.foreground).child(what))
       .child(keys(
         hintKey(v, t, "nf-draft-ok", "enter", rename ? "rename" : "create", (cx) => commitDraft(v, cx)),
         hintKey(v, t, "nf-draft-no", "esc", "cancel", (cx) => v.endDraft(cx))));
   }
 
-  const text = v.msg ? v.msg.text : v.copied ? v.copiedText ?? "path copied" : searching && v.note ? v.note
+  const text = v.msg !== null ? v.msg.text : v.copied !== 0 ? v.copiedText ?? "path copied" : searching && (v.note !== null && v.note !== "") ? v.note
     : v.limited ? `Listing cut at ${PER_FOLDER} per folder, ${TOTAL} in all` : null;
 
   // Marks: how many, and what acts on them.
-  if (!text && v.marked.size) {
+  if ((text === null || text === "") && v.marked.size !== 0) {
     const n = v.marked.size;
 
     return line()
-      .child(div().text_color(t.accent).child(`${n} marked${v.range ? " · marking a range (V ends)" : ""}`))
+      .child(div().text_color(t.accent).child(`${n} marked${v.range !== null ? " · marking a range (V ends)" : ""}`))
       .child(keys(
         hintKey(v, t, "nf-set-d", "d", "delete", (cx) => askDelete(v, markedRows(v)[0], cx)),
         hintKey(v, t, "nf-set-x", "x", "cut", (cx) => cutRow(v, markedRows(v)[0], cx)),
@@ -254,7 +255,7 @@ export function footer(v: Files, t: Theme, searching: boolean): Element | null {
         hintKey(v, t, "nf-set-esc", "esc", "unmark", () => v.unmark())));
   }
 
-  if (!text) return null;
+  if (text === null || text === "") return null;
 
-  return line().child(div().text_color(v.msg?.error ? t.ansi1 : t.dim).child(text));
+  return line().child(div().text_color(v.msg?.error === true ? t.ansi1 : t.dim).child(text));
 }

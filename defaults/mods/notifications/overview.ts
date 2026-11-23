@@ -32,13 +32,13 @@ type Bounds = { readonly x: number; readonly y: number; readonly width: number; 
 
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, run } from "herdr";
+import { theme, closeOverlay, run } from "herdr";
 import type { Theme } from "herdr";
-import { Array as Arr, Duration, Effect, Match, Number as Num, Option, Schema, String as Str } from "effect";
+import { Array as Arr, Duration, Effect, Match, Number as Num, Option, String as Str } from "effect";
 import { boxed, edge, frameBox, icon, lit, radius, rule } from "@fireflies/look";
 import { items, dismiss } from "./engine.ts";
 import { group, age, headline, summary, where, TYPES } from "./model.ts";
-import type { Item, ItemType } from "./model.ts";
+import type { Item } from "./model.ts";
 import type { PermissionGoal } from "./claude.ts";
 import { answer } from "./drive.ts";
 import { openAsk, forget, followCommands, noteOverview, noteWindow, overviewBeat, overviewPlace, zoom, BEAT } from "./open.ts";
@@ -51,8 +51,9 @@ import { inView } from "@fireflies/menu-place";
 import type { Anchor, Box, Pt } from "@fireflies/menu-place";
 import { menuEntries, menuKey, menuView, rectInView } from "./entry-menu.ts";
 import type { EntryMenu } from "./entry-menu.ts";
+import { BAR_DROP, FOCUS_LATER, HOOK_DOC, KIND_COLOR, TITLE, orSay, overviewProps, permissionOf, plate, questionsOf, screenTail } from "./overview-parts.ts";
 import { hint as barHint, keysHint, keysView, keysKey } from "@fireflies/keyhelp";
-import type { OptionKind, PermissionRequest, QuestionRequest } from "./request.ts";
+import type { QuestionRequest } from "./request.ts";
 
 // How tall it is at the least with nothing waiting (layout px, up to the
 // popup's most): a center, not a sliver around its note.
@@ -61,35 +62,6 @@ export const EMPTY_H = 560;
 /** What ? lists, ? keys last. */
 export const KEYS: readonly KeyRow[] = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
   ["p", "peek"], ["g", "go to"], ["x", "put an error away"], ["m", "menu"], ["esc q", "close"], ["?", "keys"]];
-
-// The key bar's hints in the order a narrow drop-down leaves them out (the ?
-// list has them all); esc close goes last.
-const BAR_DROP = ["⇥ but…", "g go to", "p peek", "x put away", "↑↓ choose", "j k requests", "1-9 answer", "↵ answer", "↵ go to", "esc close"];
-
-const TITLE = { permission: "Permissions", question: "Questions", other: "Needs a look" } as const satisfies { readonly [K in ItemType]: string };
-const KIND_COLOR = { yes: "done", always: "accent", auto: "working", no: "blocked" } as const satisfies { readonly [K in OptionKind]: keyof Theme };
-const HOOK_DOC = "Claude Code's hook: see ~/.config/fireflies/app/AGENTS.md, Notifications";
-
-/** `text`, or `otherwise` when it says nothing. */
-const orSay = (text: string, otherwise: string): string => (Str.isEmpty(text) ? otherwise : text);
-
-/** The overview's props: the terminal it opens on, its most height, its overlay. */
-const OverviewPropsSchema = Schema.Struct({ terminal: Schema.optionalKey(Schema.NullOr(Schema.String)), most: Schema.optionalKey(Schema.Finite), overlay: Schema.optionalKey(Schema.String) });
-
-const readOverviewProps = Schema.decodeUnknownOption(OverviewPropsSchema);
-
-const overviewProps = (given?: Props): typeof OverviewPropsSchema.Type => Option.getOrElse(readOverviewProps(props() ?? given), () => ({}));
-
-/** How long after opening it takes the keyboard (its window is up by then). */
-const FOCUS_LATER = "400 millis";
-
-/** An item that is a permission this mod can answer, with its request. */
-type Answerable = Item & { readonly request: PermissionRequest };
-
-const permissionOf = (it: Item | null): Answerable | null => (it?.type === "permission" && it.answerable && it.request?.type === "permission" ? { ...it, request: it.request } : null);
-
-/** An item that is a block of questions this mod can answer, with its request. */
-const questionsOf = (it: Item | null): QuestionRequest | null => (it?.type === "question" && it.answerable && it.request?.type === "question" ? it.request : null);
 
 /** answerWith()'s options: the option to answer with, the note to send with it. */
 interface AnswerOptions {
@@ -550,29 +522,13 @@ export default class Overview {
         .child(v_flex().id("notify-detail-body").flex_none().on_size_change(this.measure("detail")).child(body)));
   }
 
-  plate(t: Theme, kids: readonly Element[]): Element {
-    return v_flex().relative().mx(20).px(12).py(10).gap(4).flex_none()
-      .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(fill(edge(t), 1)))
-      .children(Arr.map(kids, (k) => k.relative()));
-  }
-
-  /** The end of the agent's screen, for anything without a structured request. */
-  screenTail(t: Theme, it: Item): Element {
-    if (it.tail === null || Str.isEmpty(it.tail)) return div();
-
-    const ls = Arr.takeRight(Str.split(it.tail, "\n"), 12);
-
-    return boxed(t, v_flex().mx(20).mt(10).px(10).py(8).gap(1)).flex_none()
-      .children(Arr.map(ls, (l) => div().truncate().text_color(t.muted).child(Str.isEmpty(l) ? " " : l)));
-  }
-
   permission(t: Theme, item: Item): Element {
     const it = permissionOf(item);
 
     if (it === null) {
       return v_flex().gap(0)
-        .child(this.plate(t, [div().text_color(t.foreground).child(orSay(item.msg, "It waits for a permission."))]))
-        .child(this.screenTail(t, item))
+        .child(plate(t, [div().text_color(t.foreground).child(orSay(item.msg, "It waits for a permission."))]))
+        .child(screenTail(t, item))
         .child(div().mx(20).mt(10).text_color(t.dim).child("Answer it in its terminal: p peeks, g goes to it."));
     }
 
@@ -585,7 +541,7 @@ export default class Overview {
 
     if (input.old_string !== undefined && input.old_string !== null) preview.push(...Arr.map(head(input.old_string, 3), (l) => `- ${l}`), ...Arr.map(head(input.new_string ?? "", 3), (l) => `+ ${l}`));
 
-    const plate = this.plate(t, [
+    const shown = plate(t, [
       div().text_color(t.muted).child(r.tool),
       ...Arr.map(head(orSay(r.line, r.title), 4), (l) => div().text_color(t.foreground).child(l)),
       ...Arr.map(preview, (l) => div().truncate().text_color(Str.startsWith("+ ")(l) ? t.done : Str.startsWith("- ")(l) ? t.ansi1 : t.dim).child(Str.isEmpty(l) ? " " : l)),
@@ -616,7 +572,7 @@ export default class Overview {
     }));
 
     return v_flex()
-      .child(plate)
+      .child(shown)
       .when(Str.isNonEmpty(r.description), (el) => el.child(div().mx(20).mt(10).text_color(t.muted).child(`“${r.description}”`)))
       .child(opts)
       .when(r.canAmend, (el) => el.child(this.butBox(t, it)));
@@ -666,8 +622,8 @@ export default class Overview {
 
     if (r === null) {
       return v_flex()
-        .child(this.plate(t, [div().text_color(t.foreground).child(orSay(it.msg, "It asks a question."))]))
-        .child(this.screenTail(t, it))
+        .child(plate(t, [div().text_color(t.foreground).child(orSay(it.msg, "It asks a question."))]))
+        .child(screenTail(t, it))
         .child(div().mx(20).mt(10).text_color(t.dim).child(it.adapter === "claude" ? `Answer it in its terminal (p, g), or turn on ${HOOK_DOC} to answer here.` : "Answer it in its terminal: p peeks, g goes to it."));
     }
 
@@ -690,7 +646,7 @@ export default class Overview {
 
     return v_flex()
       .child(div().mx(20).text_color(it.status === "error" ? t.ansi1 : t.muted).child(words))
-      .child(this.screenTail(t, it))
+      .child(screenTail(t, it))
       .child(h_flex().mx(20).mt(14).gap(6)
         .child(button(t, "ov-goto", "go to ↵", t.accent, true, () => this.goTo(it)))
         .when(it.status === "error", (el) => el.child(button(t, "ov-dismiss", "x put away", t.muted, false, () => dismiss(it.id)))));

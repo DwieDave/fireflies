@@ -1620,6 +1620,14 @@ test("its menu stands at the pointer (flipped near the edges), under the selecte
   view.key({ key: "m" }, cx);
   expect(view.menu.row.path).toBe("");
   expect(box()).toMatchObject({ x: 80, y: Math.round((600 - h()) / 2.4) });
+  view.menu = null;
+  // A right-click: the press in the pane's layout px (its local place over the app's zoom), on the pressed row.
+  world.settings = { zoom: 2 };
+  const right = walk(view.render(cx)).flatMap((e: any) => e.calls).find((c: any) => c[0] === "on_mouse_down" && c[1][0] === "right")[1][1];
+  view.pressed = view.listed[1];
+  right({ local_position: { x: 60, y: 180 } }, cx);
+  expect([view.menu.row.path, view.menu.at]).toEqual([view.listed[1].path, { x: 30, y: 90 }]);
+  world.settings = { zoom: 1 };
 });
 
 // ---- the narrow panel's filter line: two rows

@@ -2,6 +2,7 @@
 // matched letters, its git or cut mark), a folder's look, the split between
 // the tree and the preview, the empty states; the cursor moving through rows.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import type { Theme } from "herdr";
@@ -22,24 +23,24 @@ import { edge } from "@fireflies/tones";
 export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
   // The name's input (a new item's row, or the row being renamed) in place of the name.
   const editing = Boolean(r.draft) || (v.draft?.kind === "rename" && v.draft.path === r.path);
-  const sel = editing || (r.path === v.sel && !v.draft);
+  const sel = editing || (r.path === v.sel && v.draft === null);
   const open = r.dir && v.folders.has(r.path);
-  const cut = !r.draft && isCut(v, absOf(v, r.path));
+  const cut = r.draft !== true && isCut(v, absOf(v, r.path));
   const ask = v.ask;
-  const doomed = ask ? (ask.set ? ask.set.some((x) => x.path === r.path) : ask.path === r.path) : false;
+  const doomed = ask !== null ? (ask.set !== undefined ? Arr.some(ask.set, (x) => x.path === r.path) : ask.path === r.path) : false;
   // Marked (t, cmd-click, a range); dragged; the folder a drop would land in.
   const marked = v.marked.has(r.path);
   const dragged = Boolean(v.drag?.paths.includes(r.path));
   const target = Boolean(v.drag?.ok) && v.drag?.into === r.path && r.path !== "";
-  const mark = cut ? "cut" : r.hit ? (r.git && markColor(t, r.git) ? r.git : null) : v.marks.get(`${v.root}/${r.path}`) ?? null;
-  const hidden = r.name.startsWith(".");
-  const tinted = mark && mark !== "•" ? markColor(t, mark) : null;
-  const color = doomed ? t.ansi1 : cut ? t.dim : sel ? t.foreground : tinted ?? (hidden || r.ignored ? t.dim : r.dir ? t.foreground : t.muted);
+  const mark = cut ? "cut" : r.hit === true ? ((r.git !== null && r.git !== "") && markColor(t, r.git) ? r.git : null) : v.marks.get(`${v.root}/${r.path}`) ?? null;
+  const hidden = Str.startsWith(".")(r.name);
+  const tinted = (mark !== null && mark !== "") && mark !== "•" ? markColor(t, mark) : null;
+  const color = doomed ? t.ansi1 : cut ? t.dim : sel ? t.foreground : tinted ?? (hidden || r.ignored === true ? t.dim : r.dir ? t.foreground : t.muted);
   const input = v.nameInput;
 
-  const name = editing && input ? Input.new(input).flex_1().min_w(0).h(ROW).text_size(12).text_color(t.foreground)
-    : r.hit ? matched(v, t, `nf-m-${r.path}`, r.name, r.ranges, cut ? t.dim : color)
-    : div().relative().flex_1().min_w(0).truncate().text_color(r.head || dragged ? t.dim : marked ? t.accent : color).child(r.name);
+  const name = editing && input !== null ? Input.new(input).flex_1().min_w(0).h(ROW).text_size(12).text_color(t.foreground)
+    : r.hit === true ? matched(v, t, `nf-m-${r.path}`, r.name, r.ranges, cut ? t.dim : color)
+    : div().relative().flex_1().min_w(0).truncate().text_color(r.head === true || dragged ? t.dim : marked ? t.accent : color).child(r.name);
 
   return h_flex().id(`nf-${r.path}`).relative().h(ROW).w_full().pl(8 + r.depth * 14).pr(10).gap(6).items_center()
     .hover((s) => s.bg(`${edge(t)}55`))
@@ -52,23 +53,23 @@ export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
     .when(target, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)).child(dither(`${t.accent}40`, 1)))
     // Indent guides: one dotted rule per level.
     .children(Array.from({ length: r.depth }, (_, d) => div().absolute().top(0).bottom(0).left(14 + d * 14).w(1).opacity(0.5).child(dither(edge(t), 1))))
-    .child(r.head ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
+    .child(r.head === true ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
     .child(r.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(open ? t.accent : t.ansi4) : typeMark(t, r.name, `nf-icon-${r.path}`))
     .child(name)
-    .children(mark && !editing ? [div().relative().flex_none().when(mark !== "cut", (el) => el.w(8))
+    .children((mark !== null && mark !== "") && !editing ? [div().relative().flex_none().when(mark !== "cut", (el) => el.w(8))
       .text_color(mark === "•" || mark === "cut" ? t.ansi3 : markColor(t, mark) ?? t.ansi3).child(mark)] : []);
 }
 
 /** Text with the matched characters in the accent. */
 export function matched(v: Files, t: Theme, id: string, text: string, ranges: readonly Range[], color: Color): Element {
   return h_flex().relative().flex_1().min_w(0).overflow_hidden()
-    .children(marks(text, ranges).map(([piece, hit], j) => div().id(`${id}-${j}`).flex_none().text_color(hit ? t.accent : color).child(piece)));
+    .children(Arr.map(marks(text, ranges), ([piece, hit], j) => div().id(`${id}-${j}`).flex_none().text_color(hit ? t.accent : color).child(piece)));
 }
 
 /** A folder in the preview: its name, what it holds (as the filters list it), its first entries. */
 export function drawFolderView(v: Files, t: Theme, d: LookDir): Element {
-  const entries = (d.entries ?? []).filter((e) => lists(d.rel ? `${d.rel}/${e.name}` : e.name, v.filters, v.ignored));
-  const facts = d.error ? "" : d.entries ? folderFacts(entries) : "listing…";
+  const entries = Arr.filter((d.entries ?? []), (e) => lists(d.rel !== "" ? `${d.rel}/${e.name}` : e.name, v.filters, v.ignored));
+  const facts = d.error !== null && d.error !== "" ? "" : d.entries !== null ? folderFacts(entries) : "listing…";
 
   const bar = h_flex().id("nf-look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
     .child(div().flex_none().text_color(t.muted).child("DIR"))
@@ -77,8 +78,8 @@ export function drawFolderView(v: Files, t: Theme, d: LookDir): Element {
     .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1)));
 
   const list = v_flex().flex_1().min_h(0).overflow_hidden().py(4).text_size(12)
-    .children(d.error ? [div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)] : [])
-    .children(entries.slice(0, 120).map((e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
+    .children(d.error !== null && d.error !== "" ? [div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)] : [])
+    .children(Arr.map(entries.slice(0, 120), (e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
       .child(e.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(t.ansi4) : typeMark(t, e.name, `nf-lk-icon-${i}`))
       .child(div().min_w(0).truncate().text_color(e.dir ? t.foreground : t.muted).child(e.name))));
 
@@ -92,7 +93,7 @@ export function drawSplit(v: Files, t: Theme, side: Side, px: number, list: Elem
 
   // h_flex centers its items: the tree's column is stretched to the split's height by hand.
   const tree = v_flex().id("nf-treecol").relative().flex_1().min_w(0).min_h(0).when(right, (el) => el.h_full())
-    .child(list).children(foot ? [foot] : []);
+    .child(list).children(foot !== null ? [foot] : []);
 
   // At rest a dotted rule; under the pointer or held, a lit band the width of the grab area.
   const lit = Boolean(v.dragging) || v.dividerHover;
@@ -116,13 +117,13 @@ export function drawSplit(v: Files, t: Theme, side: Side, px: number, list: Elem
       cx.notify();
     });
 
-  const shown = v.lookDir ? v.folderView(t, v.lookDir) : v.look;
+  const shown = v.lookDir !== null ? v.folderView(t, v.lookDir) : v.look;
 
   const look = div().id("nf-look").relative().flex_none().overflow_hidden()
     .when(right, (el) => el.w(px).h_full()).when(!right, (el) => el.h(px).w_full())
     // A right-click here isn't a row's: no menu.
     .on_mouse_down("right", stop)
-    .children(shown ? [shown] : []);
+    .children(shown !== null ? [shown] : []);
 
   return (right ? h_flex() : v_flex()).id("nf-split").relative().flex_1().min_h(0).min_w(0).child(tree).child(divider).child(look);
 }
@@ -131,7 +132,7 @@ export function emptyView(v: Files, t: Theme, title: string, hint: string | null
   return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(16).text_size(11)
     .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.muted).opacity(0.6))
     .child(div().text_color(t.foreground).child(title))
-    .children(hint ? [div().text_center().text_color(t.muted).child(hint)] : [])
+    .children(hint !== null && hint !== "" ? [div().text_center().text_color(t.muted).child(hint)] : [])
     // An empty folder: its first file, as a / + file make it.
     .when(add, (el) => el.child(h_flex().id("nf-empty-add").relative().h(20).px(6).gap(7).items_center().text_color(t.muted)
       .hover((s) => s.bg(`${edge(t)}55`).text_color(t.foreground))
@@ -147,7 +148,7 @@ export function emptyView(v: Files, t: Theme, title: string, hint: string | null
 export function endDivider(v: Files): boolean {
   const side = v.dragging;
 
-  if (!side) return false;
+  if (side === null) return false;
 
   if (v.dragged !== null) saveLook(v, side === "right" ? { ...v.lookState, right: v.dragged } : { ...v.lookState, bottom: v.dragged });
 
@@ -158,7 +159,7 @@ export function endDivider(v: Files): boolean {
 }
 
 export function selectRow(v: Files, rows: readonly Row[], i: number): void {
-  if (!rows.length) return;
+  if (rows.length === 0) return;
 
   const n = Math.max(0, Math.min(rows.length - 1, i));
 
@@ -169,30 +170,30 @@ export function selectRow(v: Files, rows: readonly Row[], i: number): void {
 /** One step through the hits while typing (folder lines skipped). */
 export function stepRow(v: Files, d: number): void {
   const rows = v.shown();
-  let i = rows.findIndex((r) => r.path === v.sel);
+  let i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.sel), () => -1);
 
   do i += d; while (rows[i]?.head);
 
-  if (rows[i]) selectRow(v, rows, i);
+  if (rows[i] !== undefined) selectRow(v, rows, i);
 }
 
 /** Where the selection goes once the rows are there: after going up, the folder
  *  it came from; a row asked for once it shows; none when its row went. */
 export function settleSelection(v: Files, rows: readonly Row[]): void {
-  if (v.pendingSel && rows.length) {
-    const back = v.pendingSel.startsWith(`${v.root}/`) ? v.pendingSel.slice(v.root.length + 1).split("/")[0] : null;
+  if ((v.pendingSel !== null && v.pendingSel !== "") && rows.length !== 0) {
+    const back = Str.startsWith(`${v.root}/`)(v.pendingSel) ? Str.split(Str.slice(v.root.length + 1)(v.pendingSel), "/")[0] : null;
 
     v.pendingSel = null;
 
-    if (back) {
-      const i = rows.findIndex((r) => r.path === back);
+    if (back !== null && back !== undefined && back !== "") {
+      const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === back), () => -1);
 
       if (i >= 0) selectRow(v, rows, i);
     }
   }
 
-  if (v.want) {
-    const i = rows.findIndex((r) => r.path === v.want);
+  if (v.want !== null && v.want !== "") {
+    const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.want), () => -1);
 
     if (i >= 0) {
       v.want = null;
@@ -200,7 +201,7 @@ export function settleSelection(v: Files, rows: readonly Row[]): void {
     }
   }
 
-  if (v.sel && !v.want && !rows.some((r) => r.path === v.sel)) v.sel = null;
+  if ((v.sel !== null && v.sel !== "") && (v.want === null || v.want === "") && !Arr.some(rows, (r) => r.path === v.sel)) v.sel = null;
 }
 
 /** The rows drawn: the tree or the hits with the name row; marks on rows no
@@ -212,16 +213,16 @@ export function listOf(v: Files, rows: readonly Row[]): readonly Row[] {
   v.listed = list;
 
   // Marks on rows no longer shown (folded away, filtered out, gone) drop out.
-  if (v.marked.size && !v.drag) {
-    const shownNow = new Set(rows.map((r) => r.path));
+  if (v.marked.size !== 0 && v.drag === null) {
+    const shownNow = new Set(Arr.map(rows, (r) => r.path));
 
-    if ([...v.marked].some((p) => !shownNow.has(p))) v.marked = new Set([...v.marked].filter((p) => shownNow.has(p)));
+    if (Arr.some([...v.marked], (p) => !shownNow.has(p))) v.marked = new Set(Arr.filter([...v.marked], (p) => shownNow.has(p)));
   }
 
   const draft = v.draft;
 
-  if (draft && !draft.shown) {
-    const i = list.findIndex((r) => r.draft || (draft.kind === "rename" && r.path === draft.path));
+  if (draft !== null && !draft.shown) {
+    const i = Option.getOrElse(Arr.findFirstIndex(list, (r) => r.draft || (draft.kind === "rename" && r.path === draft.path)), () => -1);
 
     if (i >= 0) {
       draft.shown = true;
@@ -235,27 +236,27 @@ export function listOf(v: Files, rows: readonly Row[]): readonly Row[] {
 
 /** The list's place: the rows (a virtual list), or why there are none. */
 export function listBody(v: Files, t: Theme, rows: readonly Row[], list: readonly Row[], focused: boolean): Element {
-  const searching = Boolean(v.query.trim());
+  const searching = Boolean(Str.trim(v.query));
   let body: Element;
 
-  if (searching && v.hits && !rows.length) body = emptyView(v, t, "No files match", v.note ?? `“${v.query.trim()}” under ${tilde(v.root)}`);
-  else if (searching && !v.hits) body = emptyView(v, t, "Searching…", null);
-  else if (v.error && !list.length) body = emptyView(v, t, "Can't read this folder", v.error);
-  else if (!list.length) body = emptyView(v, t, v.loading ? "Listing files…" : "Nothing here", v.loading ? null : tilde(v.root), !v.loading);
+  if (searching && v.hits !== null && rows.length === 0) body = emptyView(v, t, "No files match", v.note ?? `“${Str.trim(v.query)}” under ${tilde(v.root)}`);
+  else if (searching && v.hits === null) body = emptyView(v, t, "Searching…", null);
+  else if ((v.error !== null && v.error !== "") && list.length === 0) body = emptyView(v, t, "Can't read this folder", v.error);
+  else if (list.length === 0) body = emptyView(v, t, v.loading ? "Listing files…" : "Nothing here", v.loading ? null : tilde(v.root), !v.loading);
   else {
     const rowsList = v_virtual_list("nf-rows", list.length, ROW, (i) => list[i]?.path ?? "",
-      (range) => list.slice(range.start, range.end).map((r) => v.row(t, r, focused)))
+      (range) => Arr.map(list.slice(range.start, range.end), (r) => v.row(t, r, focused)))
       .on_item_click((path, cx) => v.pick(path, cx))
       // The pane's own right press comes after this and opens the menu for the row.
       .on_item_secondary_click((path) => {
-        v.pressed = rows.find((r) => r.path === path) ?? null;
+        v.pressed = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.path === path)) ?? null;
       })
       .size_full();
 
     body = div().id("nf-tree").relative().flex_1().min_h(0).py(4).text_size(12)
       // A drop below the rows goes into the root: the list framed in the accent.
       .when(Boolean(v.drag?.ok) && v.drag?.into === "", (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
-      .child(v.scroll ? rowsList.track_scroll(v.scroll) : rowsList)
+      .child(v.scroll !== null ? rowsList.track_scroll(v.scroll) : rowsList)
       .child(Scrollbar.vertical("nf-rows").absolute().inset_0());
   }
 

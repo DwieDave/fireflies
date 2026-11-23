@@ -28,7 +28,7 @@ export const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%",
 export function dither(color: Color, cell = 1): Element {
   const plain = flat(color, cell);
 
-  if (plain) return plain;
+  if (plain !== null) return plain;
 
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

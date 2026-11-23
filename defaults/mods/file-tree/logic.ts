@@ -2,17 +2,16 @@
 // keep, git's ignored list, search results grouped under their folders, the
 // right-click menu and how Neovim opens a file or folder. main.ts draws.
 
+import { Array as Arr, Option, Schema, String as Str } from "effect";
 import type { PaneInfo, Settings } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, nullable, object } from "./guard.ts";
 import type { Entry } from "./split-size.ts";
 import type { Listed } from "./ops.ts";
 
-export const parent = (p: string): string => p.replace(/\/[^/]+$/, "") || "/";
+export const parent = (p: string): string => Str.replace(/\/[^/]+$/, "")(p) || "/";
 
-export const base = (p: string): string => p.slice(p.lastIndexOf("/") + 1);
+export const base = (p: string): string => Str.slice(Option.getOrElse(Str.lastIndexOf("/")(p), () => -1) + 1)(p);
 
-export const dirOf = (p: string): string => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+export const dirOf = (p: string): string => (Str.includes("/")(p) ? Str.slice(0, Option.getOrElse(Str.lastIndexOf("/")(p), () => -1))(p) : "");
 
 /** A `[start, end)` range of characters (fff's or fuzzy's matched characters). */
 export type Range = readonly [number, number];
@@ -24,7 +23,7 @@ export interface Filters {
 }
 
 /** A pane's filters as kept in shared `file-tree.filters` (an older entry may have one of them). */
-export const isFilters = object({}, { hidden: isBoolean, ignored: isBoolean });
+export const FiltersSchema = Schema.Struct({ hidden: Schema.optionalKey(Schema.Boolean), ignored: Schema.optionalKey(Schema.Boolean) });
 
 /** settings.json `files`: what a new pane lists. Unset, dotfiles and
  *  git-ignored files are left out (H and I show them; the chips count them). */
@@ -37,12 +36,12 @@ export function filterDefaults(settings: Partial<Pick<Settings, "files">> | null
 /** `git ls-files -z --others --ignored --exclude-standard --directory` (run in
  *  the root) as a set of paths relative to the root; folders without their "/". */
 export function parseIgnored(stdout: string): Set<string> {
-  return new Set(stdout.split("\0").flatMap((p) => (p ? [p.replace(/\/$/, "")] : [])));
+  return new Set(Arr.flatMap(Str.split(stdout, "\0"), (p) => (p !== "" ? [Str.replace(/\/$/, "")(p)] : [])));
 }
 
 /** Whether git ignores `path` (relative to the root): it, or a folder it's in, is listed. */
 export function isIgnored(path: string, ignored: ReadonlySet<string> | null): boolean {
-  if (!ignored?.size) return false;
+  if (ignored?.size === undefined || ignored?.size === 0) return false;
 
   for (let p = path; p; p = dirOf(p)) if (ignored.has(p)) return true;
 
@@ -50,7 +49,7 @@ export function isIgnored(path: string, ignored: ReadonlySet<string> | null): bo
 }
 
 /** Any part of the path starts with a dot. */
-export const isHidden = (path: string): boolean => path.split("/").some((s) => s.startsWith("."));
+export const isHidden = (path: string): boolean => Arr.some(Str.split(path, "/"), (s) => Str.startsWith(".")(s));
 
 /** Whether a pane with these filters lists `path` (relative to the root). */
 export function lists(path: string, filters: Filters, ignored: ReadonlySet<string> | null): boolean {
@@ -64,10 +63,10 @@ export function lists(path: string, filters: Filters, ignored: ReadonlySet<strin
 /** Characters of `text` matching `query` in order, case-insensitively (the
  *  search's fallback where the index can't go): [start, end) ranges, or null. */
 export function fuzzy(query: string, text: string): [number, number][] | null {
-  const q = query.toLowerCase().replace(/\s+/g, "");
-  const s = text.toLowerCase();
+  const q = Str.replace(/\s+/g, "")(Str.toLowerCase(query));
+  const s = Str.toLowerCase(text);
 
-  if (!q) return [];
+  if (q === "") return [];
 
   // Prefer the match in the name: search from the last part's start first.
   const tryFrom = (from: number): [number, number][] | null => {
@@ -81,7 +80,7 @@ export function fuzzy(query: string, text: string): [number, number][] | null {
 
       const last = out.at(-1);
 
-      if (last && last[1] === at) last[1] = at + 1;
+      if (last !== undefined && last[1] === at) last[1] = at + 1;
       else out.push([at, at + 1]);
 
       i = at + 1;
@@ -90,7 +89,7 @@ export function fuzzy(query: string, text: string): [number, number][] | null {
     return out;
   };
 
-  return tryFrom(text.lastIndexOf("/") + 1) ?? tryFrom(0);
+  return tryFrom(Option.getOrElse(Str.lastIndexOf("/")(text), () => -1) + 1) ?? tryFrom(0);
 }
 
 /** A row of the list: where it is (relative to the root), its name, a folder or not, how deep. */
@@ -163,20 +162,20 @@ export function grouped(files: readonly Found[]): (HeadRow | HitRow)[] {
     const dir = dirOf(f.path);
     const list = groups.get(dir);
 
-    if (list) list.push(f);
+    if (list !== undefined) list.push(f);
     else groups.set(dir, [f]);
   }
 
   const rows: (HeadRow | HitRow)[] = [];
 
   for (const [dir, hits] of groups) {
-    if (dir) rows.push({ path: dir, name: dir, dir: true, depth: 0, head: true });
+    if (dir !== "") rows.push({ path: dir, name: dir, dir: true, depth: 0, head: true });
 
     for (const f of hits) {
-      const cut = dir ? dir.length + 1 : 0;
-      const ranges = (f.ranges ?? []).flatMap(([a, b]): Range[] => (b - cut > Math.max(0, a - cut) ? [[Math.max(0, a - cut), b - cut]] : []));
+      const cut = dir !== "" ? dir.length + 1 : 0;
+      const ranges = Arr.flatMap((f.ranges ?? []), ([a, b]): Range[] => (b - cut > Math.max(0, a - cut) ? [[Math.max(0, a - cut), b - cut]] : []));
 
-      rows.push({ path: f.path, name: base(f.path), dir: false, depth: dir ? 1 : 0, ranges, git: f.git ?? null, hit: true });
+      rows.push({ path: f.path, name: base(f.path), dir: false, depth: dir !== "" ? 1 : 0, ranges, git: f.git ?? null, hit: true });
     }
   }
 
@@ -233,7 +232,7 @@ export interface MenuOptions {
  *  (Markdown, the preview's kinds); `reveal`: the label of the entry that
  *  shows the row in the system's file manager (none on another machine). */
 export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false, databases = false, reveal = null }: MenuOptions = {}): MenuItem[] {
-  const root = row.dir && !row.path;
+  const root = row.dir && row.path === "";
 
   const items: MenuItem[] = row.dir
     ? [
@@ -266,7 +265,7 @@ export function menuItems(row: MenuTarget, { pane = false, clip = false, look = 
 
   items.push({ key: "y", label: "Copy path", act: "copy" }, { key: "Y", label: "Copy relative path", act: "copy-rel" });
 
-  if (reveal) items.push({ key: "f", label: reveal, act: "reveal" });
+  if (reveal !== null && reveal !== "") items.push({ key: "f", label: reveal, act: "reveal" });
 
   items.push({ key: "space", label: look ? "Hide the preview" : "Show the preview", act: "look" });
 
@@ -287,15 +286,15 @@ export function revealLabel(platform: string): string {
 /** `abs` relative to the first of `bases` it is in ("." for the base itself); else `abs`. */
 export function relativeTo(abs: string, bases: readonly string[]): string {
   for (const b of bases) {
-    const base = b.length > 1 ? b.replace(/\/+$/, "") : b;
+    const base = b.length > 1 ? Str.replace(/\/+$/, "")(b) : b;
 
-    if (!base) continue;
+    if (base === "") continue;
 
     if (abs === base) return ".";
 
     const prefix = base === "/" ? "/" : `${base}/`;
 
-    if (abs.startsWith(prefix)) return abs.slice(prefix.length);
+    if (Str.startsWith(prefix)(abs)) return Str.slice(prefix.length)(abs);
   }
 
   return abs;
@@ -310,10 +309,10 @@ export const isDatabaseFile = (path: string): boolean => /\.(db|db3|sqlite|sqlit
 export const isHtml = (path: string): boolean => /\.html?$/i.test(path);
 
 /** A local file's file:// URL, each part of its path percent-encoded. */
-export const fileUrl = (abs: string): string => `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
+export const fileUrl = (abs: string): string => `file://${Arr.join(Arr.map(Str.split(abs, "/"), encodeURIComponent), "/")}`;
 
 /** A web pane's props: its slot (browser.open's target). */
-const isSlotted = object({ slot: isString });
+const isSlotted = Schema.is(Schema.Struct({ slot: Schema.String }));
 
 /** What `w` runs: browser.open on a web pane, or a new web pane split beside. */
 export type WebRun = readonly [name: string] | readonly [name: "pane.split", args: SplitArgs];
@@ -339,10 +338,10 @@ export interface WebFrom {
  *  the shown tab; `slot`: a new pane's. A run() call as [name, args]. */
 export function webOpen(url: string, { browsers = [], from = null, slot }: WebFrom): WebRun {
   for (const b of browsers) {
-    if (isSlotted(b.props) && b.props.slot) return [`browser.open:${JSON.stringify({ url, slot: b.props.slot })}`];
+    if (isSlotted(b.props) && b.props.slot !== "") return [`browser.open:${JSON.stringify({ url, slot: b.props.slot })}`];
   }
 
-  return ["pane.split", from ? { direction: "auto", pane: from, mod: "browser", props: { url, slot } } : { direction: "auto", mod: "browser", props: { url, slot } }];
+  return ["pane.split", from !== null && from !== "" ? { direction: "auto", pane: from, mod: "browser", props: { url, slot } } : { direction: "auto", mod: "browser", props: { url, slot } }];
 }
 
 /** A piece of text and whether it matched. */
@@ -359,19 +358,19 @@ export function marks(text: string, ranges: readonly Range[]): Mark[] {
 
     if (e <= s) continue;
 
-    if (s > at) out.push([text.slice(at, s), false]);
+    if (s > at) out.push([Str.slice(at, s)(text), false]);
 
-    out.push([text.slice(s, e), true]);
+    out.push([Str.slice(s, e)(text), true]);
     at = e;
   }
 
-  if (at < text.length) out.push([text.slice(at), false]);
+  if (at < text.length) out.push([Str.slice(at)(text), false]);
 
   return out;
 }
 
 /** The menu's key column width (layout px, before zoom): its widest key at 7 px a character, plus room. */
-export const keyColumn = (items: readonly { readonly key: string }[]): number => Math.max(30, ...items.map((x) => x.key.length * 7 + 14));
+export const keyColumn = (items: readonly { readonly key: string }[]): number => Math.max(30, ...Arr.map(items, (x) => x.key.length * 7 + 14));
 
 // ---- the folders visited: back and forward
 
@@ -393,7 +392,7 @@ export const newNav = (): Nav => ({ past: [], future: [] });
 /** Going to `to` from `root`: `root` goes on the back list, the forward list
  *  empties (as in a browser). null: already there. */
 export function navGo(nav: Nav, root: string, to: string): NavStep | null {
-  if (!to || to === root) return null;
+  if (to === "" || to === root) return null;
 
   return { to, nav: { past: [...nav.past, root].slice(-50), future: [] } };
 }
@@ -423,20 +422,20 @@ export function navForward(nav: Nav, root: string): NavStep | null {
 export function rangePaths(rows: readonly Listed[], a: number, b: number): string[] {
   const [from, to] = a <= b ? [a, b] : [b, a];
 
-  return rows.slice(Math.max(0, from), to + 1).flatMap((r) => (r.head || r.draft ? [] : [r.path]));
+  return Arr.flatMap(rows.slice(Math.max(0, from), to + 1), (r) => (r.head === true || r.draft === true ? [] : [r.path]));
 }
 
 /** The paths a set acts on: one under another one in the set goes with it
  *  (a marked folder covers what's inside it), the root never. */
 export function topLevel(paths: readonly string[]): string[] {
-  const all = [...new Set(paths)].filter(Boolean);
+  const all = Arr.filter([...new Set(paths)], Boolean);
 
-  return all.filter((p) => !all.some((q) => q !== p && p.startsWith(`${q}/`)));
+  return Arr.filter(all, (p) => !Arr.some(all, (q) => q !== p && Str.startsWith(`${q}/`)(p)));
 }
 
 /** The delete question for several items: the count, the first few names, trash or permanently. */
 export function deleteManyQuestion(items: readonly Entry[], trash: boolean): string {
-  const names = items.slice(0, 3).map((x) => `“${x.name}${x.dir ? "/" : ""}”`).join(", ");
+  const names = Arr.join(Arr.map(items.slice(0, 3), (x) => `“${x.name}${x.dir ? "/" : ""}”`), ", ");
   const more = items.length > 3 ? ` and ${items.length - 3} more` : "";
 
   return `${trash ? "Move" : "Delete"} ${items.length} items (${names}${more})${trash ? " to the Trash" : " permanently"}?`;
@@ -445,22 +444,24 @@ export function deleteManyQuestion(items: readonly Entry[], trash: boolean): str
 /** Why `items` (absolute paths) can't be dropped into `into`, or null. Items
  *  already in it are left where they are; all of them there is a refusal. */
 export function dropRefusal(items: readonly string[], into: string): string | null {
-  if (!items.length) return "Nothing to move";
+  if (items.length === 0) return "Nothing to move";
 
-  if (items.some((p) => p === into)) return "A folder can't go into itself";
+  if (Arr.some(items, (p) => p === into)) return "A folder can't go into itself";
 
-  if (items.some((p) => into.startsWith(`${p}/`))) return "A folder can't go into its own folder";
+  if (Arr.some(items, (p) => Str.startsWith(`${p}/`)(into))) return "A folder can't go into its own folder";
 
-  if (items.every((p) => parent(p) === into)) return "It's already there";
+  if (Arr.every(items, (p) => parent(p) === into)) return "It's already there";
 
   return null;
 }
 
 /** One rename, move or delete (`to` null) in shared `nocturne.files.changes`, as the
  *  editors' follow.ts reads it (isFileChange there): the same fields. */
-export const isFileChange = object({ id: isNumber, from: isString, to: nullable(isString) }, { on: nullable(isString), at: isNumber });
+export const FileChangeSchema = Schema.Struct({
+  id: Schema.Finite, from: Schema.String, to: Schema.NullOr(Schema.String), on: Schema.optionalKey(Schema.NullOr(Schema.String)), at: Schema.optionalKey(Schema.Finite),
+});
 
-export type FileChange = Guarded<typeof isFileChange>;
+export type FileChange = typeof FileChangeSchema.Type;
 
 /** A rename or move (`to`), or a delete (`to` null), absolute paths. */
 export interface Moved {
@@ -483,30 +484,33 @@ export function withChanges(list: readonly FileChange[], entries: readonly Moved
 }
 
 /** One item cut for P: where it is, a folder or not, its name. */
-export const isCutItem = object({ abs: isString, dir: isBoolean, name: isString });
+export const CutItemSchema = Schema.Struct({ abs: Schema.String, dir: Schema.Boolean, name: Schema.String });
 
-export type CutItem = Guarded<typeof isCutItem>;
+export type CutItem = typeof CutItemSchema.Type;
 
 /** Shared `file-tree.cut`, what P pastes: { on, items } (a set), or, as written before, one { abs, dir, name, on }. */
-export const isClip = object({}, { on: nullable(isString), items: arrayOf(isCutItem), abs: isString, dir: isBoolean, name: isString });
+export const ClipSchema = Schema.Struct({
+  on: Schema.optionalKey(Schema.NullOr(Schema.String)), items: Schema.optionalKey(Schema.Array(CutItemSchema)),
+  abs: Schema.optionalKey(Schema.String), dir: Schema.optionalKey(Schema.Boolean), name: Schema.optionalKey(Schema.String),
+});
 
-export type Clip = Guarded<typeof isClip>;
+export type Clip = typeof ClipSchema.Type;
 
 /** What's cut, as a list ({ abs, dir, name } each), from shared `file-tree.cut`
  *  (a set now, a single item before). */
 export function cutItems(c: Clip | null): readonly CutItem[] {
-  if (!c) return [];
+  if (c === null) return [];
 
-  if (c.items) return c.items;
+  if (c.items !== undefined) return c.items;
 
-  return c.abs ? [{ abs: c.abs, dir: Boolean(c.dir), name: c.name ?? base(c.abs) }] : [];
+  return c.abs !== undefined && c.abs !== "" ? [{ abs: c.abs, dir: Boolean(c.dir), name: c.name ?? base(c.abs) }] : [];
 }
 
 /** The right-click menu for a set of `n` marked rows: what acts on all of
  *  them first, then the clicked row's own entries that act on it alone. */
 export function setMenuItems(row: MenuTarget, n: number, { pane = false, clip = false, look = false, reveal = null }: MenuOptions = {}): MenuItem[] {
   const alone: readonly Act[] = ["delete", "cut", "copy", "copy-rel", "paste", "rename", "new-file", "new-folder"];
-  const own = menuItems(row, { pane, clip: false, look, reveal }).filter((x) => !alone.includes(x.act));
+  const own = Arr.filter(menuItems(row, { pane, clip: false, look, reveal }), (x) => !alone.includes(x.act));
 
   return [
     { key: "d", label: `Delete ${n} items…`, act: "delete-set" },

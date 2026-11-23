@@ -3,6 +3,7 @@
 // the filter line's tab ring), then the list's keys in groups (marks, the
 // preview split, file operations, moving, opening), tried in that order.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context, KeyEvent, Modifiers } from "gpui-kit";
 import type { Row } from "./logic.ts";
 import type { default as Files } from "./main.ts";
@@ -34,13 +35,13 @@ interface ListKey {
 
 /** A key in the files pane (the view's key handler). */
 export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
-  if (v.menu) {
+  if (v.menu !== null) {
     v.menuKey(e, cx);
 
     return;
   }
 
-  if (v.ask) {
+  if (v.ask !== null) {
     askKey(v, v.ask, e, cx);
 
     return;
@@ -55,7 +56,7 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
   };
 
   // A drag: esc cancels it, other keys wait.
-  if (v.drag) {
+  if (v.drag !== null) {
     if (k === "escape") cancelDrag(v);
 
     done();
@@ -63,7 +64,7 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  if (v.draft) {
+  if (v.draft !== null) {
     // Typing goes to the name; esc gives up (enter is the input's submit).
     if (k !== "escape") return;
 
@@ -73,7 +74,7 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  if (v.msg && !v.typing) v.msg = null;
+  if (v.msg !== null && !v.typing) v.msg = null;
 
   if (v.typing) {
     // Typing goes to the filter; these steer the hits (enter is the input's submit).
@@ -109,8 +110,8 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
   // The keys overview (keyhelp.ts): ? opens it, ? esc q close it; meanwhile it takes every key.
   const help = keysKey(e, v.keysShown);
 
-  if (help || v.keysShown) {
-    if (help) v.keysShown = help === "toggle" ? !v.keysShown : false;
+  if (help !== null || v.keysShown) {
+    if (help !== null) v.keysShown = help === "toggle" ? !v.keysShown : false;
 
     done();
 
@@ -127,7 +128,7 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
     return;
   }
 
-  if (v.stop) {
+  if (v.stop !== null) {
     if (k === "enter" || k === "space" || k === "escape") {
       if (k === "escape") v.stop = null;
       else pressStop(v, v.stop, cx);
@@ -141,19 +142,19 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
   }
 
   const upper = m.shift || /^[A-Z]$/.test(k);
-  const low = k.toLowerCase();
+  const low = Str.toLowerCase(k);
   const rows = v.shown();
-  const i = rows.findIndex((r) => r.path === v.sel);
+  const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.sel), () => -1);
   const row = rows[i];
 
   // A move ends a shift-range; in V's range it grows the range.
   const moved = (to: number): void => {
     selectRow(v, rows, to);
 
-    if (v.range) markRange(v, v.sel);
+    if (v.range !== null) markRange(v, v.sel);
   };
 
-  if (v.range?.shift && !m.shift && ["j", "k", "down", "up"].includes(k)) v.range = null;
+  if (v.range?.shift === true && !m.shift && ["j", "k", "down", "up"].includes(k)) v.range = null;
 
   const l: ListKey = { e, k, m, low, upper, rows, i, row, moved, cx };
 
@@ -165,20 +166,20 @@ function markKey(v: Files, l: ListKey): boolean {
   const { k, m, low, upper, rows, i, row, moved } = l;
 
   if (k === "escape" && (v.marked.size || v.range)) v.unmark();
-  else if (m.shift && (k === "down" || k === "up") && row) {
+  else if (m.shift && (k === "down" || k === "up") && row !== undefined) {
     // shift-↑↓: marks while moving, from where it started.
-    if (!v.range) v.range = { anchor: row.path, base: new Set(v.marked), shift: true };
+    if (v.range === null) v.range = { anchor: row.path, base: new Set(v.marked), shift: true };
 
     moved(k === "down" ? i + 1 : i - 1);
     markRange(v, v.sel);
   } else if (low === "v" && upper) {
     // V: a range from here, as vim's line-wise visual mode; V again keeps the marks and ends it.
-    if (v.range) v.range = null;
-    else if (row) {
+    if (v.range !== null) v.range = null;
+    else if (row !== undefined) {
       v.range = { anchor: row.path, base: new Set(v.marked), shift: false };
       markRange(v, row.path);
     }
-  } else if (k === "t" && row && !row.head) {
+  } else if (k === "t" && row !== undefined && row.head !== true) {
     markToggle(v, row.path);
     selectRow(v, rows, i + 1);
   }
@@ -223,7 +224,7 @@ function moveKey(v: Files, l: ListKey): boolean {
   const { k, low, upper, rows, i, row, moved, cx } = l;
 
   if (k === "escape") {
-    if (v.query) clearSearch(v, cx);
+    if (v.query !== "") clearSearch(v, cx);
     else if (v.alone) closePane(v);
     else v.leave();
   } else if (k === "q") closePane(v);
@@ -239,15 +240,15 @@ function moveKey(v: Files, l: ListKey): boolean {
       v.gAt = 0;
       moved(0);
     } else v.gAt = Date.now();
-  } else if ((k === "l" || k === "right" || k === "enter") && row?.head) reveal(v, row.path, cx);
-  else if ((k === "l" || k === "right") && row) {
+  } else if ((k === "l" || k === "right" || k === "enter") && row?.head === true) reveal(v, row.path, cx);
+  else if ((k === "l" || k === "right") && row !== undefined) {
     if (!row.dir) v.openFile(row.path, cx);
     else if (!v.folders.has(row.path)) v.toggle(row.path, cx);
     else selectRow(v, rows, i + 1);
-  } else if ((k === "h" || k === "left") && row && !row.hit) {
+  } else if ((k === "h" || k === "left") && row !== undefined && row.hit !== true) {
     if (row.dir && v.folders.has(row.path)) v.toggle(row.path, cx);
-    else if (row.depth > 0) selectRow(v, rows, rows.findIndex((r) => r.path === parent(row.path)));
-  } else if (k === "enter" && row) {
+    else if (row.depth > 0) selectRow(v, rows, Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === parent(row.path)), () => -1));
+  } else if (k === "enter" && row !== undefined) {
     if (row.dir) v.toggle(row.path, cx);
     else v.openFile(row.path, cx);
   }
@@ -263,12 +264,12 @@ function openKey(v: Files, l: ListKey): boolean {
 
   if (k === "E" || (low === "e" && m.shift)) terminalEdit(v, row?.path ?? "", cx);
   else if (k === "e") {
-    if (row && !row.dir && viewerFor(row.path)?.other === "system") v.openFile(row.path, cx, true);
+    if (row !== undefined && !row.dir && viewerFor(row.path)?.other === "system") v.openFile(row.path, cx, true);
     else v.edit(row?.path ?? "", cx);
   } else if (k === "v") nvim(v, row ?? null);
-  else if (k === "w" && row && !row.dir) openWeb(v, row.path, cx);
+  else if (k === "w" && row !== undefined && !row.dir) openWeb(v, row.path, cx);
   else if (k === "p") previewRow(v, row, cx);
-  else if (k === "o") openPane(v, row?.dir ? row.path : "");
+  else if (k === "o") openPane(v, row?.dir === true ? row.path : "");
   else if (k === "Y" || (low === "y" && m.shift)) copyPath(v, row?.path ?? "", cx, true);
   else if (k === "y") copyPath(v, row?.path ?? "", cx);
   else if (k === "f") revealRow(v, row ?? rootRow(v));
@@ -278,10 +279,10 @@ function openKey(v: Files, l: ListKey): boolean {
 
     v.go(parent(v.root), cx);
     v.pendingSel = from;
-  } else if (k === "." && row) {
-    const into = row.dir ? row.path : row.path.includes("/") ? parent(row.path) : "";
+  } else if (k === "." && row !== undefined) {
+    const into = row.dir ? row.path : Str.includes("/")(row.path) ? parent(row.path) : "";
 
-    if (into) v.go(`${v.root}/${into}`, cx);
+    if (into !== "") v.go(`${v.root}/${into}`, cx);
   } else if (k === "r") v.refresh(cx);
   else return false;
 

@@ -3,11 +3,12 @@
 // the folders a move takes along, git's errors cleaned, the trash probe and
 // the one shell script (OPS) that does every operation.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { InputRange } from "gpui-base";
 import { parent, base } from "./logic.ts";
 
 /** `a/b` under `dir` (absolute); the root "/" without a double slash. */
-export const join = (dir: string, name: string): string => (name ? (dir === "/" ? `/${name}` : `${dir}/${name}`) : dir);
+export const join = (dir: string, name: string): string => (name !== "" ? (dir === "/" ? `/${name}` : `${dir}/${name}`) : dir);
 
 /** `abs` relative to `root`: "" for the root itself, null outside it. */
 export function relTo(root: string, abs: string): string | null {
@@ -15,7 +16,7 @@ export function relTo(root: string, abs: string): string | null {
 
   const pre = root === "/" ? "/" : `${root}/`;
 
-  return abs.startsWith(pre) ? abs.slice(pre.length) : null;
+  return Str.startsWith(pre)(abs) ? Str.slice(pre.length)(abs) : null;
 }
 
 /** A typed name that points somewhere, or why it doesn't. */
@@ -28,31 +29,31 @@ export type Resolved = { readonly abs: string; readonly folder: boolean; readonl
 export function resolveName(dir: string, typed: string, home: string | null = null): Resolved {
   const text = typed;
 
-  if (!text.trim()) return { error: "Type a name" };
+  if ((Str.trim(text)) === "") return { error: "Type a name" };
 
   let start = dir;
   let rest = text;
 
-  if (text.startsWith("/")) start = "/";
-  else if (text === "~" || text.startsWith("~/")) {
-    if (!home) return { error: "~ is this Mac's home: type the path" };
+  if (Str.startsWith("/")(text)) start = "/";
+  else if (text === "~" || Str.startsWith("~/")(text)) {
+    if (home === null || home === "") return { error: "~ is this Mac's home: type the path" };
 
     start = home;
-    rest = text.slice(1);
+    rest = Str.slice(1)(text);
   }
 
-  const parts = start.split("/").filter(Boolean);
+  const parts = Arr.filter(Str.split(start, "/"), Boolean);
 
-  for (const s of rest.split("/")) {
+  for (const s of Str.split(rest, "/")) {
     if (s === "..") parts.pop();
-    else if (s && s !== ".") parts.push(s);
+    else if (s !== "" && s !== ".") parts.push(s);
   }
 
-  const last = text.split("/").filter(Boolean).pop() ?? "";
+  const last = Arr.filter(Str.split(text, "/"), Boolean).pop() ?? "";
 
-  if (!parts.length || last === "." || last === "..") return { error: `“${text}” isn't a name` };
+  if (parts.length === 0 || last === "." || last === "..") return { error: `“${text}” isn't a name` };
 
-  return { abs: `/${parts.join("/")}`, folder: text.endsWith("/") };
+  return { abs: `/${Arr.join(parts, "/")}`, folder: Str.endsWith("/")(text) };
 }
 
 /** Where a rename lands, or why it can't. */
@@ -74,7 +75,7 @@ export function moveRefusal(src: string, dst: string, root: string): string | nu
 
   if (dst === src) return "It's already there";
 
-  if (dst.startsWith(`${src}/`)) return "A folder can't go into itself";
+  if (Str.startsWith(`${src}/`)(dst)) return "A folder can't go into itself";
 
   return null;
 }
@@ -82,7 +83,7 @@ export function moveRefusal(src: string, dst: string, root: string): string | nu
 /** The part of a name a rename selects: the stem, not the extension
  *  (`.env`, `Makefile`, a folder: all of it). UTF-16 offsets, as the input takes. */
 export function stemRange(name: string, dir = false): InputRange {
-  const dot = name.lastIndexOf(".");
+  const dot = Option.getOrElse(Str.lastIndexOf(".")(name), () => -1);
 
   return { start: 0, end: dir || dot <= 0 ? name.length : dot };
 }
@@ -105,19 +106,19 @@ export interface Listed {
 /** The row to select once `path` is deleted: the next one past it (and what
  *  it held), else the one before. */
 export function neighbour(rows: readonly Listed[], path: string): string | null {
-  const i = rows.findIndex((r) => r.path === path);
+  const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === path), () => -1);
 
   if (i < 0) return null;
 
-  const inside = (r: Listed): boolean => r.path === path || r.path.startsWith(`${path}/`);
-  const next = rows.slice(i + 1).find((r) => !inside(r) && !r.head);
+  const inside = (r: Listed): boolean => r.path === path || Str.startsWith(`${path}/`)(r.path);
+  const next = Option.getOrUndefined(Arr.findFirst(rows.slice(i + 1), (r) => !inside(r) && r.head !== true));
 
-  if (next) return next.path;
+  if (next !== undefined) return next.path;
 
   for (let j = i - 1; j >= 0; j--) {
     const r = rows[j];
 
-    if (r && !r.head) return r.path;
+    if (r !== undefined && r.head !== true) return r.path;
   }
 
   return null;
@@ -128,8 +129,8 @@ export function movedFolders(folders: Iterable<string>, from: string, to: string
   const out = new Set<string>();
 
   for (const f of folders) {
-    if (f !== from && !f.startsWith(`${from}/`)) out.add(f);
-    else if (to !== null) out.add(to + f.slice(from.length));
+    if (f !== from && !Str.startsWith(`${from}/`)(f)) out.add(f);
+    else if (to !== null) out.add(to + Str.slice(from.length)(f));
   }
 
   return out;
@@ -137,22 +138,22 @@ export function movedFolders(folders: Iterable<string>, from: string, to: string
 
 /** The folders to unfold so `rel` shows (its parents). */
 export function parentsOf(rel: string): string[] {
-  const parts = rel.split("/");
+  const parts = Str.split(rel, "/");
 
-  return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
+  return Arr.map(parts.slice(0, -1), (_, i) => Arr.join(parts.slice(0, i + 1), "/"));
 }
 
 /** A failed command's stderr as one line: macOS's trash wraps its reason in
  *  an NSError dump; the shell's "sh: line 1:" goes. */
 export function cleanError(stderr: string): string {
-  const s = stderr.trim();
+  const s = Str.trim(stderr);
   const ns = /Code=\d+ "(.+?)" UserInfo/.exec(s);
 
   if (ns?.[1] !== undefined) return ns[1];
 
-  const line = s.split("\n").filter(Boolean).pop() ?? "";
+  const line = Arr.filter(Str.split(s, "\n"), Boolean).pop() ?? "";
 
-  return line.replace(/^(sh|files-op): (line \d+: )?/, "") || "It didn't work";
+  return Str.replace(/^(sh|files-op): (line \d+: )?/, "")(line) || "It didn't work";
 }
 
 /** The machine's trash, run as `sh -c PROBE files-trash-probe`: its path
