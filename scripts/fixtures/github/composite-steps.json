@@ -1,0 +1,138 @@
+[
+  {
+    "number": 1,
+    "name": "Set up job",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:47Z",
+    "completed_at": "2026-11-18T09:38:48Z"
+  },
+  {
+    "number": 2,
+    "name": "Checkout repository",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:48Z",
+    "completed_at": "2026-11-18T09:38:51Z"
+  },
+  {
+    "number": 3,
+    "name": "Set up Bun",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:51Z",
+    "completed_at": "2026-11-18T09:38:52Z"
+  },
+  {
+    "number": 4,
+    "name": "Install workspace dependencies",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:52Z",
+    "completed_at": "2026-11-18T09:38:57Z"
+  },
+  {
+    "number": 5,
+    "name": "Read domain",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:57Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 6,
+    "name": "Install sops CLI",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 7,
+    "name": "Normalize image owner name",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 8,
+    "name": "Render preview manifests",
+    "status": "completed",
+    "conclusion": "failure",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 9,
+    "name": "Configure kubectl context",
+    "status": "completed",
+    "conclusion": "skipped",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 10,
+    "name": "Create preview namespace and runtime secrets",
+    "status": "completed",
+    "conclusion": "skipped",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 11,
+    "name": "Apply preview manifests to cluster",
+    "status": "completed",
+    "conclusion": "skipped",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 12,
+    "name": "Wait for workload rollout",
+    "status": "completed",
+    "conclusion": "skipped",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:38:58Z"
+  },
+  {
+    "number": 13,
+    "name": "Comment preview URLs on PR",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:38:58Z",
+    "completed_at": "2026-11-18T09:39:00Z"
+  },
+  {
+    "number": 24,
+    "name": "Post Read domain",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:39:00Z",
+    "completed_at": "2026-11-18T09:39:00Z"
+  },
+  {
+    "number": 25,
+    "name": "Post Set up Bun",
+    "status": "completed",
+    "conclusion": "skipped",
+    "started_at": "2026-11-18T09:39:00Z",
+    "completed_at": "2026-11-18T09:39:00Z"
+  },
+  {
+    "number": 26,
+    "name": "Post Checkout repository",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:39:00Z",
+    "completed_at": "2026-11-18T09:39:00Z"
+  },
+  {
+    "number": 27,
+    "name": "Complete job",
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-11-18T09:39:00Z",
+    "completed_at": "2026-11-18T09:39:00Z"
+  }
+]

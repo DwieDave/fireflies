@@ -17,6 +17,7 @@ import { BAR, dither, focusOn, stop, zoom } from "./pane-kit.ts";
 import { closeCard } from "./card.ts";
 import { focusText } from "./md-pane.ts";
 import { closeTab, moveTab, otherEditor, popIn, popOut, select } from "./pane-tabs.ts";
+import { copyDocPath } from "./scratch-bar.ts";
 import { edge } from "@fireflies/tones";
 
 /** Opens the menu of tab `index` (the shown one by default): a right-click
@@ -60,6 +61,7 @@ export function tabMenuAct(ed: EditorPane, act: MenuAct, cx: Context): void {
   else if (act === "pop-in") popIn(ed, cx, d);
   else if (act === "move-left") moveTab(ed, i, i - 1, cx);
   else if (act === "move-right") moveTab(ed, i, i + 1, cx);
+  else if (act === "copy-path") copyDocPath(ed, d, cx);
   else if (act === "close") closeTab(ed, cx, d);
   else closeOthers(ed, cx, d);
 

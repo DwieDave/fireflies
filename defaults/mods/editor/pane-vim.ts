@@ -7,7 +7,7 @@ import { isString, object } from "./guard.ts";
 import { isList } from "./guards.ts";
 import { basename, dirname, uri } from "./logic.ts";
 import { firstLocation, isLocations } from "./lsp-replies.ts";
-import { editBetween } from "./md-text.ts";
+import { caretTo, editBetween } from "./md-text.ts";
 import { join } from "@fireflies/markdown/paths";
 import { beginInsert } from "./vim-ops.ts";
 import type { Doc as VimDoc, FeedResult, Played } from "./vim.ts";
@@ -197,7 +197,8 @@ export function vimApply(ed: EditorPane, r: FeedResult | Played, doc: VimDoc, cx
 
   if (multi) ed.editor.set_selections(multi.map((p) => ({ start: p, end: p })));
   else if (r.selections) ed.editor.set_selections(r.selections.map((s) => (s.head === "start" ? { start: s.end, end: s.start } : { start: s.start, end: s.end })));
-  else if (r.cursor) ed.editor.set_cursor(r.cursor.line, r.cursor.col);
+  // The key came from the editor that has the keyboard (the text, or the rendered view's block): it stays there.
+  else if (r.cursor) caretTo(ed.editor, r.cursor.line, r.cursor.col);
 
   if (r.mode) ed.editor.set_cursor_shape(CARET[r.mode]);
 

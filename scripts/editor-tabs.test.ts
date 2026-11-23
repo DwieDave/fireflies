@@ -1097,9 +1097,9 @@ test("the tab's menu stands at the press for a right-click, under its tab for sp
 
 test("the tab's menu: a right-click on a tab, its entries, j / k / enter and letters, a click; close the others keeps unsaved ones", async () => {
   const p = await three();
-  expect(tabs.tabMenuItems({ count: 3, index: 0, others: false }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "move-right", "close", "close-others"]);
-  expect(tabs.tabMenuItems({ count: 1, index: 0, others: true }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "pop-in", "close"]);
-  expect(tabs.tabMenuItems({ count: 1, index: 0, scratch: true }).map((x: any) => x.act)).toEqual(["close"]);
+  expect(tabs.tabMenuItems({ count: 3, index: 0, others: false }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "move-right", "copy-path", "close", "close-others"]);
+  expect(tabs.tabMenuItems({ count: 1, index: 0, others: true }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "pop-in", "copy-path", "close"]);
+  expect(tabs.tabMenuItems({ count: 1, index: 0, scratch: true }).map((x: any) => x.act)).toEqual(["copy-path", "close"]);
   const strip = p.tabStrip(theme);
   byId(strip, "editor-tab-2").calls.on_mouse_down.find((c: any[]) => c[0] === "right")[1]({}, cx());
   expect(p.tabMenu).toMatchObject({ index: 2, at: 0 });

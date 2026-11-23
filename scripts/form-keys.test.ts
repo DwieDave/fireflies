@@ -88,7 +88,7 @@ test("ctrl-tab: a root says when a form has its keyboard; the bound tab reaches 
 test("every form's root takes the bound tab and hands it to its key handler; init binds it", () => {
   // The GitHub window says when its form has the keyboard (ctrl-tab from any stop).
   const gh = readFileSync(`${root}mods/github/main.ts`, "utf8");
-  expect(gh).toContain("const formOpen = !!this.shown().form;");
+  expect(gh).toContain("const formOpen = this.shown().form !== null;");
   expect(gh).toContain("tabActions(el, (e, cx) => this.key(e, cx), formOpen)");
   for (const [file, call, init = file] of ROOTS) {
     const src = readFileSync(`${root}${file}`, "utf8");
@@ -372,7 +372,7 @@ test("feedback: opens on the title; tab walks title → message → cancel → o
 
 // ---- add a machine
 
-test("machine-add: tab reaches Add, each Copy shown and Esc, wrapping; enter presses the focused one", () => {
+test("machine-add: tab reaches Add, each Run in a tab and Copy shown and Esc, wrapping; enter presses the focused one", () => {
   state.props = { overlay: "ma" };
   const m: any = new MachineAdd();
   const c = cx();
@@ -382,12 +382,14 @@ test("machine-add: tab reaches Add, each Copy shown and Esc, wrapping; enter pre
   m.add = (target: string) => added.push(target);
   m.pending.add("box"); m.state.box = "needs a password";
   let r = m.render();
-  expect(m.stops().map((s: any) => s.id)).toEqual(["input", "add", "copy:box", "close"]);
+  expect(m.stops().map((s: any) => s.id)).toEqual(["input", "add", "tab:box", "copy:box", "close"]);
   m.typed = "me@box";
   press(r, "tab", c);
   expect(m.stop).toBe("add");
   press(r, "enter", c);
   expect(added).toEqual(["me@box"]);
+  press(r, "tab", c);
+  expect(m.stop).toBe("tab:box");
   press(r, "tab", c);
   expect(m.stop).toBe("copy:box");
   r = m.render();

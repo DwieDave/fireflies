@@ -25,7 +25,7 @@ import { openForm } from "./conn-form.ts";
 import { openExport } from "./export-form.ts";
 import { keepCopy, ownPane } from "./opening.ts";
 import { quoteName, qualified } from "./catalog.ts";
-import { schemasOf, shownTables, structRows } from "./panels.ts";
+import { schemasOf, shownTables, structRows, tableCursor } from "./panels.ts";
 import { edgesOf } from "./layout.ts";
 import { counted } from "./edits.ts";
 import { beforeLeaving, discardAll, openReview, runSave } from "./cell-edit.ts";
@@ -321,6 +321,10 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
   if (v.tablesTab === "databases") return dbAct(v, action, cx);
 
   const list = shownTables(v);
+
+  // The list read again shorter: the cursor stands on its last row (drawn there too).
+  v.tableAt = tableCursor(v, list.length);
+
   const t = list[v.tableAt];
 
   switch (action) {

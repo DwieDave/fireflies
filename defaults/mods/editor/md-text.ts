@@ -26,6 +26,16 @@ export const pos = (line: number, col: number): Pos => ({ line, col });
 
 export const caret = (p: Pos): Sel => ({ start: p, end: p });
 
+/** The caret put at (line, col) without taking the keyboard. gpui-base's set_cursor without an
+ *  end focuses the editor: the file's editor, which the rendered view doesn't draw, took the
+ *  keyboard from the block being typed in on every key (the app's fallback handed it back a
+ *  moment later, keys typed meanwhile lost), and a copy reloading the note another copy had
+ *  just saved took it from the pane being typed in. With an end (the same place) it's the same
+ *  move, its column remembered, the caret revealed, the keyboard left where it is. */
+export function caretTo(editor: { set_cursor(line: number, col: number, end?: Pos): void }, line: number, col: number): void {
+  editor.set_cursor(line, col, { line, col });
+}
+
 export const before = (a: Pos, b: Pos): boolean => a.line < b.line || (a.line === b.line && a.col <= b.col);
 
 export function ordered(sel: Sel): Sel {

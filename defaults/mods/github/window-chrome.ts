@@ -3,14 +3,14 @@
 // menu) and the yes / no asked in the bar.
 
 import { div, svg } from "gpui-kit";
-import type { Color, Element } from "gpui-kit";
+import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { placeMenu } from "@fireflies/menu-place";
-import type { Guarded } from "./guard.ts";
-import { literal } from "./guard.ts";
+import { Array as Arr, Schema, String as Str } from "effect";
 import type { Hint } from "./kit.ts";
-import { dither, chip, stop, pip, band, ART, popupScrim, unzoom } from "./kit.ts";
+import type { PickRow } from "./host.ts";
+import { dither, chip, stop, pip, lit, ART, veil, unzoom } from "./kit.ts";
 import { keysView } from "@fireflies/keyhelp";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";
@@ -23,9 +23,9 @@ import { edge } from "@fireflies/tones";
 export const NARROW = 640;
 
 /** The window's tabs. */
-export const isTabId = literal("prs", "actions", "projects");
+export const TabIdSchema = Schema.Literals(["prs", "actions", "projects"]);
 
-export type TabId = Guarded<typeof isTabId>;
+export type TabId = typeof TabIdSchema.Type;
 
 export const TABS: readonly (readonly [TabId, string])[] = [["prs", "Pull requests"], ["actions", "Actions"], ["projects", "Projects"]];
 
@@ -34,19 +34,20 @@ export const TAB_NAME = { prs: "pull requests", actions: "actions", projects: "p
 /** A yes / no asked in the bar. */
 export interface Confirm {
   readonly text: string;
-  readonly go: () => void;
+  /** Runs on yes, with the cx of the key or click that said it. */
+  readonly go: (cx: Context) => void;
 }
 
 /** The window's top bar: the moon, the repo (a fork's way across), the branch, the tabs, how fresh it is, ↻ and ✕. */
 export function header(v: GitHub, t: Theme): Element {
   const live = v.state === "ready" && v.shown().interval() < 10000;
-  const runningRuns = (v.actions.runs ?? []).filter((r) => r.status === "in_progress").length;
-  const where = v.repo ? v.repo.full : v.folder ?? "";
+  const runningRuns = Arr.filter(v.actions.runs ?? [], (r) => r.status === "in_progress").length;
+  const where = v.repo === null ? v.folder ?? "" : v.repo.full;
   const prs = v.prs.list?.length ?? 0;
 
   const compact = v.size.width < NARROW;
 
-  const tabs = TABS.map(([id, label], i) => chip(t, `tab-${id}`,
+  const tabs = Arr.map(TABS, ([id, label], i) => chip(t, `tab-${id}`,
     h_flex().gap(6).items_center()
       .child(div().text_color(v.tab === id ? t.accent : t.dim).child(String(i + 1)))
       .when(!compact || v.tab === id, (el) => el.child(div().child(label)))
@@ -61,12 +62,13 @@ export function header(v: GitHub, t: Theme): Element {
     .child(div().text_color(color).truncate().max_w(260).child(text));
 
   // Quiet: what's shown is never taken away; the bar only says how old it is.
-  const status = v.busy && v.loud ? word("working", t.dim, said ? `updating… · ${said.replace(/^updated /, "")}` : "updating…", true)
-    : v.stale ? word("failed", t.dim, said ? `couldn't update · ${said}` : "couldn't update")
+  const status = v.busy && v.loud ? word("working", t.dim, said === "" ? "updating…" : `updating… · ${Str.replace(/^updated /, "")(said)}`, true)
+    : v.stale !== "" ? word("failed", t.dim, said === "" ? "couldn't update" : `couldn't update · ${said}`)
     : live ? word("working", t.working, "live")
-    : said ? word("done", t.dim, said) : div();
+    : said === "" ? div() : word("done", t.dim, said);
 
   const r = v.repo;
+  const parent = r?.parent ?? "", child = r?.child ?? "";
 
   // The bar is where the window drags from: presses on it aren't stopped.
   // Where the window's ✕ is, the move: ◧ into a pane, or from a pane ⧉ out to a window (place.ts).
@@ -87,7 +89,7 @@ export function header(v: GitHub, t: Theme): Element {
       .child(div().text_color(t.foreground).child("GITHUB")))
     .child(div().relative().flex_shrink(1).min_w(0).max_w(320).truncate().text_color(t.muted).child(where))
     .when(Boolean(r?.parent || r?.child), (el) => el.child(chip(t, "gh-fork",
-      r?.parent ? `fork of ${r.parent}` : `‹ ${r?.child ?? ""}`, false, (cx) => v.switchFork(cx), t.dim)))
+      parent === "" ? `‹ ${child}` : `fork of ${parent}`, false, (cx) => v.switchFork(cx), t.dim)))
     .when(Boolean(r?.branch), (el) => el.child(div().relative().flex_none().text_color(t.ansi5).child(r?.branch ?? "")))
     .child(h_flex().relative().flex_none().gap(2).children(tabs))
     .child(div().flex_1())
@@ -100,10 +102,10 @@ export function header(v: GitHub, t: Theme): Element {
 /** ?: every key of the tab and the window (keyhelp.ts). */
 export function helpPanel(v: GitHub, t: Theme): Element {
   const fork = v.tab === "projects" ? "F" : "p F";
-  const r = v.repo;
-  const forkRow: Hint[] = r?.parent ? [[fork, `the parent, ${r.parent}`]] : r?.child ? [[fork, `back to the fork, ${r.child}`]] : [];
+  const parent = v.repo?.parent ?? "", child = v.repo?.child ?? "";
+  const forkRow: Hint[] = parent !== "" ? [[fork, `the parent, ${parent}`]] : child !== "" ? [[fork, `back to the fork, ${child}`]] : [];
   const all: Hint[] = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"], ...forkRow, inPane(v) ? ["q", "close the pane (from the top)"] : ["esc q", "close (from the top)"], ["ctrl-t", inPane(v) ? "out to a window" : "into a pane"], ["?", "keys"]];
-  const tab = v.tab === "prs" ? Prs.help() : v.tab === "projects" ? Projects.help() : Actions.help();
+  const tab = TAB_HELP[v.tab]();
   const name = TAB_NAME[v.tab];
 
   return keysView(t, {
@@ -113,11 +115,17 @@ export function helpPanel(v: GitHub, t: Theme): Element {
   });
 }
 
+/** Each tab's keys, for ?. */
+const TAB_HELP = { prs: () => Prs.help(), actions: () => Actions.help(), projects: () => Projects.help() } as const satisfies { readonly [K in TabId]: () => ReturnType<typeof Prs.help> };
+
+/** A picker row's height: two lines when it has a second. */
+const rowHeight = (r: PickRow): number => (r.sub === undefined || r.sub === "" ? 24 : 34);
+
 /** The picker (L's links, a right-click menu) over the body, its cursor kept in view. */
 export function pickerPanel(v: GitHub, t: Theme): Element {
   const p = v.picker;
 
-  if (!p) return div();
+  if (p === null) return div();
 
   // The cursor stays in view in a long list (the box's first child is the title).
   if (p.shownAt !== p.at) {
@@ -125,9 +133,9 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
     v.pickerScroll.scroll_to_item(p.at + 1);
   }
 
-  const rows = p.rows.map((r, i) => h_flex().id(`pick-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
+  const rows = Arr.map(p.rows, (r, i) => h_flex().id(`pick-${i}`).relative().h(rowHeight(r)).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edge(t)}55`))
-    .when(i === p.at, (el) => el.children(band(t, true)))
+    .when(i === p.at, (el) => lit(t, el, true))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       v.picker = null;
@@ -142,13 +150,13 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
   // A right-click's: at the press (flipped near the body's edges: menu-place.ts), narrower; else
   // in the middle.
   const near = p.near ?? null;
-  const w = near ? 380 : 560;
-  const h = Math.min(420, 14 + 8 + p.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0));
+  const w = near === null ? 560 : 380;
+  const h = Math.min(420, 14 + 8 + Arr.reduce(p.rows, 0, (n, r) => n + rowHeight(r)));
   const b = v.bodyBox;
-  const at = near && b ? placeMenu({ width: w, height: h }, { width: unzoom(b.w), height: unzoom(b.h) }, near) : null;
+  const at = near !== null && b !== null ? placeMenu({ width: w, height: h }, { width: unzoom(b.w), height: unzoom(b.h) }, near) : null;
   const layer = div().id("gh-picker").absolute().inset_0().text_size(12);
 
-  return (at ? layer : layer.flex().items_center().justify_center())
+  return (at === null ? layer.flex().items_center().justify_center() : layer)
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       v.picker = null;
@@ -159,7 +167,7 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
       v.picker = null;
       cx.notify();
     })
-    .child(popupScrim("gh-picker-scrim"))
+    .child(veil("gh-picker-scrim"))
     .child(v_flex().id("gh-picker-box").when(at !== null, (el) => el.absolute().left(at?.x ?? 0).top(at?.y ?? 0)).w(w).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(v.pickerScroll)
       .on_mouse_down("left", stop)
       .child(div().px(10).pb(4).text_size(10).text_color(t.muted).child(p.title))
@@ -171,9 +179,9 @@ export function confirmBar(v: GitHub, t: Theme, c: Confirm): Element {
   return h_flex().id("gh-confirm").relative().h(30).flex_none().px(12).gap(12).items_center().text_size(12)
     .child(dither(`${t.ansi3}44`, 1))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(c.text))
-    .child(chip(t, "gh-yes", "y  yes", false, () => {
+    .child(chip(t, "gh-yes", "y  yes", false, (cx) => {
       v.confirm = null;
-      c.go();
+      c.go(cx);
     }, t.ansi3))
     .child(chip(t, "gh-no", "esc  no", false, () => {
       v.confirm = null;

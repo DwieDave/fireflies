@@ -2,8 +2,9 @@
 // modes, the menus of the whole repo (log, merge / rebase, diff mode, undo),
 // push and pull, paging and ranges.
 
+import { Array as Arr, Effect, String as Str } from "effect";
 import { nextUndo, nextRedo, UNDO, REDO } from "./history.ts";
-import { shq } from "./git.ts";
+import { shell } from "./git.ts";
 import type { Action } from "./keys.ts";
 import type { MenuItem } from "./popups.ts";
 import type { default as GitView } from "./main.ts";
@@ -58,21 +59,21 @@ export const WINDOW_ACTIONS = {
     ok: (cmd) => {
       const g = v.git;
 
-      if (!cmd.trim() || !g) return;
+      if (Str.isEmpty(Str.trim(cmd)) || g === null) return;
 
-      v.shellHistory = [cmd, ...v.shellHistory.filter((c) => c !== cmd)].slice(0, 30);
-      spawn(v, async () => {
-        const r = await g.run("Shell command", [], { shell: cmd, shown: cmd, timeout: 600000 });
+      v.shellHistory = Arr.take([cmd, ...Arr.filter(v.shellHistory, (c) => c !== cmd)], 30);
+      spawn(v, Effect.gen(function* () {
+        const r = yield* g.run("Shell command", [], { shell: cmd, shown: cmd, timeout: 600000 });
 
-        if (r.out.trim() || r.err) v.showOutput(cmd, (r.out + (r.ok ? "" : `\n${r.err}`)).trim(), r.ok);
+        if (Str.isNonEmpty(Str.trim(r.out)) || Str.isNonEmpty(r.err)) v.showOutput(cmd, Str.trim(r.out + (r.ok ? "" : `\n${r.err}`)), r.ok);
 
-        await v.reloadNow();
-      }, { row: null });
+        yield* v.reloadNow();
+      }), { row: null });
     },
   }),
   "recent-repos": (v) => v.menu({
     title: "Recent repos",
-    items: recentRepos(v).map((r, i) => ({ key: i < 9 ? String(i + 1) : "", label: r.name, sub: r.folder, go: () => switchRepo(v, r.folder) })),
+    items: Arr.map(recentRepos(v), (r, i) => ({ key: i < 9 ? String(i + 1) : "", label: r.name, sub: r.folder, go: () => switchRepo(v, r.folder) })),
     empty: "No other repos in your spaces yet.",
   }),
   "all-branches-log": (v) => {
@@ -103,12 +104,12 @@ export const WINDOW_ACTIONS = {
   "tab-prev": (v) => stepTab(v, -1),
   range: (v) => toggleRange(v),
   "range-down": (v) => {
-    if (!v.range) toggleRange(v);
+    if (v.range === null) toggleRange(v);
 
     moveBy(v, 1);
   },
   "range-up": (v) => {
-    if (!v.range) toggleRange(v);
+    if (v.range === null) toggleRange(v);
 
     moveBy(v, -1);
   },
@@ -129,14 +130,14 @@ export function verbOf(s: NonNullable<GitView["data"]["state"]>) {
 export function mergeRebaseMenu(v: GitView) {
   const s = v.data.state;
 
-  if (!s) return v.error("Not merging or rebasing.");
+  if (s === null) return v.error("Not merging or rebasing.");
 
   const verb = verbOf(s);
 
   if (verb === "bisect") return v.menu({ title: "Bisect", items: [{ key: "r", label: "Reset bisect", go: () => git(v, "Bisect reset", ["bisect", "reset"]) }] });
 
   v.menu({
-    title: `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`,
+    title: Str.capitalize(s),
     items: [
       { key: "c", label: "Continue", sub: `git ${verb} --continue`, go: () => git(v, `Continue ${verb}`, [verb, "--continue"], { timeout: 120000 }) },
       { key: "a", label: "Abort", sub: `git ${verb} --abort`, danger: true, go: () => v.ask({ title: `Abort ${verb}`, text: `Abort the ${verb}?`, danger: true, go: () => git(v, `Abort ${verb}`, [verb, "--abort"]) }) },
@@ -149,7 +150,7 @@ export function diffMenu(v: GitView) {
   const r = refOf(v);
   const items: MenuItem[] = [];
 
-  if (r) {
+  if (r !== null) {
     items.push({
       key: "s", label: `Diff against ${short(r)}`, sub: "then pick another to compare",
       go: () => {
@@ -165,15 +166,17 @@ export function diffMenu(v: GitView) {
     go: () => v.prompt({
       title: "Diff against", placeholder: "a branch, tag or commit",
       ok: (x) => {
-        if (x.trim()) {
-          v.diffBase = x.trim();
+        const ref = Str.trim(x);
+
+        if (Str.isNonEmpty(ref)) {
+          v.diffBase = ref;
           loadMain(v);
         }
       },
     }),
   });
 
-  if (v.diffBase) {
+  if (v.diffBase !== null) {
     items.push({
       key: "r", label: "Reverse the direction",
       go: () => {
@@ -197,13 +200,13 @@ export function diffMenu(v: GitView) {
 export function undoRedo(v: GitView, what: "undo" | "redo") {
   const g = v.git;
 
-  if (!g) return;
+  if (g === null) return;
 
-  spawn(v, async () => {
-    const reflog = await g.reflog(100);
+  spawn(v, Effect.gen(function* () {
+    const reflog = yield* g.reflog(100);
     const step = what === "undo" ? nextUndo(reflog) : nextRedo(reflog);
 
-    if (!step) return v.error(what === "undo" ? "Nothing to undo." : "Nothing to redo.");
+    if (step === null) return v.error(what === "undo" ? "Nothing to undo." : "Nothing to redo.");
 
     const dirty = (v.data.status?.files ?? []).length > 0;
 
@@ -212,9 +215,9 @@ export function undoRedo(v: GitView, what: "undo" | "redo") {
       text: `${step.says}${step.hard && dirty ? " (your uncommitted changes are stashed and put back)" : ""}?`, danger: step.hard,
       go: () => git(v, step.says, [], {
         env: { GIT_REFLOG_ACTION: what === "undo" ? UNDO : REDO },
-        shell: step.hard && dirty ? `git stash push -q -u -m "git ${what}" && git ${step.args.map(shq).join(" ")} && git stash pop -q` : `git ${step.args.map(shq).join(" ")}`,
-        shown: `git ${step.args.join(" ")}`,
+        shell: step.hard && dirty ? `git stash push -q -u -m "git ${what}" && git ${shell(step.args)} && git stash pop -q` : `git ${shell(step.args)}`,
+        shown: `git ${Arr.join(step.args, " ")}`,
       }),
     });
-  }, { row: null }); // the whole repo moves, not one row
+  }), { row: null }); // the whole repo moves, not one row
 }

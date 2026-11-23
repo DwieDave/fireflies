@@ -5,9 +5,15 @@ import { join } from "node:path";
 
 const source = await readFile(new URL("../defaults/mods/machine-add/main.js", import.meta.url), "utf8");
 
-function setup(result: any) {
+// Where the app's own hc is (its folder first on the app's PATH): not on the
+// person's shell PATH, as on Developer's Mac (~/.local/bin/hc).
+const CORE = "/home/test/.local/bin/hc";
+
+function setup(result: any, opts: { core?: string | null; spaces?: any[] } = {}) {
   const calls: string[][] = [];
   const overlays: unknown[] = [];
+  const runs: [string, any][] = [];
+  const closed: unknown[] = [];
   const machines: any[] = [];
   const probes: unknown[] = [];
   const timers: ((cx: any) => void)[] = [];
@@ -16,11 +22,17 @@ function setup(result: any) {
     View: class {}, div() {}, svg() {}, TextView: {}, v_flex() {}, h_flex() {},
     InputState: { new: () => ({ on() {}, focus() {}, set_value() {} }) }, Input: {}, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
     home: () => "/home/test", readTextFile: async () => null,
-    theme() {}, props: () => ({}), closeOverlay() {},
+    theme() {}, props: () => ({ overlay: "ma" }), closeOverlay: (id: unknown) => closed.push(id),
+    run: (name: string, args: any) => { runs.push([name, args]); return null; },
+    spaces: () => opts.spaces ?? [{ id: "s1", machine: null, active: true }],
     // form-keys.ts and herdr's window (imports are stripped here).
     bindTab() {}, tabActions: (el: unknown) => el, formKey: () => null, formHints: () => [], ring: (el: unknown) => el, appWindow: () => null,
     openOverlay: (...args: unknown[]) => overlays.push(args),
-    exec: async (_cmd: string, _args: string[], options: any) => {
+    exec: async (cmd: string, args: string[], options: any) => {
+      if (cmd === "sh" && args[1] === "command -v hc") {
+        if (opts.core === null) throw new Error("cannot run sh");
+        return { code: 0, stdout: `${opts.core ?? CORE}\n`, stderr: "" };
+      }
       probes.push(options.on);
       return { stdout: "Darwin\n/remote/herdr-core\n" };
     },
@@ -41,7 +53,7 @@ function setup(result: any) {
   };
   view.init({}, cx);
   return {
-    view, calls, overlays, machines, probes,
+    view, calls, overlays, machines, probes, runs, closed, cx,
     async add(target = "my-host") {
       await task;
       view.typed = target;
@@ -57,11 +69,12 @@ for (const kind of ["hc_missing", "incompatible", "login_needed", "auth_failed",
     const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind, message: "needs attention" } }) });
     await s.add();
     expect(s.view.state["my-host"]).toContain("Couldn't add my-host here");
-    expect(s.view.state["my-host"]).toContain("`hc machine add my-host`");
-    expect(s.view.state["my-host"]).toContain("`hc machine --help`");
+    expect(s.view.state["my-host"]).toContain(`\`${CORE} machine add my-host\``);
+    expect(s.view.state["my-host"]).toContain(`\`${CORE} machine --help\``);
     expect(s.view.isAdded("my-host")).toBe(false);
     expect(s.calls.every((args) => args[0] === "machine")).toBe(true);
     expect(s.overlays).toEqual([]);
+    expect(s.runs).toEqual([]);
   });
 }
 
@@ -69,7 +82,7 @@ for (const message of ["Enter password", "Enter passphrase", "new host key", "Pe
   test(`${message} also gives instructions`, async () => {
     const s = setup({ code: 1, stderr: JSON.stringify({ error: { kind: "other", message } }) });
     await s.add();
-    expect(s.view.state["my-host"]).toContain("`hc machine add my-host`");
+    expect(s.view.state["my-host"]).toContain(`\`${CORE} machine add my-host\``);
   });
 }
 
@@ -80,7 +93,7 @@ for (const [target, quoted] of [
   test(`instructions quote ${target} as one shell argument`, async () => {
     const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "host_key" } }) });
     await s.add(target);
-    expect(s.view.state[target]).toContain(`\`hc machine add ${quoted}\``);
+    expect(s.view.state[target]).toContain(`\`${CORE} machine add ${quoted}\``);
     expect(s.calls.find((args) => args[1] === "add")?.[2]).toBe(target);
     const shell = Bun.spawnSync(["sh", "-c", `printf '%s' ${quoted}`]);
     expect(shell.exitCode).toBe(0);
@@ -93,7 +106,7 @@ test("pending guidance clears when another terminal adds the host and checks Mac
   await s.add();
   await s.poll();
   expect(s.view.pending.has("my-host")).toBe(true);
-  expect(s.view.state["my-host"]).toContain("hc machine add my-host");
+  expect(s.view.state["my-host"]).toContain(`${CORE} machine add my-host`);
   expect(s.probes).toEqual([]);
   s.machines.push({ target: "my-host", name: "remote" });
   await s.poll();
@@ -105,7 +118,49 @@ test("pending guidance clears when another terminal adds the host and checks Mac
   expect(s.probes).toEqual(["remote"]);
   const count = s.calls.length;
   await s.poll();
-  expect(s.calls.length).toBe(count);
+  expect(s.calls.length).toBeGreaterThan(count);
+});
+
+// Developer, 2026-11-18: "it told me to run this but it didnt find hc". His
+// shell has no hc on its PATH; the app finds ~/.local/bin/hc on its own.
+test("copy gives the command with the path of the hc the app runs", async () => {
+  const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "auth_failed", message: "Permission denied (publickey,password,keyboard-interactive)" } }) });
+  await s.add("david-mbp.local");
+  const copied: string[] = [];
+  s.view.press("copy:david-mbp.local", { write_to_clipboard: (t: string) => copied.push(t) });
+  expect(copied).toEqual([`${CORE} machine add david-mbp.local`]);
+});
+
+test("a home with a space in it is quoted in the command", async () => {
+  const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "login_needed" } }) }, { core: "/Users/a b/.local/bin/hc" });
+  await s.add();
+  expect(s.view.state["my-host"]).toContain("`'/Users/a b/.local/bin/hc' machine add my-host`");
+});
+
+test("run in a tab answers it in a terminal on this machine and closes the dialog", async () => {
+  const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "auth_failed" } }) }, {
+    spaces: [{ id: "remote", machine: "vps", active: true }, { id: "here", machine: null, active: false }],
+  });
+  await s.add("david-mbp.local");
+  expect(s.view.stops().map((x: any) => x.id)).toEqual(["input", "add", "tab:david-mbp.local", "copy:david-mbp.local", "close"]);
+  s.view.press("tab:david-mbp.local", s.cx);
+  expect(s.runs).toEqual([["tab.new", { name: "add david-mbp.local", space: "here", argv: [CORE, "machine", "add", "david-mbp.local"] }]]);
+  expect(s.closed).toEqual(["ma"]);
+});
+
+test("run in a tab makes a space here when every space is on another machine", async () => {
+  const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "host_key" } }) }, { spaces: [{ id: "remote", machine: "vps", active: true }] });
+  await s.add();
+  s.view.press("tab:my-host", s.cx);
+  expect(s.runs).toEqual([["space.new", { name: "add my-host", argv: [CORE, "machine", "add", "my-host"] }]]);
+});
+
+test("without sh to ask, the command names plain hc", async () => {
+  const s = setup({ code: 1, stdout: JSON.stringify({ error: { kind: "host_key" } }) }, { core: null });
+  await s.add();
+  expect(s.view.state["my-host"]).toContain("`hc machine add my-host`");
+  s.view.press("tab:my-host", s.cx);
+  expect(s.runs[0]?.[1].argv).toEqual(["hc", "machine", "add", "my-host"]);
 });
 
 test("other failures keep their message and do not poll", async () => {

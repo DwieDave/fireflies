@@ -15,8 +15,9 @@ import { closeFind, findLine } from "./find.ts";
 import { div } from "gpui-kit";
 import { lookView } from "./drawn-tabs.ts";
 import { mdMenuView } from "./md-pane.ts";
-import { moreView } from "./scratch-bar.ts";
+import { moreAt, moreView } from "./scratch-bar.ts";
 import { settings } from "herdr";
+import { zoom } from "./pane-kit.ts";
 import { showStrip } from "./tabs.ts";
 import { v_flex } from "gpui-base";
 
@@ -61,6 +62,14 @@ export function paneFrame(ed: EditorPane, t: Theme): Element {
         ed.moreMenu = null;
         cx.notify();
       }
+    })
+    // A right-click on a scratchpad (its bar, a drawn block, the margins): its more menu at the
+    // press, its path first. The block being typed into keeps its editor's own menu (rendered-column.ts).
+    .on_mouse_down("right", (e, cx) => {
+      const l = e.local_position;
+      const z = zoom();
+
+      moreAt(ed, l ? { x: l.x / z, y: l.y / z } : null, cx);
     })
     // A tab dragged off the strip and let go over the pane: popped out beside (tabs.ts).
     .on_mouse_up("left", (_e, cx) => {

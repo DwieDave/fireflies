@@ -303,6 +303,7 @@ export const OUT = {
   "terminal.show": "needs a terminal: the sidebar's agents",
   "terminal.peek": "needs a terminal: the sidebar's agents",
   "terminal.kill": "needs a terminal: Close pane ends the focused one",
+  "terminal.adjust_selection": "needs a direction: a mod's copy mode moves the selection's end with it",
   "terminal.pin": "Pin this agent to the top (nocturne.pin) pins the focused agent through it",
   "float.view": "needs a view index: the floating terminal's own tabs",
   "layout.set": "needs a whole layout tree (agents and mods write it)",

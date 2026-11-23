@@ -2,6 +2,7 @@
 // making, renaming, picking and removing worktrees (worktrees.ts does the git
 // and spaces work, checkouts.ts the window's part).
 
+import { Array as Arr, Option, String as Str } from "effect";
 import { run as herdrRun } from "herdr";
 import type { Action } from "./keys.ts";
 import { isRemoteBranch, isTag, hashOf, nameOf } from "./items.ts";
@@ -15,12 +16,12 @@ export const WORKTREE_ACTIONS = {
   "worktree-switch": (v) => {
     const w = checkoutOf(v);
 
-    if (w) goToWorktree(v, w);
+    if (w !== null) goToWorktree(v, w);
   },
   "worktree-here": (v) => {
     const w = checkoutOf(v);
 
-    if (!w) return;
+    if (w === null) return;
 
     if (w.prunable) return v.error("Its folder is gone: X prunes it.");
 
@@ -32,30 +33,30 @@ export const WORKTREE_ACTIONS = {
   "worktree-of": (v) => {
     const x = it(v);
 
-    if (!x) return;
+    if (x === null) return;
 
     const hash = hashOf(x);
 
-    if (hash || isTag(x) || v.ctx() === "tags") {
+    if (hash !== null || isTag(x) || v.ctx() === "tags") {
       const base = hash ?? nameOf(x);
 
-      return base ? newWorktree(v, { base, label: hash ? hash.slice(0, 7) : base }) : undefined;
+      return base === null ? undefined : newWorktree(v, { base, label: hash === null ? base : Str.slice(0, 7)(hash) });
     }
 
     if (isRemoteBranch(x)) {
       // A remote branch: a local branch of the same name that tracks it.
-      const local = v.data.branches.find((b) => b.name === x.branch);
+      const local = Arr.some(v.data.branches, (b) => b.name === x.branch);
 
       return local ? newWorktree(v, { value: x.branch }) : newWorktree(v, { value: x.branch, base: x.name, label: x.name, track: true });
     }
 
     const name = nameOf(x);
 
-    if (!name) return;
+    if (name === null) return;
 
-    const taken = v.data.worktrees.find((w) => w.branch === name);
+    const taken = Arr.findFirst(v.data.worktrees, (w) => w.branch === name);
 
-    if (taken) return v.error(`${name} is checked out in ${v.tilde(taken.path)} already: space there goes to it.`);
+    if (Option.isSome(taken)) return v.error(`${name} is checked out in ${v.tilde(taken.value.path)} already: space there goes to it.`);
 
     newWorktree(v, { value: name, now: true });
   },
@@ -63,17 +64,17 @@ export const WORKTREE_ACTIONS = {
   "worktree-open-menu": (v) => {
     const w = checkoutOf(v);
 
-    if (!w) return;
+    if (w === null) return;
 
     const on = v.on;
 
     v.menu({
       title: `Open ${v.tilde(w.path)}`,
       items: [
-        { key: "f", label: "In a files pane", go: () => herdrRun("files.open", on ? { path: w.path, on } : { path: w.path }) },
+        { key: "f", label: "In a files pane", go: () => herdrRun("files.open", on === null ? { path: w.path } : { path: w.path, on }) },
         { key: "e", label: "In the editor ($EDITOR, a floating terminal)", go: () => editIn(v, w.path) },
         { key: "t", label: "A terminal tab there, in this space", go: () => herdrRun("tab.new", { folder: w.path }) },
-        { key: "o", label: "In the system's file manager", go: () => herdrRun("files.open", on ? { path: w.path, in: "system", on } : { path: w.path, in: "system" }) },
+        { key: "o", label: "In the system's file manager", go: () => herdrRun("files.open", on === null ? { path: w.path, in: "system" } : { path: w.path, in: "system", on }) },
       ],
     });
   },
@@ -81,37 +82,41 @@ export const WORKTREE_ACTIONS = {
     const w = checkoutOf(v);
     const branch = w?.branch;
 
-    if (!branch) return v.error("A detached checkout has no branch to rename.");
+    if (branch === null || branch === undefined) return v.error("A detached checkout has no branch to rename.");
 
     v.prompt({
       title: `Rename branch ${branch}`, value: branch,
-      ok: (name) => { if (name.trim() && name.trim() !== branch) git(v, "Rename branch", ["branch", "-m", branch, name.trim()]); },
+      ok: (name) => {
+        const to = Str.trim(name);
+
+        if (Str.isNonEmpty(to) && to !== branch) git(v, "Rename branch", ["branch", "-m", branch, to]);
+      },
     });
   },
   "worktree-copy-path": (v, cx) => {
     const w = checkoutOf(v);
 
-    if (w) v.copy(w.path, cx);
+    if (w !== null) v.copy(w.path, cx);
   },
   "worktree-pick-all": (v) => {
-    const all = v.data.worktrees.filter((w) => !w.main);
+    const all = Arr.filter(v.data.worktrees, (w) => !w.main);
 
-    v.wtPicked = v.wtPicked.size ? new Set() : new Set(all.map((w) => w.path));
+    v.wtPicked = v.wtPicked.size > 0 ? new Set() : new Set(Arr.map(all, (w) => w.path));
   },
   "worktree-pick-unused": (v) => {
     const occ = v.occupancy();
 
-    v.wtPicked = new Set(v.data.worktrees.flatMap((w) => (!w.main && !occ.get(w.path)?.spaces.length && !occ.get(w.path)?.agents.length ? [w.path] : [])));
-    v.note(v.wtPicked.size ? `${v.wtPicked.size} unused picked: d removes them, esc lets go` : "Every worktree has a space or an agent");
+    v.wtPicked = new Set(Arr.flatMap(v.data.worktrees, (w) => (!w.main && (occ.get(w.path)?.spaces.length ?? 0) === 0 && (occ.get(w.path)?.agents.length ?? 0) === 0 ? [w.path] : [])));
+    v.note(v.wtPicked.size > 0 ? `${v.wtPicked.size} unused picked: d removes them, esc lets go` : "Every worktree has a space or an agent");
   },
   "worktree-pick-merged": (v) => pickMergedWorktrees(v),
   "worktree-prune": (v) => {
-    const stale = v.data.worktrees.filter((w) => w.prunable);
+    const stale = Arr.filter(v.data.worktrees, (w) => w.prunable);
 
-    if (!stale.length) return v.note("Nothing to prune: every worktree's folder is there");
+    if (!Arr.isReadonlyArrayNonEmpty(stale)) return v.note("Nothing to prune: every worktree's folder is there");
 
     v.ask({
-      title: "Prune worktrees", text: `Forget ${stale.length} worktree${stale.length === 1 ? "" : "s"} whose folder is gone?`, lines: stale.map((w) => [v.tilde(w.path), "dim"] as const),
+      title: "Prune worktrees", text: `Forget ${stale.length} worktree${stale.length === 1 ? "" : "s"} whose folder is gone?`, lines: Arr.map(stale, (w) => [v.tilde(w.path), "dim"] as const),
       go: () => git(v, "Prune worktrees", ["worktree", "prune"]),
     });
   },

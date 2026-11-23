@@ -11,7 +11,7 @@ import { assetPlace, imageMarkdown, insertImage, isImagePath, maybeCopiedImage, 
 import { unitFor, units as liveUnits } from "./live.ts";
 import { basename, dirname, uri } from "./logic.ts";
 import { cacheImage, isLocalSource, taskToggle } from "@fireflies/markdown";
-import { editBetween } from "./md-text.ts";
+import { caretTo, editBetween } from "./md-text.ts";
 import { follow, join } from "@fireflies/markdown/paths";
 import type { Picture } from "./rendered.ts";
 import { v_flex } from "gpui-base";
@@ -171,7 +171,8 @@ export function typeText(ed: EditorPane, text: string, cx: Context): void {
   const line = s.start.line + lines.length - 1;
   const col = (lines.length > 1 ? 0 : s.start.col) + (lines.at(-1) ?? "").length;
 
-  d.editor.set_cursor(line, col);
+  // The keyboard stays where the paste came from (the rendered view's block, else the text).
+  caretTo(d.editor, line, col);
 
   if (rendered) rendered.pull(cx);
 

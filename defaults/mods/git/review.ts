@@ -6,9 +6,10 @@
 // hide choices keep diff's shared keys, so what people marked
 // there is still marked here.
 
+import { Array as Arr, Effect, Option, Schema } from "effect";
 import { shared, setShared } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isString, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
+import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
+import type { Exec } from "@fireflies/kit";
 import type { Kind } from "./kinds.ts";
 import { kind, KINDS } from "./kinds.ts";
 import type { Git, Scope } from "./git.ts";
@@ -20,14 +21,17 @@ export const MARKS = "diff.reviewed";
 export const HIDE = "diff.hide";
 
 /** The reviewed marks, by repo root: each a file's diffKey. */
-const MARKS_KEY = sharedMapKey(MARKS, arrayOf(isString));
+const MARKS_KEY = sharedKey(MARKS, mapOf(Schema.Array(Schema.String)));
 
 /** The kinds hidden in review. */
-const isHide = object({}, { tests: isBoolean, config: isBoolean, assets: isBoolean, docs: isBoolean });
+const HideSchema = Schema.Struct({ tests: Schema.optionalKey(Schema.Boolean), config: Schema.optionalKey(Schema.Boolean), assets: Schema.optionalKey(Schema.Boolean), docs: Schema.optionalKey(Schema.Boolean) });
 
-type Hide = Guarded<typeof isHide>;
+type Hide = typeof HideSchema.Type;
 
-const HIDE_KEY = sharedKey(HIDE, isHide);
+const HIDE_KEY = sharedKey(HIDE, HideSchema);
+
+/** A kind hidden in `h`. */
+const hides = (h: Hide, k: Kind | null): boolean => k !== null && h[k] === true;
 
 /** A file in review: its diff, the kind it counts as (null: code), the key its mark is kept by. */
 export interface ReviewFile extends DiffFile {
@@ -72,50 +76,61 @@ export class Review {
     this.v = v;
     this.pr = pr;
     this.prRepo = repo;
-    this.scope = pr ? "pr" : scope;
+    this.scope = pr === null ? scope : "pr";
   }
 
-  scopes(): Scope[] { return this.pr ? ["pr", "work", "branch"] : ["work", "branch"]; }
+  scopes(): Scope[] { return this.pr === null ? ["work", "branch"] : ["pr", "work", "branch"]; }
 
-  scopeName(s: Scope = this.scope, base: string | null | undefined = this.v.data.main) {
-    return s === "pr" ? `#${this.pr ?? ""}` : s === "work" ? "uncommitted" : `since ${base ?? "base"}`;
+  scopeName(s: Scope = this.scope, base: string | null | undefined = this.v.data.main): string {
+    if (s === "pr") return `#${this.pr ?? ""}`;
+
+    return s === "work" ? "uncommitted" : `since ${base ?? "base"}`;
   }
 
-  async load() {
+  /** Reads the scope's changes; a failure (gh or git refusing) becomes the review's error line. */
+  load(): Effect.Effect<void, never, Exec> {
     const g = this.v.git;
 
-    if (!g) return;
+    if (g === null) return Effect.void;
 
-    this.state = this.files.length ? "ready" : "loading";
+    return Effect.gen({ self: this }, function* () {
+      this.state = this.files.length > 0 ? "ready" : "loading";
 
-    try {
-      const head = Boolean(this.v.data.status?.oid);
-      const { files, since } = this.scope === "pr" && this.pr !== null ? await g.prReview(this.pr, this.prRepo) : await g.review(this.scope, this.v.data.main ?? null, head);
+      const head = (this.v.data.status?.oid ?? null) !== null;
+      const { files, since } = this.scope === "pr" && this.pr !== null ? yield* g.prReview(this.pr, this.prRepo) : yield* g.review(this.scope, this.v.data.main ?? null, head);
 
-      this.files = files.map((f) => ({ ...f, kind: kind(f), key: diffKey(f) }));
+      this.files = Arr.map(files, (f) => ({ ...f, kind: kind(f), key: diffKey(f) }));
       this.since = since;
       this.state = "ready";
-    } catch (cause: unknown) {
+    }).pipe(Effect.catchTags({
+      ExecError: (e) => this.failed(e.message),
+      ExitError: (e) => this.failed(e.message),
+    }));
+  }
+
+  /** The review couldn't be read: why, in the list's place. */
+  failed(message: string): Effect.Effect<void> {
+    return Effect.sync(() => {
       this.state = "error";
-      this.error = cause instanceof Error ? cause.message : String(cause);
-    }
+      this.error = message;
+    });
   }
 
   hidden(): Hide { return readShared(shared, HIDE_KEY, {}); }
 
-  shown() {
+  shown(): ReviewFile[] {
     const h = this.hidden();
 
-    return this.files.filter((f) => !(f.kind && h[f.kind]));
+    return Arr.filter(this.files, (f) => !hides(h, f.kind));
   }
 
-  marks() {
+  marks(): Set<string> {
     const root = this.v.git?.root;
 
-    return new Set(root === undefined ? [] : readSharedMap(shared, MARKS_KEY).get(root) ?? []);
+    return new Set(root === undefined ? [] : readShared(shared, MARKS_KEY, new Map()).get(root) ?? []);
   }
 
-  toggle(f: ReviewFile) {
+  toggle(f: ReviewFile): void {
     const root = this.v.git?.root;
 
     if (root === undefined) return;
@@ -125,46 +140,46 @@ export class Review {
     if (m.has(f.key)) m.delete(f.key);
     else m.add(f.key);
 
-    const live = new Set(this.files.map((x) => x.key));
+    const live = new Set(Arr.map(this.files, (x) => x.key));
 
-    writeSharedMap(setShared, MARKS_KEY, new Map([...readSharedMap(shared, MARKS_KEY), [root, [...m].filter((k) => live.has(k))]]));
+    writeShared(setShared, MARKS_KEY, new Map([...readShared(shared, MARKS_KEY, new Map()), [root, Arr.filter(Arr.fromIterable(m), (k) => live.has(k))]]));
   }
 
   /** space: mark the file reviewed (or not), then the next unreviewed one. */
-  markAndNext() {
+  markAndNext(): void {
     const list = this.shown(), f = this.v.reviewItem();
 
-    if (!f) return;
+    if (f === null) return;
 
     const was = this.marks().has(f.key);
 
     this.toggle(f);
 
-    if (!was) {
-      const m = this.marks(), i = list.indexOf(f);
-      const next = [...list.slice(i + 1), ...list.slice(0, i)].find((x) => !m.has(x.key));
+    if (was) return;
 
-      if (next) this.v.moveTo(list.indexOf(next));
-    }
+    const m = this.marks(), i = list.indexOf(f);
+    const next = Arr.findFirst([...Arr.drop(list, i + 1), ...Arr.take(list, i)], (x) => !m.has(x.key));
+
+    Option.map(next, (x) => this.v.moveTo(list.indexOf(x)));
   }
 
   /** a: every shown file reviewed; when they all are already, none. */
-  markAll() {
-    const list = this.shown(), m = this.marks(), all = list.every((x) => m.has(x.key));
+  markAll(): void {
+    const list = this.shown(), m = this.marks(), all = Arr.every(list, (x) => m.has(x.key));
 
     for (const x of list) if (all === m.has(x.key)) this.toggle(x);
   }
 
-  nextScope() {
+  nextScope(): void {
     const s = this.scopes();
 
-    this.scope = s[(s.indexOf(this.scope) + 1) % s.length] ?? "work";
+    this.scope = Option.getOrElse(Arr.get(s, (s.indexOf(this.scope) + 1) % s.length), () => "work" as const);
     this.files = [];
     this.v.moveTo(0);
     this.v.reloadReview();
   }
 
-  setScope(s: Scope) {
+  setScope(s: Scope): void {
     if (this.scope === s) return;
 
     this.scope = s;
@@ -173,28 +188,28 @@ export class Review {
     this.v.reloadReview();
   }
 
-  hideMenu() {
+  hideMenu(): void {
     const h = this.hidden();
 
     this.v.menu({
       title: "Hide in review",
       items: [
-        ...KINDS.map(([k, label], i) => {
-          const n = this.files.filter((f) => f.kind === k).length;
+        ...Arr.map(KINDS, ([k, label], i) => {
+          const n = Arr.filter(this.files, (f) => f.kind === k).length;
 
-          return { key: String(i + 1), label: `${h[k] ? "Show" : "Hide"} ${label}`, sub: n ? `${n} file${n === 1 ? "" : "s"}` : "none", go: () => writeShared(setShared, HIDE_KEY, { ...this.hidden(), [k]: !this.hidden()[k] }) };
+          return { key: String(i + 1), label: `${hides(h, k) ? "Show" : "Hide"} ${label}`, sub: n > 0 ? `${n} file${n === 1 ? "" : "s"}` : "none", go: () => { writeShared(setShared, HIDE_KEY, { ...this.hidden(), [k]: !hides(this.hidden(), k) }); } };
         }),
-        { key: "0", label: "Show everything", go: () => writeShared(setShared, HIDE_KEY, {}) },
+        { key: "0", label: "Show everything", go: () => { writeShared(setShared, HIDE_KEY, {}); } },
       ],
     });
   }
 
   /** The review's counts for the panel's foot: "3/9 reviewed · 2 hidden". */
-  summary() {
+  summary(): string {
     const list = this.shown(), m = this.marks();
-    const done = list.filter((f) => m.has(f.key)).length;
+    const done = Arr.filter(list, (f) => m.has(f.key)).length;
     const off = this.files.length - list.length;
 
-    return `${done}/${list.length} reviewed${off ? ` · ${off} hidden` : ""}`;
+    return `${done}/${list.length} reviewed${off > 0 ? ` · ${off} hidden` : ""}`;
   }
 }

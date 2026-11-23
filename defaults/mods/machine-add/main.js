@@ -1,20 +1,23 @@
 // Add a machine: the hosts in ~/.ssh/config to pick from (or type one),
 // each added with one click (`hc machine add`). When the machine needs
 // something first (herdr-core installed there, a password, a new host
-// key), the picker explains what to run in a terminal. Machines that need
-// no answers are added quietly. Opened as a dialog
+// key), the picker says so and offers the same add in a terminal tab here,
+// where the person answers it, or the command to copy. The command names
+// the hc the app runs by its full path: a shell's PATH may have no hc in it
+// (Developer's had none: ~/.local/bin isn't on it). Machines that need no
+// answers are added quietly. Opened as a dialog
 // (`mod.open machine-add`); the sidebars' Add machine and the welcome
 // open it.
 //
 // Keys: ↓ / ↑ (ctrl-n / ctrl-p) walk the ssh config's hosts from the typed
 // field; enter adds the highlighted host (in the field: what's typed); esc closes.
 // As in every form (form-keys.ts), tab / shift-tab walk the field, Add, each
-// Copy and "Open the setting" shown, and Esc, wrapping; the focused one has
+// Run in a tab, Copy and "Open the setting" shown, and Esc, wrapping; the focused one has
 // the ring; enter / space press it, cmd-enter adds what's typed.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView, ScrollHandle } from "gpui-base";
-import { hc, exec, home, readTextFile, theme, props, closeOverlay, window as appWindow } from "herdr";
+import { hc, exec, run, spaces, home, readTextFile, theme, props, closeOverlay, window as appWindow } from "herdr";
 import { formKey, formHints, ring, bindTab, tabActions } from "@fireflies/form-keys";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -79,6 +82,7 @@ export default class MachineAdd extends View {
     this.input.on("blur", (_e, cx) => { this.inputFocused = false; cx.notify(); });
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
+    this.core = null; // the hc the app runs, by its full path (corePath())
     this.macs = {}; // target -> { name, core } for an added Mac
     this.opened = {};
     this.handle = cx.focus_handle();
@@ -92,7 +96,7 @@ export default class MachineAdd extends View {
       cx.notify();
     });
     cx.timer.every(3000, (cx) => {
-      if (!this.pending.size || this.refreshing) return;
+      if ((!this.pending.size && !this.added.length) || this.refreshing) return;
       this.refreshing = true;
       cx.spawn(async (cx) => {
         try {
@@ -124,6 +128,11 @@ export default class MachineAdd extends View {
     }
   }
 
+  // The ssh config's hosts not added yet: the list ↓ / ↑ walk (added ones show below it).
+  listed() {
+    return (this.hosts ?? []).filter((h) => !this.isAdded(h.alias));
+  }
+
   isAdded(target) {
     return this.added.some((m) => m.target === target || m.name === target || m.host === target);
   }
@@ -149,13 +158,41 @@ export default class MachineAdd extends View {
         await this.refresh();
         await this.checkMac(target);
       } else if (["hc_missing", "incompatible", "login_needed", "auth_failed", "host_key"].includes(why.kind) || /password|passphrase|host key|permission denied|login/i.test(why.message ?? "")) {
-        const quoted = shellArg(target);
+        const core = shellArg(await this.corePath());
         this.pending.add(target);
-        this.state[target] = `Couldn't add ${target} here: it needs you to answer something (a password, a new host key, or installing herdr-core there). Run \`hc machine add ${quoted}\` in a terminal. \`hc machine --help\` shows the options.`;
+        this.state[target] = `Couldn't add ${target} here: it needs you to answer something (a password, a new host key, or installing herdr-core there). Run it in a tab and answer there, or run \`${this.command(target)}\` in a terminal. \`${core} machine --help\` shows the options.`;
       } else this.state[target] = why.message || "it didn't work";
       await this.refresh();
       cx.notify();
     });
+  }
+
+  // The hc the app runs: mods' hc() and exec() get the app's PATH, with the
+  // core's folder first (src/core_bin.rs), which a terminal's shell may not
+  // have. Plain "hc" where sh can't say (Windows).
+  async corePath() {
+    if (this.core) return this.core;
+    const r = appWindow?.()?.platform === "windows" ? null : await exec("sh", ["-c", "command -v hc"]).catch(() => null);
+    const path = r?.code === 0 ? r.stdout.trim().split("\n")[0] ?? "" : "";
+    this.core = path.startsWith("/") ? path : "hc";
+    return this.core;
+  }
+
+  command(target) {
+    return `${shellArg(this.core ?? "hc")} machine add ${shellArg(target)}`;
+  }
+
+  // The add in a terminal tab on this machine, where the person answers it
+  // (an interactive shell runs it and stays open); the dialog closes so the
+  // tab gets the keyboard. The sidebars show the machine once it's added.
+  inTab(target) {
+    const argv = [this.core ?? "hc", "machine", "add", target];
+    const all = spaces();
+    const here = all.find((s) => !s.machine && s.active) ?? all.find((s) => !s.machine);
+    const name = `add ${target}`;
+    if (here) run("tab.new", { name, space: here.id, argv });
+    else run("space.new", { name, argv });
+    this.close();
   }
 
   // macOS asks on its own screen before anything reads Desktop, Documents
@@ -167,6 +204,22 @@ export default class MachineAdd extends View {
     const r = await exec("sh", ["-c", 'uname; command -v herdr-core || echo "$HOME/.local/bin/herdr-core"'], { on: m.name }).catch(() => null);
     const [os, core] = (r?.stdout ?? "").trim().split("\n");
     if (os === "Darwin") this.macs[target] = { name: m.name, core: core ?? "~/.local/bin/herdr-core" };
+  }
+
+  logoutCard(t, m) {
+    const command = `sudo loginctl enable-linger -- ${shellArg(m.logout_linger_user ?? "<user>")}`;
+    return v_flex().id(`ma-logout-${m.name}`).mx(10).mb(8).p(12).gap(8).rounded(10)
+      .bg(t.blocked + "14").border_1().border_color(t.blocked + "40")
+      .child(div().text_size(12.8).font_semibold().text_color(t.foreground).child(`Agents on ${m.name} stop when you disconnect`))
+      .child(div().text_size(12.5).line_height("18px").text_color(t.muted)
+        .child("The server ends your programs when your last login closes, for example when your laptop sleeps."))
+      .child(div().text_size(12.5).text_color(t.muted).child(`Run this on ${m.name} once:`))
+      .child(h_flex().gap(8).items_center()
+        .child(div().flex_1().min_w(0).text_size(12).text_color(t.foreground).child(command))
+        .child(div().id(`ma-logout-copy-${m.name}`).px(10).py(4).rounded(6).bg(t.raised).text_color(t.foreground)
+          .text_size(12).cursor_pointer().hover(s => s.bg(t.hover))
+          .on_click((_e, cx) => { cx.write_to_clipboard(command); this.copiedCommand = command; cx.notify(); })
+          .child(this.copiedCommand === command ? "Copied" : "Copy")));
   }
 
   macCard(t, target) {
@@ -222,11 +275,13 @@ export default class MachineAdd extends View {
     closeOverlay(props().overlay);
   }
 
-  /** The form's stops in tab order (form-keys.ts): the field, Add, the Copy
-   *  and "Open the setting" buttons shown, Esc. */
+  /** The form's stops in tab order (form-keys.ts): the field, Add, the Run
+   *  in a tab and Copy buttons shown, "Open the setting", Esc. */
   stops() {
     const out = [{ id: "input", kind: "text" }, { id: "add", kind: "button", submit: true }];
-    for (const target of this.pending) if (typeof this.state[target] === "string" && this.state[target] !== "adding") out.push({ id: `copy:${target}`, kind: "button" });
+    for (const target of this.pending) {
+      if (typeof this.state[target] === "string" && this.state[target] !== "adding") out.push({ id: `tab:${target}`, kind: "button" }, { id: `copy:${target}`, kind: "button" });
+    }
     for (const target of Object.keys(this.macs)) out.push({ id: `mac:${target}`, kind: "button" });
     out.push({ id: "close", kind: "button" });
     return out;
@@ -240,7 +295,8 @@ export default class MachineAdd extends View {
   press(id, cx) {
     if (id === "add") this.add(this.typed, cx);
     else if (id === "close") this.close();
-    else if (id.startsWith("copy:")) { const command = `hc machine add ${shellArg(id.slice(5))}`; cx.write_to_clipboard?.(command); this.copiedCommand = command; }
+    else if (id.startsWith("tab:")) this.inTab(id.slice(4));
+    else if (id.startsWith("copy:")) { const command = this.command(id.slice(5)); cx.write_to_clipboard?.(command); this.copiedCommand = command; }
     else if (id.startsWith("mac:")) this.openSetting(id.slice(4));
   }
 
@@ -252,13 +308,14 @@ export default class MachineAdd extends View {
   key(e, cx) {
     const k = e.key, m = e.modifiers ?? {};
     const ctrl = m.control && !m.platform && !m.alt;
-    const n = (this.hosts ?? []).length;
+    const hosts = this.listed();
+    const n = hosts.length;
     const inField = this.stop === "input";
     if (k === "escape") this.close();
     else if (inField && (k === "down" || (ctrl && k === "n")) && n) this.at = Math.min(n - 1, this.at + 1);
     else if (inField && (k === "up" || (ctrl && k === "p")) && n) this.at = Math.max(-1, this.at - 1);
-    else if (inField && k === "enter" && !m.platform && !ctrl && this.at >= 0 && this.hosts?.[this.at]) {
-      const target = this.hosts[this.at].alias;
+    else if (inField && k === "enter" && !m.platform && !ctrl && this.at >= 0 && hosts[this.at]) {
+      const target = hosts[this.at].alias;
       if (!this.isAdded(target)) this.add(target, cx);
     } else {
       const stops = this.stops();
@@ -277,10 +334,15 @@ export default class MachineAdd extends View {
 
   message(t, target) {
     const text = String(this.state[target]).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const command = `hc machine add ${shellArg(target)}`;
+    const command = this.command(target);
     return v_flex().gap(5)
       .child(div().text_size(12).text_color(t.blocked).child(TextView.html(`ma-message-${target}`, `<span>${text}</span>`).selectable(true)))
-      .when(this.pending.has(target), (el) => el.child(h_flex().child(div()
+      .when(this.pending.has(target), (el) => el.child(h_flex().gap(6).child(div()
+        .id(`ma-tab-${target}`).px(10).py(4).rounded(6).bg(t.solid).text_color(t.solid_foreground)
+        .text_size(12).font_medium().cursor_pointer().hover(s => s.opacity(0.88))
+        .on_click(() => this.inTab(target))
+        .child("Run in a tab")
+        .map((el) => ring(el, this.stop === `tab:${target}`, t.accent, 6))).child(div()
         .id(`ma-copy-${target}`).px(10).py(4).rounded(6).bg(t.raised).text_color(t.foreground)
         .text_size(12).cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => { cx.write_to_clipboard(command); this.copiedCommand = command; cx.notify(); })
@@ -291,6 +353,7 @@ export default class MachineAdd extends View {
   row(t, target, label, sub, picked = false) {
     const st = this.state[target];
     const done = this.isAdded(target);
+    const machine = this.added.find(m => m.target === target || m.name === target || m.host === target);
     const right = done
       ? h_flex().gap(5).items_center().text_size(12).text_color(t.ansi2).child(svg(I("circle-check")).size(13)).child("Added")
       : st === "adding"
@@ -331,12 +394,13 @@ export default class MachineAdd extends View {
           .child(right),
       )
       .when(typeof st === "string" && st !== "adding", (el) => el.child(div().px(35).pb(6).child(this.message(t, target))))
-      .when(Boolean(this.macs[target]), (el) => el.child(this.macCard(t, target)));
+      .when(Boolean(this.macs[target]), (el) => el.child(this.macCard(t, target)))
+      .when(machine?.keeps_running_after_logout === false, el => el.child(this.logoutCard(t, machine)));
   }
 
   render() {
     const t = theme();
-    const hosts = this.hosts ?? [];
+    const hosts = this.listed();
     return v_flex()
       .id("machine-add")
       .track_focus(this.handle)
@@ -356,7 +420,7 @@ export default class MachineAdd extends View {
           .text_color(t.muted)
           .child("A VPS, a Mac mini, a box at home: Fireflies reaches it over ssh, and agents there keep running while your laptop sleeps."),
       )
-      .child(div().pt(16).pb(6).text_size(11.5).font_medium().text_color(t.dim).child(hosts.length ? "From your ssh config · ↑↓ pick, ↵ add" : "Your ssh config lists no hosts"))
+      .child(div().pt(16).pb(6).text_size(11.5).font_medium().text_color(t.dim).child(hosts.length ? "From your ssh config · ↑↓ pick, ↵ add" : this.hosts?.length ? "Every host in your ssh config is added" : "Your ssh config lists no hosts"))
       .child(
         v_flex()
           .id("ma-hosts")
@@ -371,6 +435,8 @@ export default class MachineAdd extends View {
               : hosts.map((h, i) => this.row(t, h.alias, h.alias, [h.user, h.hostname].filter(Boolean).join("@") || (h.aliases.length ? `also ${h.aliases.join(", ")}` : ""), i === this.at)),
           ),
       )
+      .when(this.added.length > 0, el => el.child(v_flex().id("ma-added").max_h(280).min_h(0).overflow_y_scroll()
+        .children(this.added.map(m => this.row(t, m.target, m.name, m.target)))))
       .child(div().pt(14).pb(6).text_size(11.5).font_medium().text_color(t.dim).child("Or type how ssh reaches it"))
       .child(
         h_flex()

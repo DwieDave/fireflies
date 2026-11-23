@@ -19,7 +19,7 @@
 // (`import { flat } from "@fireflies/layout-look"`).
 
 import { Option, Schema } from "effect";
-import { readSharedOption, sharedKey } from "@fireflies/kit";
+import { sharedKey } from "@fireflies/kit";
 import { div } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import * as herdr from "herdr";
@@ -68,9 +68,28 @@ const readLook = (): Look => Option.match(Option.flatMap(attempt(() => herdr.lay
  *  from the next switch or start. */
 let shownLook: { readonly name: string; readonly look: Look } | null = null;
 
+const decodeName = Schema.decodeUnknownOption(LAYOUT.schema);
+
+/** The last value of the app's "layout" key and the name it decoded to: the
+ *  schema runs when the value changes, not on every ask (dither() asks on
+ *  every plate of every row of a draw). */
+let shownName: { readonly raw: unknown; readonly name: Option.Option<string> } | null = null;
+
+function nameNow(): Option.Option<string> {
+  const raw = Option.getOrUndefined(attempt(() => herdr.shared(LAYOUT.name)));
+
+  if (shownName !== null && shownName.raw === raw) return shownName.name;
+
+  const name = decodeName(raw);
+
+  shownName = { raw, name };
+
+  return name;
+}
+
 /** The shown layout's look. */
 export function lookNow(): Look {
-  return Option.match(Option.flatten(attempt(() => readSharedOption(herdr.shared, LAYOUT))), {
+  return Option.match(nameNow(), {
     onNone: readLook,
     onSome: (name) => {
       if (shownLook?.name !== name) shownLook = { name, look: readLook() };

@@ -38,7 +38,7 @@ const TABLES: readonly Binding[] = [
   [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure (a double click too; in Databases: connect to it)", "open"],
   [["["], "tables / views / schemas / databases", "subtab-prev"], [["]"], "tables / views / schemas / databases", "subtab-next"],
   [["s"], "select it in a query", "table-query"], [["i"], "its name into the query (or drag it there)", "insert"],
-  [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"],
+  [["/"], "find a table (enter opens its match, ↓ to the list, esc ends it)", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"],
   [["#"], "count its rows exactly (the list shows the server's estimate); databases: their sizes", "count"], [["m"], "menu (a right click too)", "menu"],
 ];
 

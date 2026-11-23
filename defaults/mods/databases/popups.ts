@@ -36,8 +36,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
   const k = e.key;
 
   if (k === "escape" || (ask.step === 1 && k === "n")) {
-    v.ask = null;
-    v.focusShown();
+    dropAsk(v);
 
     return true;
   }
@@ -124,13 +123,6 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
 
   if (find === null) return false;
 
-  if (e.key === "enter" || e.key === "down") {
-    v.findTyping = false;
-    v.focusSelf();
-
-    return e.key === "enter";
-  }
-
   if (e.key === "escape") {
     v.tableFind = null;
     v.findTyping = false;
@@ -139,20 +131,51 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
     return true;
   }
 
+  // The list has the keyboard (the find left by enter or ↓, a click on a row): enter opens the
+  // cursor's table there, as a double click does (it used to be swallowed while the find showed).
   if (!v.findTyping) return false;
+
+  // Typing: enter and ↓ leave the find (its filter stays) and go on to the list: enter opens the
+  // cursor's match, ↓ moves to the next one.
+  if (e.key === "enter" || e.key === "down") {
+    v.findTyping = false;
+    v.focusSelf();
+
+    return false;
+  }
 
   v.tableAt = 0;
 
   return "typing";
 }
 
+// A dialog's input had the keyboard: closed (by a key, its chip or a click beside it), the
+// keyboard comes back to the view. GPUI hands keys to a focused element only while it's drawn, so
+// without this every key, enter on a table too, went nowhere until a click.
+
+/** The rename left as it was. */
+function leaveRename(v: DbView): void {
+  v.rename = null;
+  v.focusShown();
+}
+
+/** The password not given. */
+function dropPassword(v: DbView): void {
+  v.password = null;
+  v.focusShown();
+}
+
+/** The ask answered no. */
+function dropAsk(v: DbView): void {
+  v.ask = null;
+  v.focusShown();
+}
+
 /** A query tab's new name: enter keeps it, esc leaves it; the rest is typed. */
 function renameKey(v: DbView, e: KeyEvent): Taken {
   if (e.key === "enter") keepRename(v);
-  else if (e.key === "escape") {
-    v.rename = null;
-    v.focusShown();
-  } else return "typing";
+  else if (e.key === "escape") leaveRename(v);
+  else return "typing";
 
   return true;
 }
@@ -160,10 +183,8 @@ function renameKey(v: DbView, e: KeyEvent): Taken {
 /** The password asked before connecting: enter takes it, esc drops it; the rest is typed. */
 function passwordKey(v: DbView, e: KeyEvent): Taken {
   if (e.key === "enter") v.password?.done();
-  else if (e.key === "escape") {
-    v.password = null;
-    v.focusShown();
-  } else return "typing";
+  else if (e.key === "escape") dropPassword(v);
+  else return "typing";
 
   return true;
 }
@@ -232,7 +253,7 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
   if (ask.step === 2 && ask.input !== null) {
     return bar.child(div().relative().text_color(t.dim).child(`type ${ask.verdict.target ?? "yes"}`))
       .child(div().relative().w(180).border(1).border_color(t.ansi1).px(6).child(Input.new(ask.input).text_size(12).text_color(t.foreground)))
-      .child(chip(t, "db-ask-no", "esc  no", false, () => { v.ask = null; }));
+      .child(chip(t, "db-ask-no", "esc  no", false, () => dropAsk(v)));
   }
 
   return bar
@@ -245,7 +266,7 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
         ask.go();
       }
     }, danger ? t.ansi1 : t.ansi3))
-    .child(chip(t, "db-ask-no", "esc  no", false, () => { v.ask = null; }));
+    .child(chip(t, "db-ask-no", "esc  no", false, () => dropAsk(v)));
 }
 
 /** The dim over the body or the view: a press on it (either button) closes what's on it. */
@@ -331,7 +352,7 @@ function renamePanel(t: Theme, v: DbView): Element {
     .child(div().border(1).border_color(t.accent).px(8).py(4).child(Input.new(r.input).text_size(12).text_color(t.foreground)))
     .child(h_flex().gap(8).justify_end()
       .child(chip(t, "db-rename-ok", "enter  rename", false, () => keepRename(v), t.accent))
-      .child(chip(t, "db-rename-no", "esc  leave it", false, () => { v.rename = null; }))), () => { v.rename = null; });
+      .child(chip(t, "db-rename-no", "esc  leave it", false, () => leaveRename(v)))), () => leaveRename(v));
 }
 
 function passwordPanel(t: Theme, v: DbView): Element {
@@ -353,7 +374,7 @@ function passwordPanel(t: Theme, v: DbView): Element {
     .child(div().text_size(10).text_color(t.dim).child(c?.secret === "keychain" ? "kept in the system keychain" : "kept in this window's memory until it closes; never written anywhere"))
     .child(h_flex().gap(8).justify_end()
       .child(chip(t, "db-pw-ok", "enter  connect", false, () => pw.done(), t.accent))
-      .child(chip(t, "db-pw-no", "esc  cancel", false, () => { v.password = null; }))), () => { v.password = null; });
+      .child(chip(t, "db-pw-no", "esc  cancel", false, () => dropPassword(v)))), () => dropPassword(v));
 }
 
 /** What's drawn over the body, top last. */

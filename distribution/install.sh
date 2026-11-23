@@ -3,7 +3,8 @@
 #
 #   curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 #
-# Linux: the app into ~/.local/share/herdr-app, `herdr-app` in ~/.local/bin,
+# Linux: the app into ~/.local/share/herdr-app, `herdr-app` (and `fireflies`,
+# `ff`, where those names are free or already the app's) in ~/.local/bin,
 # a launcher entry and icon. macOS: Herdr.app into ~/Applications, keeping
 # its release signature intact (ad hoc for unsigned/dev builds). The core, with its
 # own installer, into ~/.local/bin/herdr-core (and `hc`) only if none is
@@ -17,6 +18,20 @@ bin="$HOME/.local/bin"
 say() { printf '%s\n' "$*"; }
 fail() { say "herdr: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "needs $1"; }
+# `fireflies` and `ff` beside `herdr-app`: one command over the window and
+# the core. A name that is someone else's (a file, or a link that isn't
+# herdr-app's) is left alone.
+link_names() {
+  for name in fireflies ff; do
+    link="$bin/$name"
+    if [ -L "$link" ]; then
+      [ "$(readlink "$link")" = "$(readlink "$bin/herdr-app")" ] || continue
+    elif [ -e "$link" ]; then
+      continue
+    fi
+    ln -sfn "$1" "$link"
+  done
+}
 need curl
 need tar
 
@@ -87,6 +102,7 @@ if [ "$os" = linux ]; then
   rm -rf "$home"
   mv "$home.new" "$home"
   ln -sfn "$home/herdr-app" "$bin/herdr-app"
+  link_names "$home/herdr-app"
   mkdir -p "$data/applications" "$data/icons/hicolor/scalable/apps"
   cp "$home/herdr-app.svg" "$data/icons/hicolor/scalable/apps/herdr-app.svg"
   cat > "$data/applications/herdr-app.desktop" <<EOF
@@ -133,6 +149,7 @@ else
   rm -rf "$app"
   mv "$tmp/Herdr.app" "$app"
   ln -sfn "$app/Contents/MacOS/Herdr" "$bin/herdr-app"
+  link_names "$app/Contents/MacOS/Herdr"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" 2>/dev/null || true
 fi
 

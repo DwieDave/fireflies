@@ -288,7 +288,7 @@ export default class EditorPane extends TabFields {
   /** The Markdown commands' list: when it opened, whether the bar's chip opened it (else a key). */
   mdMenu: { readonly at: number; readonly chip: boolean } | null = null;
   /** A scratchpad's more menu (scratch-bar.ts), open. */
-  moreMenu: { readonly at: number } | null = null;
+  moreMenu: { readonly at: number; readonly near?: Pt | null } | null = null;
 
   /** The context of the last change, for the autosave's timer. */
   timerCx: Context | null = null;

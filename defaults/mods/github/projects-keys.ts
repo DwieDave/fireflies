@@ -2,6 +2,7 @@
 // the filter, a draft or a value; a card in hand; the detail; the board.
 
 import type { Context, KeyEvent } from "gpui-kit";
+import { Array as Arr, Option } from "effect";
 import type { Board, Item } from "./board.ts";
 import type { Dir, Layout } from "./board-layout.ts";
 import { grid, step, pickUp, carry } from "./board-layout.ts";
@@ -17,14 +18,14 @@ const DIRS = new Map<string, Dir>([
 
 /** Keys while this tab shows; true when one was used ("typing": an Input's). */
 export function key(proj: Projects, k: string, e: KeyEvent, cx: Context): boolean | "typing" {
-  if (proj.typing) return typingKey(proj, k);
+  if (proj.typing !== null) return typingKey(proj, k);
 
-  if (proj.menu) return menuKey(proj, proj.menu, k, e, cx);
+  if (proj.menu !== null) return menuKey(proj, proj.menu, k, e, cx);
 
   const b = proj.board(), lay = proj.lay(b);
 
-  if (!b || !lay) {
-    if (k === "p" && proj.list?.projects.length) {
+  if (b === null || lay === null) {
+    if (k === "p" && (proj.list?.projects.length ?? 0) > 0) {
       openProjects(proj);
 
       return true;
@@ -33,7 +34,7 @@ export function key(proj: Projects, k: string, e: KeyEvent, cx: Context): boolea
     return false;
   }
 
-  if (proj.carrying) return carryKey(proj, lay, k, cx);
+  if (proj.carrying !== null) return carryKey(proj, lay, k, cx);
 
   if (proj.focus === "detail" && detailKey(proj, k)) return true;
 
@@ -44,7 +45,7 @@ export function key(proj: Projects, k: string, e: KeyEvent, cx: Context): boolea
 function carryKey(proj: Projects, lay: Layout, k: string, cx: Context): boolean {
   const dir = DIRS.get(k);
 
-  if (dir) {
+  if (dir !== undefined) {
     proj.carrying = carry(grid(lay), proj.carrying, dir, { folded: proj.foldedCols(lay), sorted: lay.sorted });
     proj.follow(lay, proj.at(lay));
   } else if (k === "enter" || k === "space" || k === "m") dropCard(proj, cx);
@@ -84,17 +85,18 @@ function detailKey(proj: Projects, k: string): boolean {
 }
 
 /** The board's own keys: move, scroll, open, pick up, edit, add, filter, views, projects, links, fold. */
-function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context): boolean {
+/** A key on the board (no menu, no typing, no card in hand): what it does to the selected card or the view. */
+export function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context): boolean {
   const a = proj.at(lay), item = proj.current(lay);
   const dir = DIRS.get(k);
 
-  if (dir) {
+  if (dir !== undefined) {
     const next = step(proj.grid(lay), a, dir, proj.foldedCols(lay));
 
-    if (next) proj.select(lay, next, cx);
+    if (next !== null) proj.select(lay, next, cx);
   } else if (k === "J" || k === "pagedown") proj.scroll(Math.max(80, proj.viewH / 2));
   else if (k === "K" || k === "pageup") proj.scroll(-Math.max(80, proj.viewH / 2));
-  else if (k === "enter" && item) {
+  else if (k === "enter" && item !== null) {
     if (proj.detailOpen && proj.focus === "board") proj.focus = "detail";
     else {
       proj.detailOpen = true;
@@ -106,8 +108,8 @@ function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context)
   else if (k === "escape" && proj.detailOpen) {
     proj.detailOpen = false;
     proj.focus = "board";
-  } else if ((k === "space" || k === "m") && item) proj.carrying = pickUp(grid(lay), a);
-  else if (k === "e" && item) openFields(proj, item, cx);
+  } else if ((k === "space" || k === "m") && item !== null) proj.carrying = pickUp(grid(lay), a);
+  else if (k === "e" && item !== null) openFields(proj, item, cx);
   else if (k === "a") {
     proj.typing = "draft";
     proj.draft.set_value("");
@@ -118,15 +120,15 @@ function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context)
   } else if (k === "v") openViews(proj, b);
   else if (k === "p") openProjects(proj);
   else if (k === "o") {
-    const url = item ? itemUrl(b, proj.view(b), item) : b.project.url;
+    const url = item === null ? b.project.url : itemUrl(b, proj.view(b), item);
 
-    if (url) proj.app.openUrl(url, cx);
-  } else if (k === "x" && item) archive(proj, item, cx);
+    if (url !== null && url !== undefined && url !== "") proj.app.openUrl(url, cx);
+  } else if (k === "x" && item !== null) archive(proj, item, cx);
   else if (k === "i" && item?.content.kind === "draft") openConvert(proj, b, item);
   else if (k === "-") toggleFold(proj, lay, a.col);
-  else if (k === "z" && lay.lane) toggleLane(proj, lay, item);
-  else if (k === "w" && lay.columns[a.col]) openLimit(proj, lay, a.col);
-  else if (k === "escape" && proj.filterText) {
+  else if (k === "z" && lay.lane !== null) toggleLane(proj, lay, item);
+  else if (k === "w" && lay.columns[a.col] !== undefined) openLimit(proj, lay, a.col);
+  else if (k === "escape" && proj.filterText !== "") {
     proj.filter.set_value("");
     proj.filterText = "";
     proj.keepSel();
@@ -137,7 +139,7 @@ function boardKey(proj: Projects, b: Board, lay: Layout, k: string, cx: Context)
 
 export function typingKey(proj: Projects, k: string): boolean | "typing" {
   if (k === "escape") {
-    if (proj.typing === "filter" && !proj.filter.value()) proj.filterText = "";
+    if (proj.typing === "filter" && proj.filter.value() === "") proj.filterText = "";
 
     if (proj.typing === "draft") proj.draft.set_value("");
 
@@ -174,24 +176,24 @@ export function flipped(proj: Projects, list: readonly string[] | undefined, key
 export function toggleFold(proj: Projects, lay: Layout, col: number): void {
   const c = lay.columns[col], v = proj.view();
 
-  if (!c || !v) return;
+  if (c === undefined || v === null) return;
 
   proj.setLocal((l) => ({ ...l, folded: new Map(l.folded).set(v.id, flipped(proj, l.folded.get(v.id), c.key)) }));
 
   if (!c.folded) {
-    const next = step(proj.grid(lay), { col, row: 0 }, "right", lay.columns.map((x, i) => x.folded || i === col));
+    const next = step(proj.grid(lay), { col, row: 0 }, "right", Arr.map(lay.columns, (x, i) => x.folded || i === col));
     const now = proj.lay();
 
-    if (next && now && next.col !== col) proj.select(now, next, null);
+    if (next !== null && now !== null && next.col !== col) proj.select(now, next, null);
   }
 }
 
 export function toggleLane(proj: Projects, lay: Layout, item: Item | null): void {
   const v = proj.view();
-  const lane = item ? lay.lanes.find((l) => l.cells.some((c) => c.some((i) => i.id === item.id))) : lay.lanes.find((l) => l.folded);
-  const key = lane?.key;
+  const lane = Arr.findFirst(lay.lanes, (l) => (item === null ? l.folded : Arr.some(l.cells, (c) => Arr.some(c, (i) => i.id === item.id))));
+  const key = Option.getOrUndefined(lane)?.key;
 
-  if (key === undefined || key === null || !v) return;
+  if (key === undefined || key === null || v === null) return;
 
   proj.setLocal((l) => ({ ...l, lanes: new Map(l.lanes).set(v.id, flipped(proj, l.lanes.get(v.id), key)) }));
   proj.keepSel();

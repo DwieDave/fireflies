@@ -6,10 +6,10 @@
 import type { Context } from "gpui-kit";
 import * as herdr from "herdr";
 import { editorProps, openInEditor } from "@fireflies/editor-route";
-import { exec, run, panes, terminals, focused, shared, setShared } from "herdr";
+import { exec, run, panes, spaces, terminals, focused, home, shared, setShared } from "herdr";
 import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
 import type { Row } from "./logic.ts";
-import { nvimLaunch } from "./logic.ts";
+import { nvimLaunch, parent, relativeTo } from "./logic.ts";
 import type { EditorPlace } from "./state.ts";
 import { MOD, FROM, isSlotted, isTerminal, isEdit, isMarkdown, isPreviewFile, viewerFor, editTool, TITLES, PATHS } from "./state.ts";
 import type { EditorAsk } from "./routing.ts";
@@ -143,28 +143,51 @@ export function copiedNow(v: Files, cx: Context): void {
   });
 }
 
-/** y with marks: every marked path, one a line. */
-export function copySet(v: Files, cx: Context): void {
+/** A path as y (absolute; another machine's as `machine:/path`) or Y copies it: relative to
+ *  the shown space's folder (on the pane's machine; a space at home doesn't count) when it
+ *  is in it, else to the tree's root. */
+function copied(v: Files, abs: string, relative: boolean): string {
+  if (!relative) return v.on ? `${v.on}:${abs}` : abs;
+
+  const shown = spaces().find((s) => s.active);
+  const folder = shown && (shown.machine ?? null) === (v.on ?? null) ? shown.folder : "";
+  const space = folder && (v.on || folder.replace(/\/+$/, "") !== home()) ? [folder] : [];
+
+  return relativeTo(abs, [...space, v.root]);
+}
+
+/** y (Y: relative) with marks: every marked path, one a line. */
+export function copySet(v: Files, cx: Context, relative = false): void {
   const rows = setOf(v, rowAt(v, v.sel));
-  const paths = rows.map((r) => absOf(v, r.path)).map((a) => (v.on ? `${v.on}:${a}` : a));
+  const paths = rows.map((r) => copied(v, absOf(v, r.path), relative));
 
   cx.write_to_clipboard(paths.join("\n"));
-  v.copiedText = `${paths.length} paths copied`;
+  v.copiedText = `${paths.length} ${relative ? "relative paths" : "paths"} copied`;
   copiedNow(v, cx);
 }
 
-export function copyPath(v: Files, path: string, cx: Context): void {
+/** y: the row's path (the root's for ""); Y (`relative`): relative to the space's folder (copied()). */
+export function copyPath(v: Files, path: string, cx: Context, relative = false): void {
   if (v.marked.size && (!path || v.marked.has(path) || path === v.sel)) {
-    copySet(v, cx);
+    copySet(v, cx, relative);
 
     return;
   }
 
-  const abs = path ? `${v.root}/${path}` : v.root;
-
-  cx.write_to_clipboard(v.on ? `${v.on}:${abs}` : abs);
-  v.copiedText = null;
+  cx.write_to_clipboard(copied(v, path ? `${v.root}/${path}` : v.root, relative));
+  v.copiedText = relative ? "relative path copied" : null;
   copiedNow(v, cx);
+}
+
+/** f: the row in the system's file manager, selected (nocturne.reveal); under another
+ *  layout the file's folder (a folder itself) opens there. Not for another machine's rows. */
+export function revealRow(v: Files, row: Row): void {
+  if (v.on) return;
+
+  const abs = row.path ? `${v.root}/${row.path}` : v.root;
+
+  if (shared("layout") === "nocturne") run(`nocturne.reveal:${JSON.stringify({ path: abs })}`);
+  else run("files.open", { path: row.dir ? abs : parent(abs), in: "system" });
 }
 
 /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from.

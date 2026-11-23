@@ -13,7 +13,7 @@ import { stepRow, selectRow } from "./list-view.ts";
 import { keysKey } from "@fireflies/keyhelp";
 import { parent } from "./logic.ts";
 import { toggleLook, resizeLook } from "./look.ts";
-import { closePane, terminalEdit, nvim, previewRow, openPane, copyPath } from "./opening.ts";
+import { closePane, terminalEdit, nvim, previewRow, openPane, copyPath, revealRow } from "./opening.ts";
 import { viewerFor } from "./state.ts";
 import { rootRow } from "./menu.ts";
 import { lensStep, lensStops } from "./fit.ts";
@@ -256,7 +256,8 @@ function moveKey(v: Files, l: ListKey): boolean {
   return true;
 }
 
-/** Opening: E e $EDITOR, v Neovim, w the browser, p its viewer, o a files pane, y copy, m the menu, - . reroot, r refresh. */
+/** Opening: E e $EDITOR, v Neovim, w the browser, p its viewer, o a files pane, y copy (Y relative),
+ *  f the system's file manager, m the menu, - . reroot, r refresh. */
 function openKey(v: Files, l: ListKey): boolean {
   const { k, m, low, row, cx } = l;
 
@@ -268,7 +269,9 @@ function openKey(v: Files, l: ListKey): boolean {
   else if (k === "w" && row && !row.dir) openWeb(v, row.path, cx);
   else if (k === "p") previewRow(v, row, cx);
   else if (k === "o") openPane(v, row?.dir ? row.path : "");
+  else if (k === "Y" || (low === "y" && m.shift)) copyPath(v, row?.path ?? "", cx, true);
   else if (k === "y") copyPath(v, row?.path ?? "", cx);
+  else if (k === "f") revealRow(v, row ?? rootRow(v));
   else if (k === "m") v.openMenu(row ?? rootRow(v), cx);
   else if (k === "-") {
     const from = v.root;

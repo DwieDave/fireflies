@@ -12,6 +12,7 @@ import { rowStarts } from "./live.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addView, emptyView, kindsView, unitView, ADD_H, KINDS_H } from "./rendered-units.ts";
 import { edge } from "@fireflies/tones";
+import { isGoClick, linkAt } from "./cmd-click.ts";
 
 const PAD_TOP = 18;
 const PAD_BOTTOM = 60;
@@ -61,6 +62,16 @@ export function wrappedRows(text: string, width: number, cw = CHAR): number {
   return n;
 }
 
+/** The caret's row in the lit block, from the block's top (layout px): the rows its text up
+ *  to the caret takes as it wraps. */
+function caretY(v: Rendered): number {
+  const c = v.block.cursor();
+  const lines = v.piece.split("\n");
+  const upTo = [...lines.slice(0, c.line), (lines[c.line] ?? "").slice(0, c.col)].join("\n");
+
+  return v.padTop + (wrappedRows(upTo, v.litW, v.cw) - 1) * v.rowH;
+}
+
 /** The rows placed: each one's top, the column's height, the lit row's index (-1: none). */
 interface Placed {
   readonly tops: readonly number[];
@@ -73,7 +84,7 @@ const rowH = (v: Rendered, r: Row): number => (r.lit ? litHeight(v) : v.height(r
 
 /** Places the rows top to bottom; puts a kept line back at the top (a reload: rendered.ts
  *  keepTop), else scrolls the lit block into view (with room around it) when it asks to be
- *  shown; keeps the scroll within the column and notes the unit at the top. */
+ *  shown, or the caret's row when typed into (follow); keeps the scroll within the column and notes the unit at the top. */
 function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const tops: number[] = [];
   let y = PAD_TOP;
@@ -109,8 +120,15 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
     else if (bottom + 24 > v.scrollY + v.viewH) v.scrollY = Math.max(0, bottom + 24 - v.viewH);
 
     v.reveal = false;
+  } else if (v.follow && li >= 0) {
+    // Typed into: the caret's row stays in view with room around it, the view still while it is.
+    const y = (tops[li] ?? 0) + Math.min(caretY(v), Math.max(0, litHeight(v) - v.rowH));
+
+    if (y - 24 < v.scrollY) v.scrollY = Math.max(0, y - 24);
+    else if (y + v.rowH + 24 > v.scrollY + v.viewH) v.scrollY = y + v.rowH + 24 - v.viewH;
   }
 
+  v.follow = false;
   v.scrollY = Math.max(0, Math.min(v.scrollY, Math.max(0, total - v.viewH)));
   v.litTop = li >= 0 ? (tops[li] ?? 0) - v.scrollY : 0;
 
@@ -290,6 +308,8 @@ function litView(v: Rendered, o: ViewOptions): Element {
     .pl(12)
     .pr(o.kindInBar ? 12 : 92)
     .py(5)
+    // A right-click here is the block editor's own (cut, copy, paste), not the pane's (a scratchpad's more menu).
+    .on_mouse_down("right", (_e, cx) => cx.stop_propagation())
     .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(edge(t))))
     .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
     .when(!o.kindInBar, (el) => el.child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit))))
@@ -307,6 +327,16 @@ function litView(v: Rendered, o: ViewOptions): Element {
             .on_size_change((s, cx) => {
               v.litW = o.unzoom(s.width);
               cx.timer.after(0, (cx) => v.measure(cx));
+            })
+            // cmd+click on a link in the block (the caret is there already) opens it.
+            .on_mouse_down("left", (e, cx) => {
+              const at = v.block.cursor();
+              const url = isGoClick(e) ? linkAt(v.piece.split("\n")[at.line] ?? "", at.col) : null;
+
+              if (!url) return;
+
+              cx.stop_propagation();
+              v.host.link(url, cx);
             })
             .child(Editor.new(v.block).size_full().font_family(v.host.font)),
         )

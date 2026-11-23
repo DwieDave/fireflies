@@ -25,8 +25,8 @@ const commands: [string, any][] = [];
 const scrollTop = { y: 0 };
 const scrolled: number[] = [];
 const noExec = async (..._a: any[]) => ({ code: 1, stdout: "", stderr: "" });
-const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; find: (root: string, q: string) => Promise<any>; exec: (cmd: string, args: string[], o?: any) => Promise<any> } = {
-  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, find: async () => ({ files: [], scanning: false }), exec: noExec,
+const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; platform: string; find: (root: string, q: string) => Promise<any>; exec: (cmd: string, args: string[], o?: any) => Promise<any> } = {
+  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, platform: "linux", find: async () => ({ files: [], scanning: false }), exec: noExec,
 };
 const herdr = {
   props: () => world.props, theme: () => ({ background: "#080808", foreground: "#c6c6c6", ansi0: "#323437", ansi3: "#e3c78a", ansi4: "#80a0ff", ansi8: "#949494", accent: "#80a0ff", muted: "#949494", dim: "#5F6D6D" }),
@@ -36,7 +36,7 @@ const herdr = {
   shared: (k: string) => world.shared[k] ?? null, setShared: (k: string, v: any) => { world.shared[k] = v; return null; },
   findFiles: (root: string, q: string) => world.find(root, q),
   watchFolder: () => new Promise(() => {}), nextCommand: () => new Promise(() => {}),
-  home: () => "/home/me", appHome: () => "/home/me/.config/herdr-app", appWindow: () => ({ platform: "linux" }),
+  home: () => "/home/me", appHome: () => "/home/me/.config/herdr-app", appWindow: () => ({ platform: world.platform }),
 };
 const kit = {
   View: class {}, div: () => new Element(), svg: (p: string) => new Element("svg", p),
@@ -158,8 +158,8 @@ test("Neovim opens a file in its folder, a folder as nvim . there", () => {
 
 test("the menu offers Neovim for files and folders, a new pane for folders, close in a pane of its own", () => {
   const acts = (row: any, o?: any) => menuItems(row, o).map((x: any) => x.act);
-  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "look"]);
-  expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "look", "close"]);
+  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "copy-rel", "look"]);
+  expect(acts({ path: "src", dir: true }, { pane: true, reveal: "Reveal in Finder" })).toEqual(["toggle", "pane", "root", "edit", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "copy-rel", "reveal", "look", "close"]);
   expect(menuItems({ dir: false }).find((x: any) => x.act === "nvim").label).toBe("Open in Neovim");
 });
 
@@ -404,7 +404,7 @@ test("the right-click menu runs by key or enter; it opens under the pointer and 
   expect(commands.at(-1)).toEqual(["files.open", { path: "/repo/src", pane: "pf" }]);
   // On empty space: the root's menu, without fold and root.
   view.openMenu({ path: "", name: "/repo", dir: true }, cx);
-  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "new-file", "new-folder", "copy", "look", "close"]);
+  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "new-file", "new-folder", "copy", "copy-rel", "reveal", "look", "close"]);
 });
 
 test("the header shows both filters, the search hint and a close button in a pane of its own", () => {
@@ -1415,7 +1415,7 @@ test("a set: x cuts all of them, P moves them into the folder; y copies every pa
     expect(clipboard.at(-1)).toBe(`${pjoin(box.root, "docs", "guide.txt")}\n${pjoin(box.root, "README.md")}`);
     // The menu on a marked row: the set's entries first.
     view.openMenu(row(view, "README.md"), cx);
-    expect(view.menu.items.slice(0, 4).map((x: any) => x.label)).toEqual(["Delete 2 items…", "Cut 2 items", "Copy 2 paths", "Unmark all"]);
+    expect(view.menu.items.slice(0, 5).map((x: any) => x.label)).toEqual(["Delete 2 items…", "Cut 2 items", "Copy 2 paths", "Copy 2 relative paths", "Unmark all"]);
     view.key({ key: "x" }, cx);
     expect(logic.cutItems(world.shared["file-tree.cut"]).map((c: any) => c.name)).toEqual(["guide.txt", "README.md"]);
     // Both are drawn as cut.
@@ -1735,3 +1735,131 @@ test("a folder's look lists its files with their type marks", () => {
   expect(svgs(drawn).filter((p: string) => p.startsWith("mods/files/"))).toEqual(["mods/files/folder.svg"]);
 });
 
+
+// ---- copy path, copy relative path, reveal in the file manager
+
+/** A files pane rooted at `root` in the shown space (its folder `folder`), the layout `layout`. */
+function pathsPane(root: string, folder: string, { layout = "nocturne", on }: { layout?: string; on?: string } = {}) {
+  world.spaces = [{ active: true, folder, machine: on ?? null, tabs: [{ id: "t1", active: true }] }];
+  world.panes = [{ pane: "pf", tab: "t1", mod: "file-tree", props: { path: root, slot: "s1" } }];
+  world.shared = { layout };
+  const view = pane({ path: root, slot: "s1", ...(on ? { on } : null) }, TREE);
+  view.folders.add("src");
+  return view;
+}
+const entry = (view: any, path: string) => view.shown().find((r: any) => r.path === path);
+const menuOf = (view: any, path: string) => {
+  view.openMenu(path ? entry(view, path) : { path: "", name: view.root, dir: true }, cx);
+  return view.menu.items.map((x: any) => `${x.key} ${x.label}`);
+};
+
+test("a file's and a folder's menu: copy path, copy relative path, the platform's reveal", () => {
+  for (const [platform, label] of [["macos", "Reveal in Finder"], ["windows", "Reveal in Explorer"], ["linux", "Show in the file manager"]]) {
+    world.platform = platform;
+    const view = pathsPane("/repo", "/repo");
+    for (const path of ["README.md", "src", "src/main.rs", ""]) {
+      const items = menuOf(view, path);
+      const at = items.indexOf("y Copy path");
+      expect(at).toBeGreaterThan(-1);
+      expect(items.slice(at, at + 3)).toEqual(["y Copy path", "Y Copy relative path", `f ${label}`]);
+    }
+  }
+  world.platform = "linux";
+});
+
+test("Y and the menu's Copy relative path: relative to the space's folder, else to the tree's root", () => {
+  const view = pathsPane("/repo", "/repo");
+  clipboard.length = 0;
+  view.openMenu(entry(view, "src/main.rs"), cx);
+  view.menuKey({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src/main.rs");
+  expect(view.menu).toBeNull();
+  view.sel = "src";
+  view.key({ key: "y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src");
+  view.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src");
+  // y stays the absolute path.
+  view.key({ key: "y" }, cx);
+  expect(clipboard.at(-1)).toBe("/repo/src");
+  // The root (the empty space) in its own space's folder: ".".
+  view.openMenu({ path: "", name: "/repo", dir: true }, cx);
+  view.menuKey({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe(".");
+  // A tree rooted below the space's folder: still the space's folder's path.
+  const deep = pathsPane("/repo/src", "/repo");
+  deep.sel = "README.md";
+  deep.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src/README.md");
+  // Outside the space's folder (or a space at home): relative to the tree's root.
+  const other = pathsPane("/elsewhere/repo", "/repo");
+  other.sel = "src/main.rs";
+  other.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src/main.rs");
+  const home = pathsPane("/home/me/repo", "/home/me");
+  home.sel = "README.md";
+  home.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("README.md");
+  // Paths with spaces and quotes are copied as they are.
+  const odd = pathsPane("/my repo/it's \"here\"", "/my repo");
+  odd.sel = "README.md";
+  odd.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe(`it's "here"/README.md`);
+  odd.key({ key: "y" }, cx);
+  expect(clipboard.at(-1)).toBe(`/my repo/it's "here"/README.md`);
+  // Marked rows: every relative path, one a line.
+  view.marked = new Set(["src/main.rs", "README.md"]);
+  view.sel = "README.md";
+  view.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src/main.rs\nREADME.md");
+  view.unmark();
+});
+
+test("f and the menu's reveal run nocturne.reveal with the absolute path; another layout opens the folder in the system's file manager", () => {
+  world.platform = "macos";
+  const view = pathsPane("/my repo", "/my repo");
+  commands.length = 0;
+  view.openMenu(entry(view, "README.md"), cx);
+  view.menuKey({ key: "f", modifiers: {} }, cx);
+  view.sel = "src";
+  view.key({ key: "f" }, cx);
+  expect(commands).toEqual([
+    [`nocturne.reveal:${JSON.stringify({ path: "/my repo/README.md" })}`, undefined],
+    [`nocturne.reveal:${JSON.stringify({ path: "/my repo/src" })}`, undefined],
+  ]);
+  // Without nocturne: the file's folder, or the folder itself, in the system's file manager.
+  const plain = pathsPane("/my repo", "/my repo", { layout: "main" });
+  commands.length = 0;
+  plain.sel = "src/main.rs";
+  plain.key({ key: "f" }, cx);
+  plain.sel = "src";
+  plain.key({ key: "f" }, cx);
+  expect(commands).toEqual([["files.open", { path: "/my repo/src", in: "system" }], ["files.open", { path: "/my repo/src", in: "system" }]]);
+  world.platform = "linux";
+});
+
+test("a row on another machine: copy path names the machine, relative path works, no reveal", () => {
+  world.platform = "macos";
+  const view = pathsPane("/srv/app", "/srv/app", { on: "box" });
+  for (const path of ["README.md", "src"]) {
+    const items = menuOf(view, path);
+    expect(items).toContain("y Copy path");
+    expect(items).toContain("Y Copy relative path");
+    expect(items.some((x: string) => x.startsWith("f "))).toBe(false);
+  }
+  view.menu = null;
+  commands.length = 0;
+  clipboard.length = 0;
+  view.sel = "src/main.rs";
+  view.key({ key: "f" }, cx);
+  view.key({ key: "y" }, cx);
+  view.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(commands).toEqual([]);
+  expect(clipboard).toEqual(["box:/srv/app/src/main.rs", "src/main.rs"]);
+  // Its space on this computer: its folder is no base for another machine's paths.
+  world.spaces[0].machine = null;
+  world.spaces[0].folder = "/srv";
+  view.key({ key: "Y", modifiers: { shift: true } }, cx);
+  expect(clipboard.at(-1)).toBe("src/main.rs");
+  world.platform = "linux";
+});

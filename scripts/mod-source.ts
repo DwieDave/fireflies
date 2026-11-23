@@ -121,7 +121,7 @@ export async function importLibrary(spec: string, standins: Record<string, Stand
 }
 
 /** A temp folder that mod and library files are copied into, their imports rewritten (importMod). */
-function copier(prefix: string, standins: Record<string, Standin>, replace: Record<string, Standin>) {
+export function copier(prefix: string, standins: Record<string, Standin>, replace: Record<string, Standin> = {}) {
   const id = `copy${copies++}`;
   const dir = mkdtempSync(join(tmpdir(), prefix));
   const registry = ((globalThis as any).__modStandins ??= {});
@@ -134,23 +134,49 @@ function copier(prefix: string, standins: Record<string, Standin>, replace: Reco
     return r.startsWith(".") ? r : `./${r}`;
   };
 
-  /** A file's text with its imports pointed at the stand-ins, the copied libraries and node_modules. */
-  const rewrite = (text: string, at: string): string => text.replace(
-    /(import\s+(type\s+)?([\s\S]*?)\s+from\s+)"([^"]+)"/g,
-    (whole, head: string, isType: string | undefined, clause: string, spec: string) => {
-      if (isLibrary(spec) && !(spec in standins)) {
-        if (isShared(spec)) return `${head}"${Bun.resolveSync(spec, repo)}"`;
-        if (isType) return whole;
-        return `${head}"${relTo(at, library(spec))}"`;
-      }
-      const stood = spec.startsWith(".") ? (spec in replace ? spec : null) : spec;
-      if (!stood || isType) return whole;
-      const names = wanted.get(stood) ?? new Set<string>();
-      for (const n of importedNames(clause)) names.add(n);
-      wanted.set(stood, names);
-      return `${head}"${relTo(at, join(dir, fileName(stood)))}"`;
-    },
-  );
+  /**
+   * Where a module of `at` that names `spec` should load from: the shared
+   * libraries in node_modules, a copied library, a stand-in (recording the
+   * names `clause` takes from it), or null to leave it as it is.
+   */
+  const point = (spec: string, at: string, isType: boolean, clause: string): string | null => {
+    if (isLibrary(spec) && !(spec in standins)) {
+      if (isShared(spec)) return Bun.resolveSync(spec, repo);
+      if (isType) return null;
+      return relTo(at, library(spec));
+    }
+    const stood = spec.startsWith(".") ? (spec in replace ? spec : null) : spec;
+    if (!stood || isType) return null;
+    const names = wanted.get(stood) ?? new Set<string>();
+    for (const n of importedNames(clause)) names.add(n);
+    wanted.set(stood, names);
+    return relTo(at, join(dir, fileName(stood)));
+  };
+
+  /**
+   * A file's text with what it loads pointed at the stand-ins, the copied
+   * libraries and node_modules: `import … from`, re-exports (`export * from`,
+   * `export * as x from`, `export { a } from`) and `import("…")`.
+   */
+  const rewrite = (text: string, at: string): string => text
+    .replace(
+      /(import\s+(type\s+)?([\s\S]*?)\s+from\s+)"([^"]+)"/g,
+      (whole, head: string, isType: string | undefined, clause: string, spec: string) => {
+        const to = point(spec, at, Boolean(isType), clause);
+        return to === null ? whole : `${head}"${to}"`;
+      },
+    )
+    .replace(
+      /(export\s+(type\s+)?(\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s+from\s+)"([^"]+)"/g,
+      (whole, head: string, isType: string | undefined, clause: string, spec: string) => {
+        const to = point(spec, at, Boolean(isType), clause);
+        return to === null ? whole : `${head}"${to}"`;
+      },
+    )
+    .replace(/(\bimport\(\s*)(["'])([^"']+)\2(\s*\))/g, (whole, head: string, _q: string, spec: string, tail: string) => {
+      const to = point(spec, at, false, "");
+      return to === null ? whole : `${head}${JSON.stringify(to)}${tail}`;
+    });
 
   const write = (from: string, to: string) => {
     mkdirSync(dirname(to), { recursive: true });

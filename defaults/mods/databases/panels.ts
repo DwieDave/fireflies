@@ -27,7 +27,7 @@ import { connList } from "./conns.ts";
 import { cellAt, prettyValue } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
 import { changeAt } from "./edits.ts";
-import { liveEdits } from "./cell-edit.ts";
+import { liveEdits, settleEdit } from "./cell-edit.ts";
 import { atPointer } from "./menus.ts";
 import { addressOf, insertName, openTable, placeConn } from "./actions.ts";
 import { dropTarget, pressAt } from "./press.ts";
@@ -60,6 +60,9 @@ function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boole
     .when(Boolean(h.tip), (el) => el.tooltip(h.tip ?? ""))
     .on_mouse_down("left", (e, cx) => {
       cx.stop_propagation();
+
+      // A cell being edited: kept if it can be (else dropped), as the keyboard leaves the grid.
+      if (v.cellEdit) settleEdit(v);
 
       if (e.click_count >= 2) h.open(cx);
       else {
@@ -269,6 +272,9 @@ export function shownTables(v: DbView): TableRef[] {
 /** The schemas the tables are in. */
 export const schemasOf = (v: DbView): string[] => [...new Set(Arr.flatMap(v.catalog.tables, (x) => (x.schema !== null && Str.isNonEmpty(x.schema) ? [x.schema] : [])))];
 
+/** [2]'s cursor in a list of `n` tables: a list read again shorter has it on its last row. */
+export const tableCursor = (v: DbView, n: number): number => Math.min(v.tableAt, Math.max(0, n - 1));
+
 function tablesBody(t: Theme, v: DbView, active: boolean): Element {
   if (v.active === null) return empty(t, "Pick a connection", "in [1], and enter", null);
 
@@ -297,9 +303,12 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const kind = v.active.kind;
 
-  const rows = Arr.map(shownTables(v), (x, i) => listRow(t, v, `table-${i}`, v.tableAt === i, active, [
+  const shown = shownTables(v);
+  const at = tableCursor(v, shown.length);
+
+  const rows = Arr.map(shown, (x, i) => listRow(t, v, `table-${i}`, at === i, active, [
     ...(many && (x.schema !== null && Str.isNonEmpty(x.schema)) ? [text(t, `${x.schema}.`, t.dim).flex_none()] : []),
-    text(t, x.name, v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0), div().flex_1(),
+    text(t, x.name, at === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0), div().flex_1(),
     text(t, count(x.rows), t.dim).flex_none(),
   ], {
     pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
@@ -320,7 +329,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
   const findRow = find !== null ? h_flex().h(22).px(8).gap(6).items_center().child(div().text_color(t.accent).child("/")).child(Input.new(find).flex_1().text_size(11)) : null;
 
   return v_flex().size_full().when(findRow !== null, (el) => (findRow !== null ? el.child(findRow) : el))
-    .child(rows.length !== 0 ? list("tables-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables) : empty(t, v.tablesTab === "views" ? "No views" : "No tables", null, null));
+    .child(rows.length !== 0 ? list("tables-list", v.scrolls.tables, rows, at, v.seen.tables) : empty(t, v.tablesTab === "views" ? "No views" : "No tables", null, null));
 }
 
 function schemasBody(t: Theme, v: DbView, active: boolean): Element {

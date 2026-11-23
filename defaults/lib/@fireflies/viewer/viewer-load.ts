@@ -17,9 +17,9 @@ import type { ViewerServices } from "./viewer-fx.ts";
 import type { Context } from "gpui-kit";
 import { kindOf, lookKind, sniffKind, route, toolsFor, rasterArgv, pageCount, noun, siblings, stepIn, fileSize } from "./kinds.ts";
 import type { Converter, Size } from "./image.ts";
-import { formatOf, hexBytes, sniff, sizeFromFile, plan, cantShow, wrapper, sharpness } from "./image.ts";
+import { formatOf, headBytes, hexBytes, sniff, sizeFromFile, plan, cantShow, wrapper, sharpness } from "./image.ts";
 import type { Info, Copy } from "./viewer-state.ts";
-import { sh, CACHE, nativeViews, dirname, blank, COPIED, lastPart, STAMP, COPY, platform, HEAD, REMOTE_MAX, EMBEDS, dpr, basename, MOD, slotOf, TITLES, PATHS, TitleSchema, PathSchema, readSharedMap, writeSharedMap } from "./viewer-state.ts";
+import { ReadProgress, waiting, sh, CACHE, nativeViews, dirname, blank, COPIED, lastPart, STAMP, COPY, platform, HEAD, REMOTE_MAX, EMBEDS, dpr, basename, MOD, slotOf, TITLES, PATHS, TitleSchema, PathSchema, readSharedMap, writeSharedMap } from "./viewer-state.ts";
 import type { default as Viewer } from "./viewer.ts";
 import { loadLook, loadText } from "./viewer-text.ts";
 import { loadDb } from "./viewer-table.ts";
@@ -108,11 +108,99 @@ export function runRead(v: Viewer, gen: number, read: Effect.Effect<void, ExecEr
     if (gen === v.gen) failWith(v, `Can't show it: ${message}`);
   });
 
+  const progress: Progress = { waits: 0, moves: 0, done: false };
+
   v.fx?.run(Effect.catchTags(read, { ExecError: (e) => cantRead(e.message), FileError: (e) => cantRead(e.message), DecodeError: (e) => cantRead(e.message) }).pipe(
     // A bug in a read (a throw) says so the same way, for the file it was reading only.
     Effect.catchDefect((defect) => cantRead(causeMessage(defect))),
+    Effect.provideService(ReadProgress, ReadProgress.of({
+      waits: Effect.sync(() => {
+        progress.waits += 1;
+      }),
+      moves: Effect.sync(() => {
+        progress.waits -= 1;
+        progress.moves += 1;
+      }),
+    })),
+    // Every end it can see (done, failed, interrupted); a read the engine cut off sees none.
+    Effect.ensuring(Effect.sync(() => {
+      progress.done = true;
+    })),
   ));
+  v.fx?.run(watchdog(v, gen, progress));
 }
+
+/** What a read's watchdog sees of it. */
+interface Progress {
+  /** Waits on the app (programs, files, timers) under way. */
+  waits: number;
+  /** Waits ended (the read moved on). */
+  moves: number;
+  done: boolean;
+}
+
+// The watchdog looks this often; a read neither waiting nor moving for this many looks was cut off.
+const WATCH_EVERY = 1000;
+const STILL_LOOKS = 3;
+
+/**
+ * Watches a read for the end it can't say itself: the engine stops a turn
+ * that overruns its budget (500 ms for a task), uncatchably, and the read's
+ * fiber never runs again. Its pane would say "Reading…" for ever; once the
+ * read has been neither waiting nor moving for STILL_LOOKS looks, the pane
+ * says it was cut off instead (unless a newer file took its place).
+ */
+const watchdog = (v: Viewer, gen: number, progress: Progress) => Effect.gen(function* () {
+  let seen = progress.moves;
+  let still = 0;
+
+  while (!progress.done && gen === v.gen) {
+    yield* Effect.sleep(WATCH_EVERY);
+
+    const moved = progress.moves !== seen || progress.waits > 0;
+
+    seen = progress.moves;
+    still = moved ? 0 : still + 1;
+
+    if (!progress.done && gen === v.gen && still >= STILL_LOOKS) {
+      failWith(v, "Can't show it: reading it was cut off before it finished (it took the app too long in one go)");
+
+      return;
+    }
+  }
+});
+
+/** Of a picture's first bytes, this many text characters of `od` are read into bytes a turn. */
+const SLICE = 64 * 1024;
+
+/**
+ * `od -An -v -tx1` text as bytes, a slice a turn: a picture's head (256 KB:
+ * 800 KB of text) in one go can overrun the engine's turn budget under load
+ * and be cut off. Between slices a 1 ms wait (a timer: a turn of its own).
+ */
+export const hexBytesIn = Effect.fnUntraced(function* (text: string) {
+  const out: number[] = [];
+  const lineEnd = /\n/g;
+  let at = 0;
+
+  while (at < text.length) {
+    lineEnd.lastIndex = at + SLICE;
+
+    const cut = at + SLICE < text.length ? lineEnd.exec(text) : null;
+    const end = cut === null ? text.length : cut.index + 1;
+
+    for (const b of hexBytes(Str.slice(at, end)(text))) out.push(b);
+
+    at = end;
+
+    if (at < text.length) yield* waiting(Effect.sleep(1));
+  }
+
+  return out;
+});
+
+/** A non-picture's first bytes say what it is in its first 16 (PDF, the font formats, SQLite). */
+const SNIFF_BYTES = 16;
 
 export function failed(r: ExecResult): string {
   return r.code === 3 ? "It isn't there (moved or deleted?)" : Str.trim(Str.isEmpty(r.stderr) ? "Can't read it" : r.stderr);
@@ -174,7 +262,9 @@ export const loadCopy = Effect.fnUntraced(function* (v: Viewer, gen: number) {
   // Media can be big: played from where it is (only another machine's is fetched),
   // known by its size and time instead of a checksum.
   const media = v.kind === "video" || v.kind === "audio";
-  const r = v.on !== null ? yield* fetchCopy(v, path, dir, ext) : media ? yield* mediaStamp(path) : yield* sh(COPY, [path, dir, ext]);
+  // As many first bytes as the kind (a picture: its format) needs, no more.
+  const head = v.kind === "image" ? headBytes(formatOf(path), HEAD) : SNIFF_BYTES;
+  const r = v.on !== null ? yield* fetchCopy(v, path, dir, ext, head) : media ? yield* mediaStamp(path) : yield* sh(COPY, [path, dir, ext, String(head)]);
 
   if (gen !== v.gen) return;
 
@@ -186,7 +276,10 @@ export const loadCopy = Effect.fnUntraced(function* (v: Viewer, gen: number) {
     return;
   }
 
-  const [name = "", size = "", ...rest] = Str.split(r.stdout, "\n");
+  // The copy's name and size lines, then its first bytes as `od` writes them.
+  const lines = /^([^\n]*)\n([^\n]*)\n?/.exec(r.stdout);
+  const name = lines?.[1] ?? "";
+  const size = lines?.[2] ?? "";
   const stamp = `${name}:${size}`;
 
   // Unchanged.
@@ -194,7 +287,9 @@ export const loadCopy = Effect.fnUntraced(function* (v: Viewer, gen: number) {
 
   v.stamp = stamp;
 
-  const bytes = hexBytes(Arr.join(rest, " "));
+  const bytes = yield* hexBytesIn(Str.slice(lines?.[0].length ?? 0)(r.stdout));
+
+  if (gen !== v.gen) return;
 
   if (v.kind === "image") return yield* loadImage(v, gen, name, Number(size), bytes, dir);
 
@@ -254,7 +349,7 @@ export const loadCopy = Effect.fnUntraced(function* (v: Viewer, gen: number) {
  * tool that couldn't run leaves none, and the caller says so).
  */
 const runTool = (argv: readonly string[], tool: string) =>
-  Effect.map(Effect.option(Exec.use((x) => x.run(argv[0] ?? tool, argv.slice(1), { timeout: 60000 }))), Option.isSome);
+  Effect.map(Effect.option(waiting(Exec.use((x) => x.run(argv[0] ?? tool, argv.slice(1), { timeout: 60000 })))), Option.isSome);
 
 /** One PDF page as a PNG in the cache, then shown as a picture. */
 export const rasterPageOf = Effect.fnUntraced(function* (view: Viewer, gen: number) {
@@ -390,17 +485,17 @@ export const loadImage = Effect.fnUntraced(function* (view: Viewer, gen: number,
 
 /** Writes a file named by its contents, once: one already there has them (same name, same contents). */
 const writeOnce = (path: string, text: string) =>
-  Effect.catchTag(Files.use((f) => f.write(path, text, null)), "StaleFile", () => Effect.void);
+  Effect.catchTag(waiting(Files.use((f) => f.write(path, text, null))), "StaleFile", () => Effect.void);
 
 /** Another machine's file: its checksum there, then (once per contents) its bytes over base64. */
-export const fetchCopy = Effect.fnUntraced(function* (view: Viewer, path: string, dir: string, ext: string) {
+export const fetchCopy = Effect.fnUntraced(function* (view: Viewer, path: string, dir: string, ext: string, head: number) {
   const sum = yield* sh('[ -f "$1" ] || exit 3; cksum < "$1"', [path], view.on);
 
   if (sum.code !== 0) return sum;
 
   const [crc = "", bytes = "0"] = Str.split(Str.trim(sum.stdout), /\s+/);
   const name = `${crc}-${bytes}.${ext}`;
-  const have = yield* sh(`[ -f "$1/$2" ] && od -An -v -tx1 -N ${HEAD} "$1/$2"`, [dir, name]);
+  const have = yield* sh(`[ -f "$1/$2" ] && od -An -v -tx1 -N ${head} "$1/$2"`, [dir, name]);
 
   if (have.code === 0) return { code: 0, stdout: `${name}\n${bytes}\n${have.stdout}`, stderr: "" };
 
@@ -417,7 +512,7 @@ export const fetchCopy = Effect.fnUntraced(function* (view: Viewer, path: string
   // Left over from before: the same name holds the same bytes.
   yield* writeOnce(b64, data.stdout);
 
-  return yield* sh(`base64 -d < "$1" > "$2/$3" && rm -f "$1" && printf '%s\\n%s\\n' "$3" "$4" && od -An -v -tx1 -N ${HEAD} "$2/$3"`, [b64, dir, name, bytes]);
+  return yield* sh(`base64 -d < "$1" > "$2/$3" && rm -f "$1" && printf '%s\\n%s\\n' "$3" "$4" && od -An -v -tx1 -N ${head} "$2/$3"`, [b64, dir, name, bytes]);
 });
 
 /** A PNG copy by the first converter found (none when no converter here makes one). */

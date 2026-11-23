@@ -1,0 +1,128 @@
+Preview / Deploy preview	UNKNOWN STEP	﻿2026-11-18T09:38:47.8815866Z Current runner version: '2.338.2'
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8855783Z ##[group]Runner Image Provisioner
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8857300Z Hosted Compute Agent
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8858667Z Version: 20261103.629
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8866186Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8869010Z ##[group]Operating System
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8870279Z Ubuntu
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8871377Z 26.04.1
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8873415Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8874628Z ##[group]Runner Image
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8875831Z Image: ubuntu-26.04
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8876978Z Version: 20261111.196.1
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8884412Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8886863Z ##[group]GITHUB_TOKEN Permissions
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8890052Z Contents: read
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8891114Z Metadata: read
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.8894494Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.9753656Z Prepare all required actions
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:47.9827166Z Getting action download info
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.1828399Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.3046453Z Download action repository 'oven-sh/setup-bun@v2' (SHA:0c5077e51419868618aeaa5fe8019c62421857d6)
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.4226297Z Download action repository 'actions/github-script@v9' (SHA:3a2844b7e9c422d3c10d287c895573f7108da1b3)
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.6310687Z ##[group] Inputs
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.6311830Z   pr_number: 69
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.6312444Z   head_sha: 67d510d7ad0ba553c8ccef72d8e7eff42adb72f0
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.6314983Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.6315678Z Complete job name: Preview / Deploy preview
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.7219995Z ##[group]Run actions/checkout@v7
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.7221215Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.7221740Z   repository: acme/shop
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:48.7234317Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0790647Z ##[group]Getting Git version info
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0792547Z Working directory is '/home/runner/work/shop/shop'
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0808282Z [command]/usr/bin/git version
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0814901Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0857115Z ##[group]Determining repository object format
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0870570Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0873022Z ##[group]Initializing the repository
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.0874879Z [command]/usr/bin/git init /home/runner/work/shop/shop
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.1020223Z hint: Using 'master' as the name for the initial branch. This default branch name
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2269694Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2271419Z ##[group]Disabling automatic garbage collection
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2272842Z [command]/usr/bin/git config --local gc.auto 0
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2276202Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2278849Z ##[group]Setting up auth
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2280060Z Removing SSH command configuration
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.2281707Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.3335649Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.3337916Z ##[group]Fetching the repository
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:49.3340354Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +05684f6c0395f3c081283b80c300da13fb87102e:refs/remotes/pull/69/merge
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2223807Z From https://github.com/acme/shop
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2230621Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2231743Z ##[group]Determining the checkout info
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2232826Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2233511Z [command]/usr/bin/git sparse-checkout disable
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2352841Z ##[group]Checking out the ref
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.2354259Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/69/merge
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.5989102Z Note: switching to 'refs/remotes/pull/69/merge'.
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.6033678Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.6463882Z ##[group]Run oven-sh/setup-bun@v2
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.6464215Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.6464442Z   bun-version: 1.4.4
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:51.6468396Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:52.7900339Z ##[group]Run bun install --frozen-lockfile --ignore-scripts
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:52.7900906Z ^[[36;1mbun install --frozen-lockfile --ignore-scripts^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:52.7959737Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:52.7960802Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.5353799Z Prepare all required actions
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.5354672Z Getting action download info
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6387146Z ##[group]Run ./.github/actions/read-domain
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6388091Z env:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6388484Z   REGISTRY: ghcr.io
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6389274Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6476633Z ##[start-action display=Run oven-sh/setup-bun@v2;id=domain.__oven-sh_setup-bun]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6586151Z ##[group]Run oven-sh/setup-bun@v2
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6586610Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6586948Z   bun-version: 1.4.4
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:57.6597063Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.0837234Z ##[end-action id=domain.__oven-sh_setup-bun;outcome=success;conclusion=success;duration_ms=435]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.0851770Z ##[start-action display=Run set -euo pipefail;id=domain.read]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.0916021Z ##[group]Run set -euo pipefail
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.0916554Z ^[[36;1mset -euo pipefail^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.0917199Z ^[[36;1mbun -e 'import("./infra/konfig/cluster.ts").then(({ cluster }) => {^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.1044117Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.1681075Z ##[end-action id=domain.read;outcome=success;conclusion=success;duration_ms=82]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.1806815Z Prepare all required actions
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.2965378Z ##[group]Run ./.github/actions/install-sops
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.2965903Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.2966263Z   version: 3.11.0
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.2987989Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.2994261Z ##[start-action display=Install sops binary;id=__self.__run]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.3025935Z ##[group]Run set -euo pipefail
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.3026466Z ^[[36;1mset -euo pipefail^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.3026890Z ^[[36;1m^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.3167531Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7557020Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=456]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7615354Z Prepare all required actions
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7675174Z ##[group]Run ./.github/actions/normalize-owner
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7675702Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7676072Z   repository_owner: acme
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7677600Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7683500Z ##[start-action display=Normalize owner to lowercase;id=owner.normalize]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7709678Z ##[group]Run set -euo pipefail
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7710215Z ^[[36;1mset -euo pipefail^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7710844Z ^[[36;1mowner_lc="$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7779558Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.7949749Z ##[end-action id=owner.normalize;outcome=success;conclusion=success;duration_ms=26]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8002823Z ##[group]Run set -euo pipefail
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8003391Z ^[[36;1mset -euo pipefail^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8003850Z ^[[36;1mshort_sha="${HEAD_SHA:0:7}"^[[0m
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8098908Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8215976Z Preview images:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8369021Z   web: ghcr.io/acme/web:pr-69-67d510d
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8508875Z   scanner: ghcr.io/acme/scanner:3594e26c43bdec4e558397afae4e23a99b555648
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8666527Z   api: ghcr.io/acme/api:3594e26c43bdec4e558397afae4e23a99b555648
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8818883Z   orders-sync: ghcr.io/acme/orders-sync:3594e26c43bdec4e558397afae4e23a99b555648
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.8959123Z   stock-sync: ghcr.io/acme/stock-sync:3594e26c43bdec4e558397afae4e23a99b555648
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9095703Z jq: error (at infra/konfig/images.json:35): no promoted image for report-sync
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9115365Z ##[error]Process completed with exit code 5.
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9269139Z ##[group]Run actions/github-script@v9
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9269654Z with:
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9276969Z   script: const fs = require('fs');
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:38:58.9294584Z ##[endgroup]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:39:00.5588939Z Post job cleanup.
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:39:00.5592510Z ##[start-action display=Run oven-sh/setup-bun@v2;id=__f8de7d6d-36f7-4846-9bdd-d9bb8baf00d4.__oven-sh_setup-bun]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:39:00.5596183Z ##[end-action id=__f8de7d6d-36f7-4846-9bdd-d9bb8baf00d4.__oven-sh_setup-bun;outcome=skipped;conclusion=skipped;duration_ms=0]
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:39:00.5687941Z Post job cleanup.
+Preview / Deploy preview	UNKNOWN STEP	2026-11-18T09:39:00.8905584Z Cleaning up orphan processes

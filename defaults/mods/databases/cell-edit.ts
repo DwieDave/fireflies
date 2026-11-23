@@ -173,6 +173,14 @@ export function editKey(v: DbView, e: KeyEvent): Taken {
 
   if (edit === null) return false;
 
+  // The keyboard went to another panel (a click on a table in [2]): the edit is kept if it can
+  // be, else dropped, and the key is that panel's (enter opens the table, not the cell's value).
+  if (v.panel !== "main") {
+    settleEdit(v);
+
+    return false;
+  }
+
   const m = e.modifiers;
 
   if (e.key === "enter") keepEdit(v);

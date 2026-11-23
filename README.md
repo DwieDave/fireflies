@@ -13,9 +13,9 @@ It is a fork of [Herdr](https://github.com/herdrdev/herdr-app), the desktop app,
 - **More from panes**: splits left, up or along a tab's edge, font zoom per pane, and floating terminals.
 - **Layout roles for the dialogs**, so a layout can draw the prompt, confirm, palette, peek, toasts, the welcome and the update note in its own look.
 
-Under the name it is still Herdr: the same app home (`~/.config/herdr-app`), the same [herdr-core](https://github.com/herdrdev/herdr-core) and the same mod API. Mods written for Herdr run here.
+Under the name it is still Herdr: the same [herdr-core](https://github.com/herdrdev/herdr-core) and the same mod API. Mods written for Herdr run here. Its home is `~/.config/fireflies/app`: the first start moves Herdr's `~/.config/herdr-app` there and leaves a link at the old name.
 
-The command is `fireflies`. Herdr's name for it, `herdr-app`, is the same program and keeps working: scripts, agent skills and setups that call it don't change. [FIREFLIES.md](FIREFLIES.md) lists what the fork changes and how it follows Herdr.
+The command is `fireflies` (short: `ff`). It drives the window and hands every herdr-core command to the core as `hc` would run it (`fireflies run`, `fireflies send`, `fireflies ls`); `fireflies app ls` lists the window's spaces. Herdr's names keep working: `herdr-app` (the window's commands), `hc` and `herdr-core` (the core's), for scripts, setups and the Herdr iOS app, which runs `hc` over ssh. [FIREFLIES.md](FIREFLIES.md) lists what the fork changes and how it follows Herdr.
 
 ## What it looks like
 
@@ -89,9 +89,9 @@ just test
 just install
 ```
 
-On macOS `just install` builds a release, puts the app in `~/Applications/Fireflies.app` and links both commands, `~/.local/bin/fireflies` and `~/.local/bin/herdr-app`, to it. Add that folder to your PATH. Quit and reopen the app to use a new build.
+On macOS `just install` builds a release, puts the app in `~/Applications/Fireflies.app` and links its commands, `~/.local/bin/fireflies`, `ff` and `herdr-app`, to it. Add that folder to your PATH. Quit and reopen the app to use a new build.
 
-`scripts/install-fork-macos` installs into `/Applications/Fireflies.app` instead. A fork build that an earlier run put at `/Applications/Herdr.app` moves there; pin it in the Dock again. An official Herdr can stay beside it, but both apps use `~/.config/herdr-app`. To remove Herdr, uninstall it without `--zap` (zap deletes `~/.config/herdr-app`): `brew uninstall --cask herdr-app`.
+`scripts/install-fork-macos` installs into `/Applications/Fireflies.app` instead. A fork build that an earlier run put at `/Applications/Herdr.app` moves there; pin it in the Dock again. An official Herdr can stay beside it, but both apps use the same home: Herdr's `~/.config/herdr-app` links to Fireflies' `~/.config/fireflies/app`. To remove Herdr, uninstall it without `--zap` (zap trashes `~/.config/herdr-app`): `brew uninstall --cask herdr-app`.
 
 The bundle keeps Herdr's bundle id, `dev.herdr.app`. A build from source never updates itself: pull and build again.
 
@@ -122,11 +122,13 @@ Add an SSH machine from Settings → Machines or the sidebar's Add machine actio
 
 ## Make it yours
 
-Open the command palette (Cmd+Shift+P) to find an action by name and see its key, or open Settings to change fonts, colors, sounds and other preferences. Settings → Look switches layouts: Nocturne, plus Herdr's own main, Terminals and Windows 98 layouts.
+Open the command palette (Cmd+Shift+P) to find an action by name and see its key, or open Settings to change fonts, colors, sounds and other preferences. Settings → Look switches layouts: Nocturne, plus Herdr's own main, Terminals and Windows 98 layouts. It also adjusts terminal line height, cell width and scroll speed. All default to 100%; layouts can override them with `terminal_line_height` (0.8–2), `terminal_cell_width` (0.8–2) and `terminal_scroll_speed` (0.1–5).
 
 A **layout** arranges the window. **Mods** are small JavaScript programs that draw its panels, menus and dialogs. Duplicate a shipped layout or mod before changing it: your copies stay yours, and the app replaces the shipped ones on start. Save a personal layout, mod or key file and the window reloads it. A broken edit keeps the last good version and reports the error.
 
 Change any key in `keys.json`. The [keys section](defaults/AGENTS.md#keys-keysjson) of the mod guide has the format.
+
+On macOS, Cmd+A selects the terminal's whole screen and scrollback, ready for Cmd+C. In vim and other alternate-screen apps, it selects only that screen. Linux and Windows keep Ctrl+A for the shell; bind `terminal.select_all` in `keys.json` if desired.
 
 [Layouts and mods](docs/mods.md) · [Commands](docs/commands.md) · [Labels](docs/labels.md)
 
@@ -143,12 +145,12 @@ fireflies --skill
 This prints the agent guide for driving the window. The herdr-core skill points agents here. Use herdr-core for running and coordinating programs; use the app to change what you see.
 
 ```sh
-fireflies ls
+fireflies app ls
 fireflies status
 fireflies commands
 ```
 
-The first two inspect the open window. The command list also works without one. See the [command reference](docs/commands.md) for arguments. Every example works with `herdr-app` in place of `fireflies`.
+The first two inspect the open window. The command list also works without one. See the [command reference](docs/commands.md) for arguments. `herdr-app` answers the same (`herdr-app ls` is `fireflies app ls`).
 
 ## Contributing
 

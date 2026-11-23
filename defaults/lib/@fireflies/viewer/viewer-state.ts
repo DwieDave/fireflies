@@ -3,8 +3,7 @@
 // native views' answers, the shapes it holds (a copy, a text look, a table, a
 // drag), and the helpers its parts share (zoom, the checker, paths).
 
-import { Array as Arr, Option, Record as Rec, Schema, String as Str } from "effect";
-import type { Effect } from "effect";
+import { Array as Arr, Context as Services, Effect, Option, Record as Rec, Schema, String as Str } from "effect";
 import { PathBuilder, Background } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent, Point } from "gpui-kit";
 import * as herdr from "herdr";
@@ -33,7 +32,8 @@ export const ART = "mods/nocturne/art";
 // Copies of what's shown, under the app's folder (where image() reads).
 export const CACHE = `cache/${MOD}`;
 
-// The first bytes read for the size and format.
+// The most a copy's first bytes are read for its size and format (a picture whose
+// format keeps its size far in: image.ts `headBytes` says how far each needs).
 export const HEAD = 262144;
 
 // A file on another machine: read it this often; fetched up to this size.
@@ -72,11 +72,11 @@ export const LINE = 18;
 export const LOOK_HEAD = `[ -e "$1" ] || [ -L "$1" ] || exit 3; [ -f "$1" ] || exit 6; [ -r "$1" ] || exit 5
 wc -c < "$1"; n=$(head -c 8000 "$1" | tr -dc '\\000' | wc -c); echo $n; [ "$n" -gt 0 ] || head -c "$2" "$1"`;
 
-// One copy per contents: `<crc>-<bytes>.<ext>` (then its size line and its first bytes).
-export const COPY = `f="$1"; d="$2"; e="$3"; [ -f "$f" ] || exit 3; mkdir -p "$d" || exit 4
+// One copy per contents: `<crc>-<bytes>.<ext>` (then its size line and its first $4 bytes).
+export const COPY = `f="$1"; d="$2"; e="$3"; h="$4"; [ -f "$f" ] || exit 3; mkdir -p "$d" || exit 4
 set -- $(cksum < "$f"); n="$1-$2.$e"
 [ -f "$d/$n" ] || cp -c "$f" "$d/$n" 2>/dev/null || cp "$f" "$d/$n" || exit 4
-printf '%s\\n%s\\n' "$n" "$2"; od -An -v -tx1 -N ${HEAD} "$d/$n"`;
+printf '%s\\n%s\\n' "$n" "$2"; od -An -v -tx1 -N "$h" "$d/$n"`;
 
 // Text: its size, its line count, then its first bytes.
 export const TEXT_HEAD = `[ -f "$1" ] || exit 3; wc -c < "$1"; wc -l < "$1"; head -c ${MAX_BYTES} "$1"`;
@@ -297,9 +297,27 @@ export const basename = (p: string): string => {
 export const tilde = (p: string, h: string): string => (Str.isEmpty(p) || Str.isEmpty(h) ? p : p === h ? "~" : Str.startsWith(h + "/")(p) ? "~" + Str.slice(h.length)(p) : p);
 export const lastPart = (p: string): string => Str.toLowerCase(Arr.lastNonEmpty(Str.split(p, ".")));
 
+/**
+ * How the file's read is getting on, for its watchdog (viewer-load.ts
+ * `runRead`): a wait on the app (a program, a file, a timer) starts and
+ * ends. A read that is neither waiting nor moving any more was cut off: the
+ * engine stops a turn that overruns its budget, and nothing after it runs.
+ */
+export class ReadProgress extends Services.Service<ReadProgress, {
+  readonly waits: Effect.Effect<void>;
+  readonly moves: Effect.Effect<void>;
+}>()("@fireflies/viewer/viewer-state/ReadProgress") {}
+
+/** `effect` (a program, a file, a timer) as a wait of the read it runs in, when it runs in one. */
+export const waiting = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.serviceOption(ReadProgress), Option.match({
+    onNone: () => effect,
+    onSome: (p) => Effect.andThen(p.waits, Effect.ensuring(effect, p.moves)),
+  }));
+
 /** Runs `script` in sh (`$0` the mod, `$1`… `args`), here or on machine `on`: its exit and output, whatever the code. */
 export const sh = (script: string, args: readonly string[], on: string | null = null): Effect.Effect<ExecResult, ExecError, Exec> =>
-  Exec.use((x) => x.run("sh", ["-c", script, MOD, ...args], on === null ? undefined : { on }));
+  waiting(Exec.use((x) => x.run("sh", ["-c", script, MOD, ...args], on === null ? undefined : { on })));
 
 /** A pointer's place in the viewport, from an event on it. */
 export const pointOf = (e: { readonly local_position?: Point | undefined }): Point | null => (e.local_position === undefined ? null : { x: e.local_position.x, y: e.local_position.y });

@@ -108,7 +108,8 @@ for (const [what, n] of [["few tabs", 2], ["tabs overflowing the strip", 40]] as
     expect(area.calls.min_w?.[0]).toBe(0);
     expect(find(root, "tab-seam").calls.flex_none).toBeDefined();
     expect(find(root, "tab-tools").calls.flex_none).toBeDefined();
-    expect(find(root, "tab-scroll").calls.overflow_x_scrollbar).toBeDefined();
+    // GPUI's own sideways scroll, a vertical wheel turned sideways (tabscroll.ts)
+    expect(find(root, "tab-scroll").calls.overflow_x_scroll).toBeDefined();
     expect(find(root, "tab-scroll").kids.filter((k: any) => String(idOf(k)).startsWith("tab-t")).length).toBe(n);
     // the fade lies over the tabs (after them, at the area's right edge), above the horizon
     expect(area.kids.map(idOf)).toEqual(["tab-scroll", "tab-fade"]);

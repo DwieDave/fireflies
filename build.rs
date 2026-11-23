@@ -34,7 +34,12 @@ fn embed(base: &Path, folder: &str, name: &str, file: &str) {
     println!("cargo:rerun-if-changed={folder}");
     let mut lines = Vec::new();
     let root = base.join(folder);
-    walk(&root, base, &root, &mut lines);
+    // A folder that isn't there embeds nothing: a packager's dependency step builds
+    // from a stub of this tree that has no defaults/lib (the app's own build has it,
+    // and a test loads every library by name).
+    if root.is_dir() {
+        walk(&root, base, &root, &mut lines);
+    }
     let code = format!("pub const {name}: &[(&str, &[u8])] = &[\n{}\n];\n", lines.join("\n"));
     std::fs::write(Path::new(&std::env::var("OUT_DIR").unwrap()).join(file), code).unwrap();
 }

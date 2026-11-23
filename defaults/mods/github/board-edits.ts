@@ -2,11 +2,10 @@
 // last read, and the GraphQL mutations that make them on GitHub. No herdr
 // imports, so scripts/ tests it.
 
-import { isNumber, isString, object } from "./guard.ts";
-import { maybe } from "./guards.ts";
+import { Array as Arr, Option, Predicate, Schema, String as Str } from "effect";
+import { maybe } from "./model.ts";
 import { dateOf, iterationOf, numberOf, selectOf, textOf } from "./board-filter.ts";
 import type { Board, Content, Field, FieldValue, Item } from "./board.ts";
-import { text } from "./board.ts";
 
 // ---- edits: optimistic, laid over the last read
 
@@ -15,15 +14,11 @@ export function valueFor(field: Field, choice: string | number | null | undefine
   if (choice === null || choice === undefined || choice === "") return null;
 
   if (field.type === "single") {
-    const o = field.options.find((x) => x.id === choice);
-
-    return o ? { optionId: o.id, name: o.name } : null;
+    return Option.getOrNull(Option.map(Arr.findFirst(field.options, (x) => x.id === choice), (o) => ({ optionId: o.id, name: o.name })));
   }
 
   if (field.type === "iteration") {
-    const it = field.iterations.find((x) => x.id === choice);
-
-    return it ? { iterationId: it.id, title: it.title, startDate: it.startDate, duration: it.duration } : null;
+    return Option.getOrNull(Option.map(Arr.findFirst(field.iterations, (x) => x.id === choice), (it) => ({ iterationId: it.id, title: it.title, startDate: it.startDate, duration: it.duration })));
   }
 
   if (field.type === "number") {
@@ -32,7 +27,7 @@ export function valueFor(field: Field, choice: string | number | null | undefine
     return Number.isFinite(n) ? { number: n } : null;
   }
 
-  if (field.type === "date") return isString(choice) && /^\d{4}-\d\d-\d\d$/.test(choice) ? { date: choice } : null;
+  if (field.type === "date") return Predicate.isString(choice) && /^\d{4}-\d\d-\d\d$/.test(choice) ? { date: choice } : null;
 
   return { text: String(choice) };
 }
@@ -51,17 +46,17 @@ export type Op =
 export function apply(board: Board, op: Op): Board {
   const items = board.items;
   const id = op.kind === "add" ? op.item.id : op.item;
-  const i = items.findIndex((x) => x.id === id);
+  const i = Option.getOrElse(Arr.findFirstIndex(items, (x) => x.id === id), () => -1);
 
   switch (op.kind) {
     case "add": return i >= 0 ? board : { ...board, items: [...items, op.item] };
-    case "archive": return i < 0 ? board : { ...board, items: items.filter((_, k) => k !== i) };
+    case "archive": return i < 0 ? board : { ...board, items: Arr.remove(items, i) };
     case "field": {
       if (i < 0) return board;
 
       return {
         ...board,
-        items: items.map((x, k) => {
+        items: Arr.map(items, (x, k) => {
           if (k !== i) return x;
 
           const values = new Map(x.values);
@@ -74,14 +69,14 @@ export function apply(board: Board, op: Op): Board {
       };
     }
 
-    case "content": return i < 0 ? board : { ...board, items: items.map((x, k) => (k === i ? { ...x, content: { ...x.content, ...op.patch } } : x)) };
+    case "content": return i < 0 ? board : { ...board, items: Arr.map(items, (x, k) => (k === i ? { ...x, content: { ...x.content, ...op.patch } } : x)) };
     case "position": {
       const it = items[i];
 
-      if (!it) return board;
+      if (it === undefined) return board;
 
-      const rest = items.filter((_, k) => k !== i);
-      const at = op.afterId === null ? 0 : rest.findIndex((x) => x.id === op.afterId) + 1;
+      const rest = Arr.remove(items, i);
+      const at = op.afterId === null ? 0 : Option.getOrElse(Arr.findFirstIndex(rest, (x) => x.id === op.afterId), () => -1) + 1;
 
       if (op.afterId !== null && at === 0) return board;
 
@@ -107,7 +102,17 @@ export const overlay = (board: Board, pending: readonly Pending[] | null | undef
 
 // ---- mutations (literal arguments: gh api's -f only takes strings)
 
-const lit = (v: string | readonly string[]) => JSON.stringify(v);
+/** What a GraphQL string writes for a character it can't hold as itself. */
+const ESCAPES: ReadonlyMap<string, string> = new Map([["\"", "\\\""], ["\\", "\\\\"], ["\b", "\\b"], ["\f", "\\f"], ["\n", "\\n"], ["\r", "\\r"], ["\t", "\\t"]]);
+
+/** One character as a GraphQL string holds it: escaped, a control character as \\u00XX, else itself. */
+const escaped = (c: string): string => ESCAPES.get(c) ?? (c < " " ? `\\u${Str.padStart(4, "0")(Option.getOrElse(Str.charCodeAt(c, 0), () => 0).toString(16))}` : c);
+
+/** A GraphQL string literal. */
+const quoted = (s: string): string => `"${Arr.join(Arr.map(Str.split(s, ""), escaped), "")}"`;
+
+/** A GraphQL literal of a string or a list of strings (written as JSON writes them). */
+export const lit = (v: string | readonly string[]): string => (Predicate.isString(v) ? quoted(v) : `[${Arr.join(Arr.map(v, quoted), ",")}]`);
 
 /** The GraphQL value of a field edit. */
 function valueLiteral(field: Field, value: FieldValue): string {
@@ -123,13 +128,13 @@ function valueLiteral(field: Field, value: FieldValue): string {
 }
 
 export function setFieldMutation(projectId: string, itemId: string, field: Field, value: FieldValue | null | undefined): string {
-  if (!value) return `mutation { clearProjectV2ItemFieldValue(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)}, fieldId: ${lit(field.id)} }) { projectV2Item { id } } }`;
+  if (value === null || value === undefined) return `mutation { clearProjectV2ItemFieldValue(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)}, fieldId: ${lit(field.id)} }) { projectV2Item { id } } }`;
 
   return `mutation { updateProjectV2ItemFieldValue(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)}, fieldId: ${lit(field.id)}, value: ${valueLiteral(field, value)} }) { projectV2Item { id } } }`;
 }
 
 export const positionMutation = (projectId: string, itemId: string, afterId: string | null | undefined): string =>
-  `mutation { updateProjectV2ItemPosition(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)}${afterId ? `, afterId: ${lit(afterId)}` : ""} }) { clientMutationId } }`;
+  `mutation { updateProjectV2ItemPosition(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)}${afterId === null || afterId === undefined || afterId === "" ? "" : `, afterId: ${lit(afterId)}`} }) { clientMutationId } }`;
 
 export const archiveMutation = (projectId: string, itemId: string): string =>
   `mutation { archiveProjectV2Item(input: { projectId: ${lit(projectId)}, itemId: ${lit(itemId)} }) { item { id } } }`;
@@ -138,8 +143,10 @@ export const addDraftMutation = (projectId: string, title: string): string =>
   `mutation { addProjectV2DraftIssue(input: { projectId: ${lit(projectId)}, title: ${lit(title)} }) { projectItem { id databaseId content { ... on DraftIssue { id } } } } }`;
 
 /** addDraftMutation's answer: the new item's id. */
-export const isAddedDraft = object({}, {
-  addProjectV2DraftIssue: maybe(object({}, { projectItem: maybe(object({}, { id: text, databaseId: maybe(isNumber), content: maybe(object({}, { id: text })) })) })),
+export const AddedDraftSchema = Schema.Struct({
+  addProjectV2DraftIssue: maybe(Schema.Struct({
+    projectItem: maybe(Schema.Struct({ id: maybe(Schema.String), databaseId: maybe(Schema.Finite), content: maybe(Schema.Struct({ id: maybe(Schema.String) })) })),
+  })),
 });
 
 export const convertMutation = (itemId: string, repoId: string): string =>
@@ -152,7 +159,7 @@ export interface DraftPatch {
 }
 
 export const draftMutation = (draftId: string, { title, assigneeIds }: DraftPatch = {}): string =>
-  `mutation { updateProjectV2DraftIssue(input: { draftIssueId: ${lit(draftId)}${isString(title) ? `, title: ${lit(title)}` : ""}${assigneeIds ? `, assigneeIds: ${lit(assigneeIds)}` : ""} }) { draftIssue { id } } }`;
+  `mutation { updateProjectV2DraftIssue(input: { draftIssueId: ${lit(draftId)}${Predicate.isString(title) ? `, title: ${lit(title)}` : ""}${assigneeIds === null || assigneeIds === undefined ? "" : `, assigneeIds: ${lit(assigneeIds)}`} }) { draftIssue { id } } }`;
 
 /** Labels or assignees added and removed on an issue or pull request (ids). */
 export function toggleMutation(contentId: string, kind: "labels" | "assignees", add: readonly string[], remove: readonly string[]): string | null {
@@ -160,9 +167,9 @@ export function toggleMutation(contentId: string, kind: "labels" | "assignees", 
   const id = kind === "labels" ? "labelableId" : "assignableId";
   const parts: string[] = [];
 
-  if (add.length) parts.push(`add: ${a}(input: { ${id}: ${lit(contentId)}, ${key}: ${lit(add)} }) { clientMutationId }`);
+  if (add.length > 0) parts.push(`add: ${a}(input: { ${id}: ${lit(contentId)}, ${key}: ${lit(add)} }) { clientMutationId }`);
 
-  if (remove.length) parts.push(`remove: ${r}(input: { ${id}: ${lit(contentId)}, ${key}: ${lit(remove)} }) { clientMutationId }`);
+  if (remove.length > 0) parts.push(`remove: ${r}(input: { ${id}: ${lit(contentId)}, ${key}: ${lit(remove)} }) { clientMutationId }`);
 
-  return parts.length ? `mutation { ${parts.join(" ")} }` : null;
+  return parts.length > 0 ? `mutation { ${Arr.join(parts, " ")} }` : null;
 }
