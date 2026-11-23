@@ -22,9 +22,9 @@ import { join, relTo } from "./ops.ts";
 
 /** The marked rows in the tree's order (none: []). */
 export function markedRows(v: Files): Row[] {
-  if (!v.marked.size) return [];
+  if (v.marked.size === 0) return [];
 
-  return v.shown().filter((r) => v.marked.has(r.path) && !r.head && !r.draft);
+  return v.shown().filter((r) => v.marked.has(r.path) && r.head !== true && r.draft !== true);
 }
 
 /** The rows an action on `row` covers: every marked one (a folder's
@@ -33,7 +33,7 @@ export function markedRows(v: Files): Row[] {
 export function setOf(v: Files, row: Row | null): Row[] {
   const marked = markedRows(v);
 
-  if (!marked.length || (row?.path && !v.marked.has(row.path) && row.path !== v.sel)) return row?.path ? [row] : [];
+  if (marked.length === 0 || (row?.path && !v.marked.has(row.path) && row.path !== v.sel)) return row?.path !== undefined && row?.path !== "" ? [row] : [];
 
   const keep = new Set(topLevel(marked.map((r) => r.path)));
 
@@ -42,7 +42,7 @@ export function setOf(v: Files, row: Row | null): Row[] {
 
 /** t, cmd-click: marks or unmarks a row. */
 export function markToggle(v: Files, path: string): void {
-  if (!path || path === DRAFT) return;
+  if (path === "" || path === DRAFT) return;
 
   const next = new Set(v.marked);
 
@@ -58,7 +58,7 @@ export function markRange(v: Files, to: string | null): void {
   const r = v.range;
   const rows = v.shown();
 
-  if (!r) return;
+  if (r === null) return;
 
   const a = rows.findIndex((x) => x.path === r.anchor);
   const b = rows.findIndex((x) => x.path === to);
@@ -80,7 +80,7 @@ export function moveSet(v: Files, paths: readonly string[], into: string, cx: Co
   const items = topLevel(paths).filter((p) => parent(p) !== into);
   const why = dropRefusal(topLevel(paths), into);
 
-  if (why) {
+  if (why !== null && why !== "") {
     v.say(why, cx);
 
     return;
@@ -111,13 +111,13 @@ export function scrolled(v: Files): number {
 export function hitAt(v: Files, at: At | null): Hit | null {
   const box = treeBox(v);
 
-  if (!at || v.keysShown || at.y < box.top || at.y > box.bottom || at.x > box.right) return null;
+  if (at === null || v.keysShown || at.y < box.top || at.y > box.bottom || at.x > box.right) return null;
 
   const list = v.listed;
   const i = rowIndexAt(at.y, scrolled(v), treeTop(v.lensRows));
   const row = list[i];
 
-  if (i >= 0 && row) return { row };
+  if (i >= 0 && row !== undefined) return { row };
 
   return i >= list.length ? { root: true } : null;
 }
@@ -128,12 +128,12 @@ export function pressAt(v: Files, e: MouseButtonEvent): void {
 
   const m = e.modifiers;
 
-  if (m.platform || m.shift || m.alt || v.draft || v.typing || !e.local_position || !v.scroll) return;
+  if (m.platform || m.shift || m.alt || v.draft !== null || v.typing || e.local_position === undefined || v.scroll === null) return;
 
   const at = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
   const hit = v.hitAt(at);
 
-  if (hit && "row" in hit && hit.row.path !== DRAFT && !hit.row.head) v.press = { path: hit.row.path, at };
+  if (hit !== null && "row" in hit && hit.row.path !== DRAFT && hit.row.head !== true) v.press = { path: hit.row.path, at };
 }
 
 /** The pointer moved with the button held: the drag starts, or aims. A
@@ -141,11 +141,11 @@ export function pressAt(v: Files, e: MouseButtonEvent): void {
 export function dragMove(v: Files, at: At, cx: Context): void {
   const press = v.press;
 
-  if (!press) return;
+  if (press === null) return;
 
   let d = v.drag;
 
-  if (!d) {
+  if (d === null) {
     if (Math.hypot(at.x - press.at.x, at.y - press.at.y) < SLOP) return;
 
     const p = press.path;
@@ -166,8 +166,8 @@ export function dragMove(v: Files, at: At, cx: Context): void {
  *  rows; lit when the drop is allowed (dropRefusal). A closed folder
  *  unfolds after resting UNFOLD ms under it. */
 export function aim(v: Files, d: Drag, hit: Hit | null, cx: Context): void {
-  const row = hit && "row" in hit ? hit.row : null;
-  const into = hit && "root" in hit ? "" : row?.dir ? row.path : null;
+  const row = hit !== null && "row" in hit ? hit.row : null;
+  const into = hit !== null && "root" in hit ? "" : row?.dir === true ? row.path : null;
 
   if (into === d.into) return;
 
@@ -181,11 +181,11 @@ export function aim(v: Files, d: Drag, hit: Hit | null, cx: Context): void {
   }
 
   d.why = dropRefusal(d.paths.map((p) => absOf(v, p)), absOf(v, into));
-  d.ok = !d.why;
+  d.ok = d.why === null || d.why === "";
   // What a drop here really moves: the rows already in the target stay.
   d.moving = d.paths.filter((p) => dirOf(p) !== into);
 
-  if (into && row && !row.head && !v.folders.has(into)) {
+  if (into !== "" && row !== null && row.head !== true && !v.folders.has(into)) {
     cx.timer.after(UNFOLD, (cx) => {
       if (v.drag?.into === into && !v.folders.has(into)) {
         v.toggle(into, cx);
@@ -204,12 +204,12 @@ export function edgeScroll(v: Files, at: At, cx: Context): void {
 
   v.edging = dir;
 
-  if (!dir) return;
+  if (dir === 0) return;
 
   const step = (cx: Context): void => {
     const d = v.drag;
 
-    if (!d || v.edging !== dir) return;
+    if (d === null || v.edging !== dir) return;
 
     const first = Math.floor(scrolled(v) / ROW_H);
     const shown = Math.max(1, Math.floor((box.bottom - box.top) / ROW_H) - 1);
@@ -231,7 +231,7 @@ export function dragEnd(v: Files, cx: Context): boolean {
 
   v.press = null;
 
-  if (!d) return false;
+  if (d === null) return false;
 
   cancelDrag(v);
 
@@ -272,15 +272,15 @@ export function runSet(v: Files, ops: readonly SetOp[], cx: Context, said: (n: n
 
     recordChanges(v, done.map((op) => ({ from: op.abs, to: op.to })));
 
-    for (const op of done) forget(v, relTo(v.root, op.abs), op.to ? relTo(v.root, op.to) || null : null, op.abs);
+    for (const op of done) forget(v, relTo(v.root, op.abs), op.to !== null && op.to !== "" ? relTo(v.root, op.to) || null : null, op.abs);
 
     v.unmark();
 
     const ok = said(done.length);
 
-    v.say(failed.length ? `${ok}; ${failed.length} failed: ${failed.join(" · ")}` : ok, cx, { error: failed.length > 0 });
+    v.say(failed.length !== 0 ? `${ok}; ${failed.length} failed: ${failed.join(" · ")}` : ok, cx, { error: failed.length > 0 });
 
-    if (v.query.trim()) v.search(cx);
+    if ((v.query.trim()) !== "") v.search(cx);
 
     v.refresh(cx);
     cx.notify();
@@ -304,7 +304,7 @@ export function ghost(v: Files, t: Theme, d: Drag): Element {
 
   return h_flex().id("nf-ghost").absolute().left(x).top(y).max_w(200).h(20).px(8).gap(6).items_center().text_size(11)
     .bg(t.background).border_1().border_color(d.ok ? t.accent : t.muted)
-    .child(svg(`mods/files/${n === 1 && !rowAt(v, first)?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
+    .child(svg(`mods/files/${n === 1 && (rowAt(v, first)?.dir) !== true ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
     .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(first) : `${n} items`));
 }
 
@@ -322,16 +322,16 @@ export function withPointer(v: Files, el: Element): Element {
         pressAt(v, e);
 
         // A click in the name's input keeps it (a click on another row ends it: pick).
-        if (!v.draft) v.focus();
+        if (v.draft === null) v.focus();
 
         // A click elsewhere keeps what the delete question was about.
-        if (v.ask) {
+        if (v.ask !== null) {
           v.ask = null;
           cx.notify();
         }
       })
       .on_mouse_down("right", (e, cx) => {
-        if (e.local_position) v.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
+        if (e.local_position !== undefined) v.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
 
         const row = v.pressed ?? rootRow(v);
 
@@ -342,14 +342,14 @@ export function withPointer(v: Files, el: Element): Element {
         v.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
 
         // The divider follows the pointer while it's held.
-        if (v.dragging) {
+        if (v.dragging !== null) {
           const f = dragShare(v.size, v.dragging, v.mouse);
 
           if (f !== null && f !== v.dragged) {
             v.dragged = f;
             cx.notify();
           }
-        } else if (v.press) dragMove(v, v.mouse, cx);
+        } else if (v.press !== null) dragMove(v, v.mouse, cx);
         // A row held and moved: dragged.
       })
       .on_mouse_up("left", (_e, cx) => {
@@ -362,7 +362,7 @@ export function withPointer(v: Files, el: Element): Element {
 
         const ended = endDivider(v);
 
-        if (ended || v.drag) {
+        if (ended || v.drag !== null) {
           cancelDrag(v);
           cx.notify();
         }

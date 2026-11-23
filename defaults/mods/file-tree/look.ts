@@ -18,7 +18,7 @@ import type { ViewerProps } from "@fireflies/viewer";
 /** The viewer (the preview pane's, viewer.ts), made once: a nested view, so
  *  its reading and drawing redraw only it, never the tree. */
 export function mountLook(v: Files, cx: Context): void {
-  if (!v.look) v.look = cx.new(Viewer, v.lookProps);
+  if (v.look === null) v.look = cx.new(Viewer, v.lookProps);
 }
 
 /** space, the toolbar's switch, the menu's entry: the split on or off. */
@@ -42,7 +42,7 @@ export function toggleLook(v: Files, cx: Context): void {
 export function saveLook(v: Files, next: LookState): void {
   v.lookState = next;
 
-  if (!v.slot) return;
+  if (v.slot === null || v.slot === "") return;
 
   writeSharedMap(setShared, LOOK, keptFor(v, readSharedMap(shared, LOOK), v.slot, next));
 }
@@ -57,7 +57,7 @@ export function setLook(v: Files, next: ViewerProps): void {
 export function lookTarget(v: Files): LookTarget {
   const row = rowAt(v, v.sel);
 
-  if (!row) return { abs: v.root, rel: "", dir: true };
+  if (row === null) return { abs: v.root, rel: "", dir: true };
 
   return { abs: join(v.root, row.path), rel: row.path, dir: Boolean(row.dir || row.head) };
 }
@@ -95,7 +95,7 @@ export function showLook(v: Files, target: LookTarget, cx: Context): void {
 
   v.lookDir = { abs: target.abs, rel: target.rel, entries: listed ?? null, error: null };
 
-  if (listed) return;
+  if (listed !== undefined) return;
 
   cx.spawn(async (cx) => {
     let entries: Entry[] | null = null;
@@ -116,12 +116,12 @@ export function showLook(v: Files, target: LookTarget, cx: Context): void {
 
 /** The folder changed on disk: the preview reads its file again (unchanged ones stay as they are). */
 export function reloadLook(v: Files): void {
-  if (v.lookState.on && v.lookProps.path) setLook(v, { ...v.lookProps, reload: ++v.lookN });
+  if (v.lookState.on && (v.lookProps.path !== null && v.lookProps.path !== undefined && v.lookProps.path !== "")) setLook(v, { ...v.lookProps, reload: ++v.lookN });
 }
 
 /** J / K: the preview scrolls, the keyboard stays in the tree. */
 export function scrollLookBy(v: Files, dir: number): void {
-  if (v.lookState.on && v.lookProps.path) setLook(v, { ...v.lookProps, scroll: { n: ++v.lookN, dir } });
+  if (v.lookState.on && (v.lookProps.path !== null && v.lookProps.path !== undefined && v.lookProps.path !== "")) setLook(v, { ...v.lookProps, scroll: { n: ++v.lookN, dir } });
 }
 
 /** < / >: the preview smaller or bigger, both parts keeping their least. */
@@ -138,11 +138,11 @@ export function resizeLook(v: Files, dir: number): void {
 *  the selection; a native view set aside while the menu is open. */
 export function placeLook(v: Files, cx: Context): Geo {
   // The preview split: its side follows the pane's shape; no room for both parts, no split.
-  const side = v.lookState.on && v.look ? lookSide(v.size, v.side) : null;
+  const side = v.lookState.on && v.look !== null ? lookSide(v.size, v.side) : null;
 
-  if (side) v.side = side;
+  if (side !== null) v.side = side;
 
-  const px = side ? lookSize(v.size, side, v.dragged ?? v.lookState[side]) : null;
+  const px = side !== null ? lookSize(v.size, side, v.dragged ?? v.lookState[side]) : null;
 
   if (px !== null) followSelection(v, cx);
 

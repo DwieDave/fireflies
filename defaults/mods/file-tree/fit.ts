@@ -7,7 +7,7 @@ import type { KeyRow } from "@fireflies/keyhelp";
 /** About how wide a character is at the header's size 11 (logical px). */
 export const CH = 7;
 
-const chipW = (label: string, cut: number): number => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
+const chipW = (label: string, cut: number): number => 8 + 11 + (label !== "" ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
 
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS: readonly KeyRow[] = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
@@ -154,7 +154,7 @@ export function chipsFit(w: number, cut: Cut = { hidden: 0, ignored: 0 }): Chips
 /** How wide the filter line is with `fit` (logical px); the ? chip ends it. */
 function lensWidth(fit: LensFit, cut: Cut, count: number | null): number {
   const [h, i] = fit.labels;
-  const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
+  const find = CH + (fit.find !== "" ? 5 + fit.find.length * CH : 0);
   const adds: readonly (readonly [NewKind, string])[] = ADDS[fit.add];
   const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...adds.map(([, l]) => addW(l)), KEYS_CHIP];
 
@@ -223,7 +223,7 @@ export function toolbarFit(w: number, { alone = false, branch = null, changed = 
   take("look", 20);
   take("edit", 12 + 4 * CH);
 
-  if (branch) take("branch", Math.min(140, branch.length * CH));
+  if (branch !== null && branch !== "") take("branch", Math.min(140, branch.length * CH));
 
   take("eyebrow", 5 * CH);
   take("path", 80);

@@ -105,5 +105,5 @@ export function folderFacts(entries: readonly Entry[]): string {
   const files = entries.length - dirs;
   const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
 
-  return entries.length ? `${n(dirs, "folder", "folders")} · ${n(files, "file", "files")}` : "empty";
+  return entries.length !== 0 ? `${n(dirs, "folder", "folders")} · ${n(files, "file", "files")}` : "empty";
 }

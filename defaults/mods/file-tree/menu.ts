@@ -32,7 +32,7 @@ export function rootRow(v: Files): TreeRow {
 /** A listed row's rectangle in the pane (layout px) while it's drawn in the tree: what a key's
  *  menu stands at; null for the root (the empty space) or a row out of sight. */
 export function rowRect(v: Files, row: Row): Rect | null {
-  const i = row.path ? v.listed.findIndex((r) => r.path === row.path) : -1;
+  const i = row.path !== "" ? v.listed.findIndex((r) => r.path === row.path) : -1;
 
   if (i < 0) return null;
 
@@ -45,15 +45,15 @@ export function rowRect(v: Files, row: Row): Rect | null {
 /** Opens a row's menu at `at` (a press, pane px), else (a key) at the row: rowRect. */
 export function openMenu(v: Files, row: Row, cx: Context | null, at: Anchor = rowRect(v, row)): void {
   // On a marked row (with others marked): the set's entries first.
-  const set = row.path && v.marked.has(row.path) ? setOf(v, row) : [];
+  const set = row.path !== "" && v.marked.has(row.path) ? setOf(v, row) : [];
   const clip = Boolean(clipNow(v));
   // Another machine's files have no file manager here.
-  const reveal = v.on ? null : revealLabel(appWindow().platform);
+  const reveal = v.on !== null && v.on !== "" ? null : revealLabel(appWindow().platform);
 
   const all = set.length > 1 ? setMenuItems(row, set.length, { pane: v.alone, clip, look: v.lookState.on, reveal })
-    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: !v.on, viewer: !row.dir && Boolean(viewerFor(row.path)), databases: !v.on && v.dbMod, reveal });
+    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: v.on === null || v.on === "", viewer: !row.dir && Boolean(viewerFor(row.path)), databases: (v.on === null || v.on === "") && v.dbMod, reveal });
 
-  const items = row.head ? all.filter((x) => x.act !== "root") : all;
+  const items = row.head === true ? all.filter((x) => x.act !== "root") : all;
 
   v.sel = row.path || v.sel;
   v.menu = { row, items, at, n: 0 };
@@ -66,12 +66,12 @@ export function runAct(v: Files, act: Act, row: Row, cx: Context): void {
 
   switch (act) {
     case "toggle":
-      if (row.head) reveal(v, p, cx);
+      if (row.head === true) reveal(v, p, cx);
       else v.toggle(p, cx);
 
       break;
     case "pane": openPane(v, p); break;
-    case "root": v.go(p ? `${v.root}/${p}` : v.root, cx); break;
+    case "root": v.go(p !== "" ? `${v.root}/${p}` : v.root, cx); break;
     case "edit": v.edit(p, cx); break;
     case "nvim": nvim(v, row); break;
     case "open": v.openFile(p, cx); break;
@@ -105,7 +105,7 @@ export function runAct(v: Files, act: Act, row: Row, cx: Context): void {
 export function menuKey(v: Files, e: KeyEvent, cx: Context): void {
   const m = v.menu;
 
-  if (!m) return;
+  if (m === null) return;
 
   const k = e.key;
   const char = e.modifiers.shift && /^[a-z]$/.test(k) ? k.toUpperCase() : k;
@@ -118,11 +118,11 @@ export function menuKey(v: Files, e: KeyEvent, cx: Context): void {
 
     const it = m.items[m.n];
 
-    if (it) v.act(it.act, m.row, cx);
+    if (it !== undefined) v.act(it.act, m.row, cx);
   } else {
     const it = m.items.find((x) => x.key === char && x.key !== "enter");
 
-    if (!it) return;
+    if (it === undefined) return;
 
     v.menu = null;
     v.act(it.act, m.row, cx);
@@ -142,7 +142,7 @@ export function menuBox(v: Files, t: Theme, m: Menu): Element {
   const edge = (where: "top" | "bottom"): Element => h_flex().absolute().left(0).right(0).h(13).items_center().text_size(11)
     .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
     .child(div().h(1).w(8).flex_none().bg(t.accent))
-    .when(where === "top", (el) => el.child(div().flex_shrink(1).min_w(0).px(4).truncate().text_color(t.foreground).child(m.row.path ? m.row.name.split("/").pop() ?? "" : tilde(v.root))))
+    .when(where === "top", (el) => el.child(div().flex_shrink(1).min_w(0).px(4).truncate().text_color(t.foreground).child(m.row.path !== "" ? m.row.name.split("/").pop() ?? "" : tilde(v.root))))
     .child(div().h(1).flex_1().min_w(8).bg(t.accent));
 
   const rows = m.items.map((it, i) => h_flex().id(`nf-mi-${i}`).relative().h(MENU_ROW).px(10).gap(10).items_center().text_size(11)

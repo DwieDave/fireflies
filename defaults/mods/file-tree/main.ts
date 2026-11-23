@@ -245,9 +245,9 @@ export default class Files extends View {
       cx.notify();
     });
 
-    const kept = slot ? readSharedMap(shared, FILTERS).get(slot) : undefined;
+    const kept = slot !== null && slot !== "" ? readSharedMap(shared, FILTERS).get(slot) : undefined;
 
-    this.filters = kept ? { hidden: kept.hidden === true, ignored: kept.ignored === true } : filterDefaults(settings());
+    this.filters = kept !== undefined ? { hidden: kept.hidden === true, ignored: kept.ignored === true } : filterDefaults(settings());
 
     const input = InputState.new({ placeholder: "filter files" });
 
@@ -283,14 +283,14 @@ export default class Files extends View {
     });
 
     name.on("blur", (_e, cx) => {
-      if (this.naming && this.draft && !this.draft.busy) this.endDraft(cx, false);
+      if (this.naming && this.draft !== null && !this.draft.busy) this.endDraft(cx, false);
 
       this.naming = false;
       cx.notify();
     });
 
     name.on("change", (_e, cx) => {
-      if (this.msg?.draft) this.msg = null;
+      if (this.msg?.draft === true) this.msg = null;
 
       cx.notify();
     });
@@ -304,7 +304,7 @@ export default class Files extends View {
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
 
-    const look = slot ? readSharedMap(shared, LOOK).get(slot) : undefined;
+    const look = slot !== null && slot !== "" ? readSharedMap(shared, LOOK).get(slot) : undefined;
 
     this.lookState = { ...newLook(), ...look };
     this.lookProps = { embedded: true, path: null, on: this.on };
@@ -323,7 +323,7 @@ export default class Files extends View {
     }
 
     // Remote folders can't be watched: poll those instead.
-    cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
+    cx.timer.every(this.on !== null && this.on !== "" ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
       for (;;) {
         const c = (await nextCommand()).replace(`${MOD}.`, "");
@@ -371,10 +371,10 @@ export default class Files extends View {
   takeKeys(cx: Context | null): void {
     this.focus();
 
-    if (!this.sel) {
+    if (this.sel === null || this.sel === "") {
       const rows = this.shown();
 
-      if (rows.length) selectRow(this, rows, 0);
+      if (rows.length !== 0) selectRow(this, rows, 0);
     }
 
     cx?.notify();
@@ -385,7 +385,7 @@ export default class Files extends View {
     const from = readShared(shared, FROM, null);
     const mine = ownPane(this) ?? this.panel();
 
-    if (from && from !== mine?.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+    if ((from !== null && from !== "") && from !== mine?.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
     else run("pane.go", { direction: "left" });
   }
 
@@ -395,7 +395,7 @@ export default class Files extends View {
   go(folder: string, cx: Context): void {
     const step = navGo(this.nav, this.root, folder);
 
-    if (!step) return;
+    if (step === null) return;
 
     this.nav = step.nav;
     reroot(this, step.to, cx);
@@ -405,7 +405,7 @@ export default class Files extends View {
   back(cx: Context): void {
     const step = navBack(this.nav, this.root);
 
-    if (!step) return;
+    if (step === null) return;
 
     const from = this.root;
 
@@ -417,7 +417,7 @@ export default class Files extends View {
   forward(cx: Context): void {
     const step = navForward(this.nav, this.root);
 
-    if (!step) return;
+    if (step === null) return;
 
     this.nav = step.nav;
     reroot(this, step.to, cx);
@@ -458,9 +458,9 @@ export default class Files extends View {
     this.filters = name === "hidden" ? { ...this.filters, hidden: !this.filters.hidden } : { ...this.filters, ignored: !this.filters.ignored };
 
     // Kept per pane, by slot; panes that are gone drop out.
-    if (this.slot) writeSharedMap(setShared, FILTERS, keptFor(this, readSharedMap(shared, FILTERS), this.slot, this.filters));
+    if (this.slot !== null && this.slot !== "") writeSharedMap(setShared, FILTERS, keptFor(this, readSharedMap(shared, FILTERS), this.slot, this.filters));
 
-    if (this.query.trim()) this.search(cx);
+    if ((this.query.trim()) !== "") this.search(cx);
 
     cx.notify();
   }
@@ -473,7 +473,7 @@ export default class Files extends View {
   natives(action: string, args: { readonly visible: boolean } | null = null): void {
     for (const id of NATIVE_IDS) {
       try {
-        herdr.nativeViewCall(id, action, args ? { visible: args.visible } : {});
+        herdr.nativeViewCall(id, action, args !== null ? { visible: args.visible } : {});
       } catch {
         // None of that kind.
       }
@@ -585,7 +585,7 @@ export default class Files extends View {
     if (path === DRAFT || (this.draft?.kind === "rename" && this.draft.path === path)) return;
 
     // The release that ends a drag isn't a click.
-    if (this.drag || this.dropped) {
+    if (this.drag !== null || this.dropped) {
       this.dropped = false;
 
       return;
@@ -594,21 +594,21 @@ export default class Files extends View {
     const rows = this.shown();
     const row = rows.find((r) => r.path === path);
 
-    if (!row) return;
+    if (row === undefined) return;
 
     const mods = this.mods;
 
     // cmd-click: the row joins or leaves the marks (the keyboard's row too, the
     // first time, as a selection grows in Finder); shift-click: every row from
     // the last clicked one to this one.
-    if ((mods?.platform || mods?.shift) && !row.head) {
+    if ((mods?.platform || mods?.shift) && row.head !== true) {
       if (mods.shift) {
         const a = rows.findIndex((r) => r.path === (this.anchor ?? this.sel));
         const b = rows.indexOf(row);
 
         this.marked = new Set(rangePaths(rows, a < 0 ? b : a, b));
       } else {
-        if (!this.marked.size && this.sel && this.sel !== path && rows.some((r) => r.path === this.sel && !r.head)) this.marked = new Set([this.sel]);
+        if (this.marked.size === 0 && (this.sel !== null && this.sel !== "") && this.sel !== path && rows.some((r) => r.path === this.sel && r.head !== true)) this.marked = new Set([this.sel]);
 
         markToggle(this, path);
       }
@@ -623,7 +623,7 @@ export default class Files extends View {
     }
 
     // A plain click: one row, the marks go.
-    if (this.marked.size) this.unmark();
+    if (this.marked.size !== 0) this.unmark();
 
     this.anchor = path;
 
@@ -635,7 +635,7 @@ export default class Files extends View {
     this.sel = path;
     this.focus();
 
-    if (row.head) reveal(this, path, cx);
+    if (row.head === true) reveal(this, path, cx);
     else if (!row.dir) {
       if (again) this.openFile(path, cx, this.alt);
     } else if (again) {
@@ -711,13 +711,13 @@ export default class Files extends View {
 
     const el = withPointer(this, root)
       .child(this.toolbar(t, w, focused))
-      .child(this.lens(t, w, rows.filter((r) => !r.head).length))
-      .children(side === null || px === null ? [area, ...(foot ? [foot] : [])] : [this.split(t, side, px, area, foot)])
-      .children(menu ? [menuBox(this, t, menu)] : [])
+      .child(this.lens(t, w, rows.filter((r) => r.head !== true).length))
+      .children(side === null || px === null ? [area, ...(foot !== null ? [foot] : [])] : [this.split(t, side, px, area, foot)])
+      .children(menu !== null ? [menuBox(this, t, menu)] : [])
       // What's dragged, beside the pointer.
-      .children(drag ? [ghost(this, t, drag)] : []);
+      .children(drag !== null ? [ghost(this, t, drag)] : []);
 
-    return this.handle ? el.track_focus(this.handle) : el;
+    return this.handle !== null ? el.track_focus(this.handle) : el;
   }
 
 }

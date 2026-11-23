@@ -7,7 +7,7 @@ import type { InputRange } from "gpui-base";
 import { parent, base } from "./logic.ts";
 
 /** `a/b` under `dir` (absolute); the root "/" without a double slash. */
-export const join = (dir: string, name: string): string => (name ? (dir === "/" ? `/${name}` : `${dir}/${name}`) : dir);
+export const join = (dir: string, name: string): string => (name !== "" ? (dir === "/" ? `/${name}` : `${dir}/${name}`) : dir);
 
 /** `abs` relative to `root`: "" for the root itself, null outside it. */
 export function relTo(root: string, abs: string): string | null {
@@ -28,14 +28,14 @@ export type Resolved = { readonly abs: string; readonly folder: boolean; readonl
 export function resolveName(dir: string, typed: string, home: string | null = null): Resolved {
   const text = typed;
 
-  if (!text.trim()) return { error: "Type a name" };
+  if ((text.trim()) === "") return { error: "Type a name" };
 
   let start = dir;
   let rest = text;
 
   if (text.startsWith("/")) start = "/";
   else if (text === "~" || text.startsWith("~/")) {
-    if (!home) return { error: "~ is this Mac's home: type the path" };
+    if (home === null || home === "") return { error: "~ is this Mac's home: type the path" };
 
     start = home;
     rest = text.slice(1);
@@ -45,12 +45,12 @@ export function resolveName(dir: string, typed: string, home: string | null = nu
 
   for (const s of rest.split("/")) {
     if (s === "..") parts.pop();
-    else if (s && s !== ".") parts.push(s);
+    else if (s !== "" && s !== ".") parts.push(s);
   }
 
   const last = text.split("/").filter(Boolean).pop() ?? "";
 
-  if (!parts.length || last === "." || last === "..") return { error: `“${text}” isn't a name` };
+  if (parts.length === 0 || last === "." || last === "..") return { error: `“${text}” isn't a name` };
 
   return { abs: `/${parts.join("/")}`, folder: text.endsWith("/") };
 }
@@ -110,14 +110,14 @@ export function neighbour(rows: readonly Listed[], path: string): string | null 
   if (i < 0) return null;
 
   const inside = (r: Listed): boolean => r.path === path || r.path.startsWith(`${path}/`);
-  const next = rows.slice(i + 1).find((r) => !inside(r) && !r.head);
+  const next = rows.slice(i + 1).find((r) => !inside(r) && r.head !== true);
 
-  if (next) return next.path;
+  if (next !== undefined) return next.path;
 
   for (let j = i - 1; j >= 0; j--) {
     const r = rows[j];
 
-    if (r && !r.head) return r.path;
+    if (r !== undefined && r.head !== true) return r.path;
   }
 
   return null;

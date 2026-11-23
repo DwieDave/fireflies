@@ -27,13 +27,13 @@ export function reroot(v: Files, folder: string, cx: Context): void {
   v.anchor = null;
   v.watched = null;
 
-  if (v.query) clearSearch(v, cx);
+  if (v.query !== "") clearSearch(v, cx);
 
   v.refresh(cx);
 }
 
 export async function loadFolderOf(v: Files, path: string, gen: number): Promise<void> {
-  const entries = await directory(path ? `${v.root}/${path}` : v.root, v.on);
+  const entries = await directory(path !== "" ? `${v.root}/${path}` : v.root, v.on);
 
   if (gen !== v.gen || (path && !v.folders.has(path))) return;
 
@@ -120,7 +120,7 @@ export function refreshTree(v: Files, cx: Context): void {
 }
 
 export function watchTree(v: Files, cx: Context): void {
-  if (v.on || v.watched === v.root) return;
+  if ((v.on !== null && v.on !== "") || v.watched === v.root) return;
 
   const root = v.root;
 
@@ -184,7 +184,7 @@ export function treeRows(v: Files): TreeRow[] {
     for (const e of v.entries.get(prefix) ?? []) {
       if (out.length >= TOTAL) break;
 
-      const path = prefix ? `${prefix}/${e.name}` : e.name;
+      const path = prefix !== "" ? `${prefix}/${e.name}` : e.name;
 
       if (!lists(path, v.filters, v.ignored)) {
         if (!v.filters.hidden && isHidden(path)) cut.hidden++;
@@ -207,7 +207,7 @@ export function treeRows(v: Files): TreeRow[] {
 
 /** What the list shows: the search's hits while there's a query, else the tree. */
 export function shownRows(v: Files): readonly Row[] {
-  return v.query.trim() && v.hits ? v.hits : v.rows();
+  return (v.query.trim()) !== "" && v.hits !== null ? v.hits : v.rows();
 }
 
 /** The row at `path` in the list. */
@@ -217,7 +217,7 @@ export function rowAt(v: Files, path: string | null): Row | null {
 
 /** The slots of the files panes there are now (a kept entry of another is dropped). */
 export function liveSlots(): Set<string> {
-  return new Set(panes().flatMap((p) => (p.mod === MOD && isSlotted(p.props) && p.props.slot ? [p.props.slot] : [])));
+  return new Set(panes().flatMap((p) => (p.mod === MOD && isSlotted(p.props) && p.props.slot !== "" ? [p.props.slot] : [])));
 }
 
 /** `map` with this pane's `value` under its slot, the panes that are gone left out. */

@@ -21,7 +21,7 @@ export const TOTAL = 5000;
 export const EDIT = "nocturne-edit";
 
 /** The editor wrapper: the one this mod ships, here; another machine's own. */
-export const editTool = (on: string | null): string => (on ? EDIT : `${appHome()}/mods/file-tree/bin/${EDIT}`);
+export const editTool = (on: string | null): string => (on !== null && on !== "" ? EDIT : `${appHome()}/mods/file-tree/bin/${EDIT}`);
 
 /** The app's viewer pane for a kind of file: the command that opens one there, and what the
  *  other way (alt-double-click, `e`) does instead. */
@@ -114,7 +114,7 @@ export const EDGE = 18;
 export const tilde = (p: string | null): string => {
   const h = home();
 
-  return !p ? "" : p === h ? "~" : p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
+  return p === null || p === "" ? "" : p === h ? "~" : p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
 };
 
 /** A folder's entries, folders first, capped at PER_FOLDER (+1 to tell it was cut). */

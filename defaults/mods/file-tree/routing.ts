@@ -48,12 +48,12 @@ const SHOWN = sharedMapKey("preview.paths", nullable(isString));
 
 /** This pane's own panes, as kept (a restart keeps them by its slot). */
 export function openedOf(v: Files): Opened {
-  return (v.slot ? readSharedMap(shared, OPENED).get(v.slot) : undefined) ?? {};
+  return (v.slot !== null && v.slot !== "" ? readSharedMap(shared, OPENED).get(v.slot) : undefined) ?? {};
 }
 
 /** Notes this pane's own editor or preview pane (null: none now). */
 export function noteMine(v: Files, which: "editor" | "preview", mine: Mine | null): void {
-  if (!v.slot) return;
+  if (v.slot === null || v.slot === "") return;
 
   const was = openedOf(v);
   const now: Opened = { editor: was.editor ?? null, preview: was.preview ?? null, [which]: mine };
@@ -77,18 +77,18 @@ function canBeMine(p: PaneInfo, which: "editor" | "preview"): boolean {
 function own(v: Files, which: "editor" | "preview"): PaneInfo | null {
   const mine = openedOf(v)[which];
 
-  if (!mine || v.on) return null;
+  if ((mine === null || mine === undefined) || (v.on !== null && v.on !== "")) return null;
 
   const tab = v.shownTab() ?? null;
   const fit = panes().filter((p) => p.tab === tab && canBeMine(p, which));
   const slotOf = (p: PaneInfo): string | null => editorProps(p).slot ?? null;
   const fileOf = (p: PaneInfo): string | null => (which === "preview" ? previewFile(p) : editorProps(p).path ?? null);
-  const found = mine.slot ? fit.find((p) => slotOf(p) === mine.slot) : fit.find((p) => fileOf(p) === mine.path);
+  const found = mine.slot !== undefined && mine.slot !== "" ? fit.find((p) => slotOf(p) === mine.slot) : fit.find((p) => fileOf(p) === mine.path);
 
-  if (found && !mine.slot) {
+  if (found !== undefined && (mine.slot === undefined || mine.slot === "")) {
     const slot = slotOf(found);
 
-    if (slot) noteMine(v, which, { slot });
+    if (slot !== null && slot !== "") noteMine(v, which, { slot });
   }
 
   return found ?? null;
@@ -103,7 +103,7 @@ export const ownPreview = (v: Files): PaneInfo | null => own(v, "preview");
 /** The file a preview pane shows: as it noted (it steps through its folder), else its props'. */
 export function previewFile(pane: PaneInfo): string | null {
   const slot = editorProps(pane).slot;
-  const noted = slot ? readSharedMap(shared, SHOWN).get(slot) : undefined;
+  const noted = slot !== undefined && slot !== "" ? readSharedMap(shared, SHOWN).get(slot) : undefined;
 
   return noted ?? editorProps(pane).path ?? null;
 }
@@ -112,7 +112,7 @@ export function previewFile(pane: PaneInfo): string | null {
 export function showInPreview(pane: PaneInfo, abs: string): void {
   const slot = editorProps(pane).slot;
 
-  if (slot && previewFile(pane) !== abs) {
+  if ((slot !== undefined && slot !== "") && previewFile(pane) !== abs) {
     writeShared(setShared, SHOW_KEY, { slot, path: abs, n: (readShared(shared, SHOW_KEY, null)?.n ?? 0) + 1, at: Date.now() });
   }
 

@@ -37,12 +37,12 @@ export function filterDefaults(settings: Partial<Pick<Settings, "files">> | null
 /** `git ls-files -z --others --ignored --exclude-standard --directory` (run in
  *  the root) as a set of paths relative to the root; folders without their "/". */
 export function parseIgnored(stdout: string): Set<string> {
-  return new Set(stdout.split("\0").flatMap((p) => (p ? [p.replace(/\/$/, "")] : [])));
+  return new Set(stdout.split("\0").flatMap((p) => (p !== "" ? [p.replace(/\/$/, "")] : [])));
 }
 
 /** Whether git ignores `path` (relative to the root): it, or a folder it's in, is listed. */
 export function isIgnored(path: string, ignored: ReadonlySet<string> | null): boolean {
-  if (!ignored?.size) return false;
+  if (ignored?.size === undefined || ignored?.size === 0) return false;
 
   for (let p = path; p; p = dirOf(p)) if (ignored.has(p)) return true;
 
@@ -67,7 +67,7 @@ export function fuzzy(query: string, text: string): [number, number][] | null {
   const q = query.toLowerCase().replace(/\s+/g, "");
   const s = text.toLowerCase();
 
-  if (!q) return [];
+  if (q === "") return [];
 
   // Prefer the match in the name: search from the last part's start first.
   const tryFrom = (from: number): [number, number][] | null => {
@@ -81,7 +81,7 @@ export function fuzzy(query: string, text: string): [number, number][] | null {
 
       const last = out.at(-1);
 
-      if (last && last[1] === at) last[1] = at + 1;
+      if (last !== undefined && last[1] === at) last[1] = at + 1;
       else out.push([at, at + 1]);
 
       i = at + 1;
@@ -163,20 +163,20 @@ export function grouped(files: readonly Found[]): (HeadRow | HitRow)[] {
     const dir = dirOf(f.path);
     const list = groups.get(dir);
 
-    if (list) list.push(f);
+    if (list !== undefined) list.push(f);
     else groups.set(dir, [f]);
   }
 
   const rows: (HeadRow | HitRow)[] = [];
 
   for (const [dir, hits] of groups) {
-    if (dir) rows.push({ path: dir, name: dir, dir: true, depth: 0, head: true });
+    if (dir !== "") rows.push({ path: dir, name: dir, dir: true, depth: 0, head: true });
 
     for (const f of hits) {
-      const cut = dir ? dir.length + 1 : 0;
+      const cut = dir !== "" ? dir.length + 1 : 0;
       const ranges = (f.ranges ?? []).flatMap(([a, b]): Range[] => (b - cut > Math.max(0, a - cut) ? [[Math.max(0, a - cut), b - cut]] : []));
 
-      rows.push({ path: f.path, name: base(f.path), dir: false, depth: dir ? 1 : 0, ranges, git: f.git ?? null, hit: true });
+      rows.push({ path: f.path, name: base(f.path), dir: false, depth: dir !== "" ? 1 : 0, ranges, git: f.git ?? null, hit: true });
     }
   }
 
@@ -233,7 +233,7 @@ export interface MenuOptions {
  *  (Markdown, the preview's kinds); `reveal`: the label of the entry that
  *  shows the row in the system's file manager (none on another machine). */
 export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false, databases = false, reveal = null }: MenuOptions = {}): MenuItem[] {
-  const root = row.dir && !row.path;
+  const root = row.dir && row.path === "";
 
   const items: MenuItem[] = row.dir
     ? [
@@ -266,7 +266,7 @@ export function menuItems(row: MenuTarget, { pane = false, clip = false, look = 
 
   items.push({ key: "y", label: "Copy path", act: "copy" }, { key: "Y", label: "Copy relative path", act: "copy-rel" });
 
-  if (reveal) items.push({ key: "f", label: reveal, act: "reveal" });
+  if (reveal !== null && reveal !== "") items.push({ key: "f", label: reveal, act: "reveal" });
 
   items.push({ key: "space", label: look ? "Hide the preview" : "Show the preview", act: "look" });
 
@@ -289,7 +289,7 @@ export function relativeTo(abs: string, bases: readonly string[]): string {
   for (const b of bases) {
     const base = b.length > 1 ? b.replace(/\/+$/, "") : b;
 
-    if (!base) continue;
+    if (base === "") continue;
 
     if (abs === base) return ".";
 
@@ -339,10 +339,10 @@ export interface WebFrom {
  *  the shown tab; `slot`: a new pane's. A run() call as [name, args]. */
 export function webOpen(url: string, { browsers = [], from = null, slot }: WebFrom): WebRun {
   for (const b of browsers) {
-    if (isSlotted(b.props) && b.props.slot) return [`browser.open:${JSON.stringify({ url, slot: b.props.slot })}`];
+    if (isSlotted(b.props) && b.props.slot !== "") return [`browser.open:${JSON.stringify({ url, slot: b.props.slot })}`];
   }
 
-  return ["pane.split", from ? { direction: "auto", pane: from, mod: "browser", props: { url, slot } } : { direction: "auto", mod: "browser", props: { url, slot } }];
+  return ["pane.split", from !== null && from !== "" ? { direction: "auto", pane: from, mod: "browser", props: { url, slot } } : { direction: "auto", mod: "browser", props: { url, slot } }];
 }
 
 /** A piece of text and whether it matched. */
@@ -393,7 +393,7 @@ export const newNav = (): Nav => ({ past: [], future: [] });
 /** Going to `to` from `root`: `root` goes on the back list, the forward list
  *  empties (as in a browser). null: already there. */
 export function navGo(nav: Nav, root: string, to: string): NavStep | null {
-  if (!to || to === root) return null;
+  if (to === "" || to === root) return null;
 
   return { to, nav: { past: [...nav.past, root].slice(-50), future: [] } };
 }
@@ -423,7 +423,7 @@ export function navForward(nav: Nav, root: string): NavStep | null {
 export function rangePaths(rows: readonly Listed[], a: number, b: number): string[] {
   const [from, to] = a <= b ? [a, b] : [b, a];
 
-  return rows.slice(Math.max(0, from), to + 1).flatMap((r) => (r.head || r.draft ? [] : [r.path]));
+  return rows.slice(Math.max(0, from), to + 1).flatMap((r) => (r.head === true || r.draft === true ? [] : [r.path]));
 }
 
 /** The paths a set acts on: one under another one in the set goes with it
@@ -445,7 +445,7 @@ export function deleteManyQuestion(items: readonly Entry[], trash: boolean): str
 /** Why `items` (absolute paths) can't be dropped into `into`, or null. Items
  *  already in it are left where they are; all of them there is a refusal. */
 export function dropRefusal(items: readonly string[], into: string): string | null {
-  if (!items.length) return "Nothing to move";
+  if (items.length === 0) return "Nothing to move";
 
   if (items.some((p) => p === into)) return "A folder can't go into itself";
 
@@ -495,11 +495,11 @@ export type Clip = Guarded<typeof isClip>;
 /** What's cut, as a list ({ abs, dir, name } each), from shared `file-tree.cut`
  *  (a set now, a single item before). */
 export function cutItems(c: Clip | null): readonly CutItem[] {
-  if (!c) return [];
+  if (c === null) return [];
 
-  if (c.items) return c.items;
+  if (c.items !== undefined) return c.items;
 
-  return c.abs ? [{ abs: c.abs, dir: Boolean(c.dir), name: c.name ?? base(c.abs) }] : [];
+  return c.abs !== undefined && c.abs !== "" ? [{ abs: c.abs, dir: Boolean(c.dir), name: c.name ?? base(c.abs) }] : [];
 }
 
 /** The right-click menu for a set of `n` marked rows: what acts on all of

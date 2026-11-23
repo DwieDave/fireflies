@@ -20,7 +20,7 @@ export function runSearch(v: Files, cx: Context): void {
   const q = v.query.trim();
   const seq = ++v.seq;
 
-  if (!q) {
+  if (q === "") {
     v.hits = null;
     v.note = null;
     cx.notify();
@@ -34,7 +34,7 @@ export function runSearch(v: Files, cx: Context): void {
     if (seq !== v.seq) return;
 
     const hits = grouped(files.filter((f) => lists(f.path, v.filters, v.ignored)).slice(0, HITS));
-    const i = hits.findIndex((r) => !r.head);
+    const i = hits.findIndex((r) => r.head !== true);
 
     v.hits = hits;
     v.note = note;
@@ -45,7 +45,7 @@ export function runSearch(v: Files, cx: Context): void {
     cx.notify();
   };
 
-  if (v.on) {
+  if (v.on !== null && v.on !== "") {
     done(loaded(v, q), "searching the folders listed so far");
 
     return;
@@ -78,10 +78,10 @@ export function loaded(v: Files, q: string): Found[] {
     for (const e of entries) {
       if (e.dir) continue;
 
-      const path = prefix ? `${prefix}/${e.name}` : e.name;
+      const path = prefix !== "" ? `${prefix}/${e.name}` : e.name;
       const ranges = fuzzy(q, path);
 
-      if (ranges) out.push({ path, ranges });
+      if (ranges !== null) out.push({ path, ranges });
     }
   }
 
@@ -116,7 +116,7 @@ export function openWeb(v: Files, path: string, cx: Context): void {
     return;
   }
 
-  if (v.on) {
+  if (v.on !== null && v.on !== "") {
     v.say("A page on another machine can't open in the web pane", cx);
 
     return;
@@ -145,7 +145,7 @@ export function pressStop(v: Files, stop: Stop, cx: Context): void {
 export function addNew(v: Files, kind: NewKind, cx: Context): void {
   v.stop = null;
 
-  const row = v.shown().find((r) => r.path === v.sel && !r.head) ?? null;
+  const row = v.shown().find((r) => r.path === v.sel && r.head !== true) ?? null;
 
   startDraft(v, kind, row, cx);
 }
@@ -180,9 +180,9 @@ export function reveal(v: Files, path: string, cx: Context): void {
 export function enterRow(v: Files, cx: Context): void {
   const row = rowAt(v, v.sel);
 
-  if (!row) return;
+  if (row === null) return;
 
-  if (row.head) reveal(v, row.path, cx);
+  if (row.head === true) reveal(v, row.path, cx);
   else if (row.dir) v.toggle(row.path, cx);
   else v.openFile(row.path, cx);
 }
