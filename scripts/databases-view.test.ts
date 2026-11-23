@@ -260,6 +260,32 @@ async function withQuery(conn: any, sql: string) {
   return { v, q };
 }
 
+test("closing a query tab, the others, or disconnecting writes the connection's tabs at once, as they were", async () => {
+  const { loadQueries } = await import("../defaults/mods/databases/queries.ts");
+  const { closeQuery } = await import("../defaults/mods/databases/act-grid.ts");
+  const { closeOthers } = await import("../defaults/mods/databases/menus.ts");
+  const { disconnect } = await import("../defaults/mods/databases/actions.ts");
+  const FILE = "/tmp/herdr-test/data/databases/queries/sq-1.json";
+  const tabs = () => JSON.parse(written.filter(([p]) => p === FILE).at(-1)?.[1] ?? "null")?.tabs.map((t: any) => t.text);
+  fresh();
+  const { v } = await withQuery(LITE, "");
+  await runView(loadQueries(v, LITE));
+  v.queries[0].editor.set_value("select 1;");
+  const b = v.addQuery("select 2;");
+  const c = v.addQuery("select 3;");
+  closeQuery(v, c, cx);
+  await flush();
+  expect(tabs()).toEqual(["select 1;", "select 2;"]);
+  closeOthers(v, b);
+  await flush();
+  expect(tabs()).toEqual(["select 2;"]);
+  b.editor.set_value("select 4;");
+  disconnect(v);
+  await flush();
+  expect(v.active).toBeNull();
+  expect(tabs()).toEqual(["select 4;"]);
+});
+
 test("a write asks once; a DROP asks, then wants its name typed; nothing runs before", async () => {
   fresh();
   let { v, q } = await withQuery(LITE, "insert into tags(name) values ('x');");
