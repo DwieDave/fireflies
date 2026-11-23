@@ -3,42 +3,36 @@
 // (model.ts) and keeps them in shared(ITEMS) for the overview, the
 // question dialog and Nocturne's toasts. Answers go out through drive.ts.
 
-import { Array as Arr, Clock, Effect, Option, Record as Rec, Schema, String as Str } from "effect";
+import { Array as Arr, Clock, Effect, Option, Schema, String as Str } from "effect";
 import { shared, setShared } from "herdr";
-import { Exec, Shared, Workspace, decodeJsonOption, readShared, sharedKey, writeShared } from "@fireflies/kit";
-import { agents, hc } from "./fx.ts";
+import { Exec, Hc, Shared, Workspace, decode, decodeJsonOption, listOf, mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import { collect, adapterOf, ItemSchema, TerminalSchema, statusOf, splitAddress } from "./model.ts";
 import type { Info, Item, Terminal } from "./model.ts";
 import { HookPayloadSchema } from "./request.ts";
 import type { HookRecord } from "./request.ts";
-import { listEntries, readSharedList, readSharedMap, sharedListKey, sharedMapKey, writeSharedMap } from "./shared-lists.ts";
 
 export const ITEMS = "notifications.items";
 export const OPEN = "notifications.open"; // { terminal, at }: what the overview opens on
 export const DISMISSED = "notifications.dismissed"; // { [item id]: true }: errors put away
 
 /** The items, newest first within a type (model.ts collect), read entry by entry. */
-export const ITEMS_KEY = sharedListKey(ITEMS, ItemSchema);
-
-/** ITEMS, written whole. */
-const ITEMS_LIST = sharedKey(ITEMS, Schema.Array(ItemSchema));
+export const ITEMS_KEY = sharedKey(ITEMS, listOf(ItemSchema));
 
 /** The request a toast asked the overview to open on: its terminal, and when. */
 export const OPEN_KEY = sharedKey(OPEN, Schema.NullOr(Schema.Struct({ terminal: Schema.String, at: Schema.optionalKey(Schema.Finite) })));
 
 /** The errors put away, by item id (each `true`). */
-const DISMISSED_KEY = sharedMapKey(DISMISSED, Schema.Literal(true));
-
-/** ITEMS and DISMISSED as they are, for an effect to read entry by entry. */
-const ITEMS_RAW = sharedKey(ITEMS, Schema.Array(Schema.Unknown));
-
-const DISMISSED_RAW = sharedKey(DISMISSED, Schema.Record(Schema.String, Schema.Unknown));
+const DISMISSED_KEY = sharedKey(DISMISSED, mapOf(Schema.Literal(true)));
 
 /** Two item lists hold the same items, field by field. */
 const sameItems = Schema.toEquivalence(Schema.Array(ItemSchema));
 
 /** The terminals as herdr-core lists them, the fields read here (one in another shape is left out). */
-export const terminalsNow: Effect.Effect<readonly Terminal[], never, Workspace> = Effect.map(Workspace.use((w) => w.terminals), (list) => listEntries(list, TerminalSchema));
+export const terminalsNow: Effect.Effect<readonly Terminal[], never, Workspace> = Workspace.use((w) => w.terminals).pipe(
+  Effect.flatMap(decode(listOf(TerminalSchema), "the terminals")),
+  // Not a list at all: none to read this time; the next poll asks again.
+  Effect.orElseSucceed((): readonly Terminal[] => []),
+);
 
 /** The name a person gave a terminal (Nocturne's rename label), by address. */
 function givenNames(list: readonly Terminal[]): ReadonlyMap<string, string> {
@@ -54,8 +48,8 @@ function givenNames(list: readonly Terminal[]): ReadonlyMap<string, string> {
 }
 
 /** The visible screen of a terminal; null when it can't be read (the caller says so: "Its terminal can't be read"). */
-export const readScreen = (address: string): Effect.Effect<string | null> =>
-  hc(["read", address, "--lines", "0"]).pipe(
+export const readScreen = (address: string): Effect.Effect<string | null, never, Hc> =>
+  Hc.use((h) => h.run(["read", address, "--lines", "0"])).pipe(
     Effect.map((r) => (r.code === 0 ? r.stdout : null)),
     Effect.catchTag("ExecError", () => Effect.succeed(null)),
   );
@@ -193,20 +187,20 @@ export class Engine {
   });
 
   /** Items into shared(ITEMS), when they changed. */
-  publish(list: readonly Terminal[]): Effect.Effect<boolean, never, Shared> {
+  publish(list: readonly Terminal[]): Effect.Effect<boolean, never, Shared | Workspace> {
     return Effect.gen({ self: this }, function* () {
       const shared = yield* Shared;
-      const put = yield* shared.get(DISMISSED_RAW);
-      const had = yield* shared.get(ITEMS_RAW);
-      const dismissed = new Set(Arr.map(Arr.filter(Rec.toEntries(Option.getOrElse(put, () => ({}))), ([, v]) => v === true), ([k]) => k));
-      const before = listEntries(Option.getOrElse(had, () => []), ItemSchema);
-      const places = yield* agents;
+      const put = yield* shared.get(DISMISSED_KEY);
+      const had = yield* shared.get(ITEMS_KEY);
+      const dismissed = new Set(Option.match(put, { onNone: () => [], onSome: (m) => m.keys() }));
+      const before = Option.getOrElse(had, (): readonly Item[] => []);
+      const places = yield* Workspace.use((w) => w.agents);
       const at = yield* Clock.currentTimeMillis;
       const now = collect({ terminals: list, agents: places, info: this.info, since: this.since(list, at), names: givenNames(list), dismissed });
 
       if (sameItems(before, now)) return false;
 
-      yield* shared.set(ITEMS_LIST, now);
+      yield* shared.set(ITEMS_KEY, now);
 
       return true;
     });
@@ -214,21 +208,21 @@ export class Engine {
 }
 
 /** The items as last published. */
-export const items = (): readonly Item[] => readSharedList(shared, ITEMS_KEY);
+export const items = (): readonly Item[] => readShared(shared, ITEMS_KEY, []);
 
 /** How many put-away errors are kept (the newest). */
 const KEEP_DISMISSED = 200;
 
 /** Puts an error away (it isn't asking anything). */
 export function dismiss(id: string): void {
-  const d = new Map(readSharedMap(shared, DISMISSED_KEY));
+  const d = new Map(readShared(shared, DISMISSED_KEY, new Map()));
 
   d.set(id, true);
 
   for (const k of Arr.take(Arr.fromIterable(d.keys()), Math.max(0, d.size - KEEP_DISMISSED))) d.delete(k);
 
-  writeSharedMap(setShared, DISMISSED_KEY, d);
-  writeShared(setShared, ITEMS_LIST, Arr.filter(items(), (i) => i.id !== id));
+  writeShared(setShared, DISMISSED_KEY, d);
+  writeShared(setShared, ITEMS_KEY, Arr.filter(items(), (i) => i.id !== id));
 }
 
 /** The toast's request for the overview, none when there is none. */

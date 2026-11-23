@@ -3,22 +3,15 @@
 // and key bar it settles at. gpui stand-ins record each element's calls (its
 // height, opacity, size callbacks); a "frame" is a render, then the size
 // callbacks fired with the sizes the real layout reports. Its own process: it
-// stands in for "herdr" (importMod can't copy @fireflies/look's re-exports
-// yet: with it, these become importMod stand-ins).
+// stands in for "herdr" (notifications-host.ts).
 import { test, expect, mock, beforeEach } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
+import { newHost, notificationsHerdr, notificationsServices } from "./notifications-host.ts";
 
-let sharedState: Record<string, unknown> = {};
-let specs: any[] = [];
-let propsNow: any = { overlay: "o1", most: 580 };
-const herdr = {
-  closeOverlay: () => null, openOverlay: (spec: any) => { specs.push(spec); return "o9"; }, run: () => null, nextCommand: () => new Promise(() => {}),
-  props: () => propsNow, settings: () => ({ zoom: 0.9, ui_font_family: "Departure Mono" }), theme: () => theme, layout: () => ({ scrim: { dither: true }, corners: "square" }),
-  shared: (k: string) => (k === "layout" ? "nocturne" : sharedState[k] ?? null), setShared: (k: string, v: unknown) => { sharedState[k] = v; return null; },
-  window: () => ({ platform: "macos" }), terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "", stderr: "" }), exec: async () => ({ code: 1, stdout: "", stderr: "" }),
-  notify: () => null, keys: () => [],
-};
-mock.module("herdr", () => herdr);
+const theme: any = new Proxy({}, { get: () => "#808080" });
+const host = newHost(theme);
+mock.module("herdr", () => notificationsHerdr(host));
 
 type Rec = { calls: Record<string, any[][]>; kids: any[] };
 function el(): any {
@@ -41,7 +34,6 @@ function el(): any {
 }
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} }
 (globalThis as any).window = { paint_path: el };
-const theme: any = new Proxy({}, { get: () => "#808080" });
 mock.module("gpui-kit", () => ({ View: class {}, div: el, svg: el, image: el, PathBuilder: { fill: el }, Background: { checkerboard: el } }));
 mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () => new Input() }, Input: { new: el } }));
 
@@ -96,11 +88,11 @@ const permission = {
   request: { ...PERM_REQUEST, type: "permission", tool: "Bash", line: "ls -la", options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "No", kind: "no" }], canAmend: true },
 };
 
-beforeEach(() => { sharedState = {}; specs = []; propsNow = { overlay: "o1", most: 580 }; });
+beforeEach(() => { host.shared = {}; host.opened.length = 0; host.props = { overlay: "o1", most: 580 }; });
 
 for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
   test(`overview ${name}: the first frame seen has the height and key bar it settles at`, () => {
-    sharedState[ITEMS] = items;
+    host.shared[ITEMS] = items;
     const v: any = new Overview();
     v.init({}, cx);
     const frames = [frame(v), frame(v), frame(v)];
@@ -118,11 +110,11 @@ for (const [name, items] of [["with a request", [permission]], ["empty", []]] as
 }
 
 test("overview: a request coming in while it's open changes its height, seen (no blank frame)", () => {
-  sharedState[ITEMS] = [];
+  host.shared[ITEMS] = [];
   const v: any = new Overview();
   v.init({}, cx);
   frame(v); const empty = frame(v);
-  sharedState[ITEMS] = [permission];
+  host.shared[ITEMS] = [permission];
   const next = [frame(v), frame(v)];
   expect(next.every((f) => f.seen)).toBe(true);
   expect(next[1].height).not.toBe(empty.height);
@@ -157,7 +149,7 @@ test("the overview's height: a small window's room below the strip, a laptop's m
 });
 
 test("the overview is taller than it was: with a request it fills the popup's most, whatever it shows", () => {
-  sharedState[ITEMS] = [permission];
+  host.shared[ITEMS] = [permission];
   const v: any = new Overview();
   v.init({}, cx);
   frame(v); frame(v);
@@ -173,12 +165,12 @@ for (const [how, press] of [["by a key: centered", null], ["by a click on the be
   for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
     test(`overview opened ${how}, ${name}: its first frame seen is the settled one`, () => {
       notif.noteWindow({ width: 1600, height: 1000 });
-      sharedState[ITEMS] = items;
+      host.shared[ITEMS] = items;
       notif.openOverview(null, press);
-      const spec = specs.at(-1);
+      const spec = host.opened.at(-1);
       if (press) expect(spec).toMatchObject({ kind: "popup", at: { x: expect.any(Number), y: expect.any(Number) } });
       else { expect(spec.kind).toBe("dialog"); expect(spec.at).toBeUndefined(); expect(spec.height).toBeUndefined(); }
-      propsNow = { overlay: "o9", ...spec.props };
+      host.props = { overlay: "o9", ...spec.props };
       const v: any = new Overview();
       v.init(spec.props, cx);
       const frames = [frame(v), frame(v), frame(v)];
@@ -196,9 +188,9 @@ for (const [how, press] of [["by a key: centered", null], ["by a click on the be
 // ---- empty: a center, not a sliver around its note
 
 test("the empty overview is EMPTY_H tall (a center's height, not its note's), never more than its room", () => {
-  sharedState[ITEMS] = [];
+  host.shared[ITEMS] = [];
   const settle = (most: number, keys = false) => {
-    propsNow = { overlay: "o1", most };
+    host.props = { overlay: "o1", most };
     const v: any = new Overview();
     v.init({}, cx);
     v.keysShown = keys;
@@ -217,7 +209,7 @@ test("the empty overview is EMPTY_H tall (a center's height, not its note's), ne
 
 // ---- answering: the driver waits for the dialog, not for any change on a busy screen
 
-test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
+test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", () => {
   const rule = "─".repeat(80);
   const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
   const before = dlg("Yes", "Esc to cancel · Tab to amend");
@@ -225,10 +217,17 @@ test("drive settled(): a ticking status line isn't the key's effect; the dialog 
   // Three reads where only the status line ticks, then the note line drawn.
   const reads = [`${before}\n◐ 1`, `${before}\n◐ 2`, `${before}\n◐ 3`, `${after}\n◐ 4`, `${after}\n◐ 5`];
   let i = 0;
-  const read = () => Effect.sync(() => reads[Math.min(i++, reads.length - 1)]);
-  const got = await Effect.runPromise(settled("t1", `${before}\n◐ 0`, dialog, read));
-  expect(got).toContain("tell Claude what to do next");
-  // Compared whole (no dialog view), the first tick would have counted.
-  i = 0;
-  expect(await Effect.runPromise(settled("t1", `${before}\n◐ 0`, undefined, read))).toBe(`${before}\n◐ 2`);
+  const read = () => Effect.sync(() => reads[Math.min(i++, reads.length - 1)] ?? null);
+  /** settled() on a clock the test moves past its longest wait. */
+  const settle = (view: ((s: string) => string) | undefined) => Effect.gen(function* () {
+    i = 0;
+    const f = yield* Effect.forkChild(settled("t1", `${before}\n◐ 0`, view, read));
+    yield* TestClock.adjust("5 seconds");
+    return yield* Fiber.join(f);
+  });
+  return Effect.runPromise(Effect.gen(function* () {
+    expect(yield* settle(dialog)).toContain("tell Claude what to do next");
+    // Compared whole (no dialog view), the first tick would have counted.
+    expect(yield* settle(undefined)).toBe(`${before}\n◐ 2`);
+  }).pipe(Effect.provide(notificationsServices({}).layer), Effect.provide(TestClock.layer())));
 });

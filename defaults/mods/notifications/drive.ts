@@ -9,14 +9,14 @@ import type { Goal, StepState } from "./claude.ts";
 import { adapterOf } from "./model.ts";
 import type { Item } from "./model.ts";
 import { readScreen } from "./engine.ts";
-import { hc } from "./fx.ts";
+import { Hc } from "@fireflies/kit";
 
 const STEPS = 60; // a block of questions takes ~20
 const SETTLE_MS = 1600; // how long one key may take to show
 const LOOK_MS = 80; // between two reads while a key takes effect
 
 /** Reads a terminal's screen (null: it can't be read). */
-export type ReadScreen = (address: string) => Effect.Effect<string | null>;
+export type ReadScreen = (address: string) => Effect.Effect<string | null, never, Hc>;
 
 /** Waits until the dialog on screen differs from the one in `before` (or a
  *  while passed). `view` picks the dialog out of a screen: the rest of a busy
@@ -48,8 +48,8 @@ export type Outcome = { readonly ok: true } | { readonly ok: false; readonly rea
 const didntGo = (what: string, fallback: string, said: string): Outcome => ({ ok: false, reason: `${what} didn't go through: ${Str.isEmpty(Str.trim(said)) ? fallback : Str.trim(said)}` });
 
 /** Sends keys or text with `hc`: an exit or a run that failed is the outcome's reason; null when it went. */
-const send = (args: readonly string[], what: string, fallback: string): Effect.Effect<Outcome | null> =>
-  hc(args).pipe(
+const send = (args: readonly string[], what: string, fallback: string): Effect.Effect<Outcome | null, never, Hc> =>
+  Hc.use((h) => h.run(args)).pipe(
     Effect.map((r) => (r.code === 0 ? null : didntGo(what, fallback, r.stderr))),
     Effect.catchTag("ExecError", (e) => Effect.succeed(didntGo(what, fallback, e.message))),
   );
