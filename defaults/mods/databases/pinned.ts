@@ -8,72 +8,62 @@
 // again on its next tick. The active connection's object is never swapped by
 // a re-read: a read going on keeps its answer.
 
-import type { Context } from "gpui-kit";
-import { setShared, shared } from "herdr";
+import { Array as Arr, Clock, Effect, Equal, Option, String as Str } from "effect";
+import { Shared, redraw } from "@fireflies/kit";
 import type { Conn } from "./kinds.ts";
-import { readShared, writeShared } from "./guard.ts";
 import { PINNED_KEY, changeConnections, readConnections } from "./store.ts";
-import { IO, dataHome } from "./session.ts";
+import { dataHome } from "./session.ts";
 import { saveFound } from "./conns.ts";
 import { confirmRemove } from "./menus.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** Changes the pinned list (on the file as it is now), then tells the other windows. Null when
  *  the file refused (said in the bar). */
-export async function changePinned(v: DbView, change: (list: Conn[]) => Conn[], cx: Context): Promise<Conn[] | null> {
-  cx = v.held(cx);
-
-  try {
-    const next = await changeConnections(IO, dataHome(), change);
-
+export const changePinned = (v: DbView, change: (list: Conn[]) => Conn[]): Effect.Effect<Conn[] | null, never, DbRun> => changeConnections(dataHome(), change).pipe(
+  Effect.tap((next) => Effect.gen(function* () {
     v.saved = keepActive(v, next);
-    v.pinnedAt = Date.now();
-    writeShared(setShared, PINNED_KEY, { at: v.pinnedAt, by: v.me });
-    cx.notify();
-
-    return next;
-  } catch (error) {
-    v.say(`the pinned connections weren't changed: ${error instanceof Error ? error.message : String(error)}`, "failed");
-    cx.notify();
-
-    return null;
-  }
-}
+    v.pinnedAt = yield* Clock.currentTimeMillis;
+    yield* Shared.use((s) => s.set(PINNED_KEY, { at: v.pinnedAt, by: v.me }));
+  })),
+  Effect.catch((error) => Effect.as(Effect.sync(() => v.say(`the pinned connections weren't changed: ${error.message}`, "failed")), null)),
+  Effect.ensuring(redraw),
+);
 
 /** The list with the active connection's own object where it is in it (same id, same fields):
  *  a read going on compares objects. */
 function keepActive(v: DbView, list: Conn[]): Conn[] {
   const a = v.active;
 
-  return a ? list.map((c) => (c.id === a.id && JSON.stringify(c) === JSON.stringify(a) ? a : c)) : list;
+  return a !== null ? Arr.map(list, (c) => (c.id === a.id && Equal.equals(c, a) ? a : c)) : list;
 }
 
 /** P: a pinned one asks to be unpinned (every window drops it); another is pinned. */
-export function togglePin(v: DbView, c: Conn, cx: Context): void {
-  if (c.origin === "saved") confirmRemove(v, c, cx);
-  else void saveFound(v, c, cx);
+export function togglePin(v: DbView, c: Conn): void {
+  if (c.origin === "saved") confirmRemove(v, c);
+  else v.run(saveFound(v, c));
 }
 
-/** Reads the pinned list again when another window changed it (the window's tick). */
-export async function syncPinned(v: DbView, cx: Context): Promise<void> {
-  cx = v.held(cx);
+/** Reads the pinned list again when another window changed it (the window's tick). A file that
+ *  can't be read leaves the list as it is (the next change tries again). */
+export const syncPinned = (v: DbView): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
+  const kept = yield* Shared.use((s) => s.get(PINNED_KEY));
+  const n = Option.getOrNull(kept);
 
-  const n = readShared(shared, PINNED_KEY, null);
-
-  if (!n || n.at <= v.pinnedAt || n.by === v.me) return;
+  if (n === null || n.at <= v.pinnedAt || n.by === v.me) return;
 
   v.pinnedAt = n.at;
 
   const at = v.saved[v.connAt]?.id ?? null;
-  const list = await readConnections(IO, dataHome());
+  const list = yield* readConnections(dataHome());
 
   v.saved = keepActive(v, list);
   // A pinned one also listed as found or sent here: the pinned one stands.
-  v.sent = v.sent.filter((s) => !list.some((p) => p.id === s.id));
+  v.sent = Arr.filter(v.sent, (s) => !Arr.some(list, (p) => p.id === s.id));
 
-  const again = at ? v.saved.findIndex((c) => c.id === at) : -1;
+  const again = at !== null && Str.isNonEmpty(at) ? Option.getOrElse(Arr.findFirstIndex(v.saved, (c) => c.id === at), () => -1) : -1;
 
   if (again >= 0) v.connAt = again;
 
-  cx.notify();
-}
+  yield* redraw;
+}).pipe(Effect.catch((error) => Effect.sync(() => v.say(`the pinned connections couldn't be read again: ${error.message}`, "failed"))));

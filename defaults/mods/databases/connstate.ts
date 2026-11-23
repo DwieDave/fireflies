@@ -7,8 +7,12 @@
 // again with one `select 1` when the window gets the focus after a while
 // (a forward that died says so, not a lit mark over a dead port).
 
-import type { Color, Context } from "gpui-kit";
+import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
+import { Clock, Effect, Match, String as Str } from "effect";
+import { causeMessage, localTime, redraw } from "@fireflies/kit";
+import { nowMs } from "./app.ts";
+import type { DbRun } from "./app.ts";
 import type { Conn, Kind } from "./kinds.ts";
 import type { Where } from "./dbs.ts";
 import { whereNow } from "./dbs.ts";
@@ -34,24 +38,28 @@ export const RECHECK_AFTER = 30000;
 
 /** The state of `c` in this window. */
 export function connState(v: DbView, c: Conn | null): ConnState {
-  if (!c || v.active?.id !== c.id) return { kind: "off" };
+  if (c === null || v.active?.id !== c.id) return { kind: "off" };
 
   const a = v.alive?.conn === c.id ? v.alive : null;
   const f = v.forwardAsk?.conn.id === c.id ? v.forwardAsk : null;
 
-  if (f?.starting) return { kind: "connecting", what: "starting its forward" };
+  if (f?.starting !== null && f?.starting !== undefined && f?.starting !== 0) return { kind: "connecting", what: "starting its forward" };
 
-  if (f) return { kind: "failed", why: f.why === "gone" ? `its forward's pod isn't there${f.note ? `: ${f.note}` : ""}` : f.why === "taken" ? `another program answers on localhost:${f.local}` : `no forward on localhost:${f.local}` };
+  if (f !== null) return { kind: "failed", why: Match.value(f.why).pipe(
+    Match.when("gone", () => `its forward's pod isn't there${f.note !== null && Str.isNonEmpty(f.note) ? `: ${f.note}` : ""}`),
+    Match.when("taken", () => `another program answers on localhost:${f.local}`),
+    Match.orElse(() => `no forward on localhost:${f.local}`),
+  ) };
 
   if (v.password?.conn === c.id) return { kind: "connecting", what: "waiting for its password" };
 
-  if (v.catalog.busy) return a?.ok ? { kind: "reading", since: a.since, at: a.at } : { kind: "connecting", what: readIn(v, "tables")?.what ?? "connecting" };
+  if (v.catalog.busy) return a?.ok === true ? { kind: "reading", since: a.since, at: a.at } : { kind: "connecting", what: readIn(v, "tables")?.what ?? "connecting" };
 
-  if (a && !a.ok) return { kind: "failed", why: a.why ?? "it didn't answer" };
+  if (a !== null && !a.ok) return { kind: "failed", why: a.why ?? "it didn't answer" };
 
-  if (a?.ok) return { kind: "connected", since: a.since, at: a.at };
+  if (a?.ok === true) return { kind: "connected", since: a.since, at: a.at };
 
-  if (v.catalog.error) return { kind: "failed", why: v.catalog.error };
+  if (v.catalog.error !== null && Str.isNonEmpty(v.catalog.error)) return { kind: "failed", why: v.catalog.error };
 
   return { kind: "connecting", what: readIn(v, "tables")?.what ?? "connecting" };
 }
@@ -82,7 +90,12 @@ export function stateColor(t: Theme, s: ConnState): Color {
 export const breathes = (s: ConnState): boolean => s.kind === "connecting" || s.kind === "reading";
 
 /** A clock time, "14:02:09". */
-const clock = (at: number): string => new Date(at).toTimeString().slice(0, 8);
+const clock = (at: number): string => {
+  const t = localTime(at);
+  const two = (n: number) => Str.padStart(2, "0")(String(n));
+
+  return `${two(t.hours)}:${two(t.minutes)}:${two(Math.floor(at / 1000) % 60)}`;
+};
 
 /** Seconds or minutes ago, in words. */
 function ago(at: number, now: number): string {
@@ -92,9 +105,9 @@ function ago(at: number, now: number): string {
 }
 
 /** The state's hover: since when, what it means here, why it failed. */
-export function stateTip(s: ConnState, w: Where | null, readonly: boolean, now = Date.now()): string {
+export function stateTip(s: ConnState, w: Where | null, readonly: boolean, now: number): string {
   const ro = readonly ? " · read only: writes are refused" : "";
-  const there = w ? ` · in ${w.database ?? "every database"}${w.fallback ? " (the server's default: none was named)" : ""}${w.user ? ` as ${w.user}` : ""}` : "";
+  const there = w !== null ? ` · in ${w.database ?? "every database"}${w.fallback ? " (the server's default: none was named)" : ""}${w.user !== null && Str.isNonEmpty(w.user) ? ` as ${w.user}` : ""}` : "";
 
   switch (s.kind) {
     case "off": return "Not connected · enter on a connection in [1] connects";
@@ -117,45 +130,45 @@ export function lostRun(kind: Kind, code: number, stderr: string): boolean {
 
 /** What a run on `c` says of the connection: an answer (it stands, its time noted) or a lost
  *  connection (failed, with why). Only the active connection is tracked. */
-export function heard(v: DbView, c: Conn, ok: boolean, why: string | null, now = Date.now()): void {
+export function heard(v: DbView, c: Conn, ok: boolean, why: string | null, now: number): void {
   if (v.active?.id !== c.id) return;
 
   const a = v.alive?.conn === c.id ? v.alive : null;
 
-  if (ok) v.alive = { conn: c.id, ok: true, since: a?.ok ? a.since : now, at: now, why: null };
+  if (ok) v.alive = { conn: c.id, ok: true, since: a?.ok === true ? a.since : now, at: now, why: null };
   else v.alive = { conn: c.id, ok: false, since: a?.since ?? now, at: a?.at ?? now, why };
 }
 
 /** The window got the focus: a connection that last answered a while ago is asked once more. */
-export function focusArrived(v: DbView, cx: Context, now = Date.now()): void {
+export function focusArrived(v: DbView, now: number): void {
   const a = v.alive;
 
-  if (!a?.ok || v.active?.id !== a.conn || now - a.at < RECHECK_AFTER || v.catalog.busy || v.checking) return;
+  if (a?.ok !== true || v.active?.id !== a.conn || now - a.at < RECHECK_AFTER || v.catalog.busy || v.checking) return;
 
-  void recheck(v, cx);
+  v.run(recheck(v));
 }
 
 /** One `select 1` on the active connection (runOn notes what it says). */
-export async function recheck(v: DbView, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const recheck = (v: DbView): Effect.Effect<void, never, DbRun> => Effect.suspend(() => {
   const c = v.active;
 
-  if (!c) return;
+  if (c === null) return Effect.void;
 
   v.checking = true;
 
-  try {
-    const e = await reading(v, "checking it still answers", "conns", cx, (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, "a check that it answers"), 20000);
+  return Effect.gen(function* () {
+    const e = yield* reading(v, "checking it still answers", "conns", (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, "a check that it answers"), 20000);
 
-    if (!("value" in e)) heard(v, c, false, "late" in e ? `no answer after ${Math.round(e.late / 1000)} s` : "the check was stopped");
-  } catch (error) {
-    heard(v, c, false, error instanceof Error ? error.message : String(error));
-  } finally {
-    v.checking = false;
-    cx.notify();
-  }
-}
+    const now = yield* Clock.currentTimeMillis;
+
+    if (!("value" in e)) heard(v, c, false, "late" in e ? `no answer after ${Math.round(e.late / 1000)} s` : "the check was stopped", now);
+  }).pipe(
+    Effect.catchDefect((d) => Effect.sync(() => heard(v, c, false, causeMessage(d), nowMs()))),
+    Effect.ensuring(Effect.andThen(Effect.sync(() => {
+      v.checking = false;
+    }), redraw)),
+  );
+});
 
 /** Where the active connection is, for the mark (null when it's off). */
-export const whereOf = (v: DbView, c: Conn | null): Where | null => (c && v.active?.id === c.id ? whereNow(c, v.catalog.here) : null);
+export const whereOf = (v: DbView, c: Conn | null): Where | null => (c !== null && v.active?.id === c.id ? whereNow(c, v.catalog.here) : null);

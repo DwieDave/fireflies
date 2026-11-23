@@ -3,6 +3,7 @@
 // every statement's rows and its error land with it. Also where each statement
 // starts in the file (a MySQL error names the file's line).
 
+import { Array as Arr, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Risk } from "./safety.ts";
 
@@ -36,7 +37,7 @@ export interface Script {
 }
 
 /** A statement closed for the client: with its semicolon (a trigger's END keeps it). */
-const closed = (text: string): string => (text.trimEnd().endsWith(";") ? text.trimEnd() : `${text.trimEnd()};`);
+const closed = (text: string): string => (Str.endsWith(";")(Str.trimEnd(text)) ? Str.trimEnd(text) : `${Str.trimEnd(text)};`);
 
 /** The marker line in the client's own words. */
 function marker(kind: Kind, i: number): string {
@@ -56,13 +57,13 @@ export function scriptOf(kind: Kind, statements: readonly ScriptStatement[], rea
 
   if (kind === "mysql" && readonly) out.push("SET SESSION TRANSACTION READ ONLY;");
 
-  statements.forEach((st, i) => {
+  Arr.forEach(statements, (st, i) => {
     out.push(marker(kind, i));
-    lines.push(out.join("\n").split("\n").length + 1);
+    lines.push(Str.split(Arr.join(out, "\n"), "\n").length + 1);
     out.push(closed(st.text));
 
     if (kind === "mysql" && st.risk !== "read" && st.count !== false) out.push("SELECT ROW_COUNT() AS __ff_affected;");
   });
 
-  return { text: `${out.join("\n")}\n`, lines };
+  return { text: `${Arr.join(out, "\n")}\n`, lines };
 }

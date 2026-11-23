@@ -75,10 +75,13 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {},
   focus_handle: () => { const h = { focus() { focusTo(h); }, is_focused: () => focusNow === h, release: () => true }; return h; },
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard() {},
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard() {},
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 const flush = () => new Promise((r) => setTimeout(r, 5));
@@ -229,7 +232,7 @@ test("the password asked before connecting, given by enter: enter on a table ope
   const v = await connected();
 
   v.active = null;
-  v.askPassword(PG, false, cx, () => {
+  v.askPassword(PG, false, () => {
     v.active = PG;
     v.catalog = { tables: TABLES.map((t) => ({ ...t })), error: null, busy: false };
     v.panel = "tables";
@@ -244,7 +247,7 @@ test("the password asked before connecting, given by enter: enter on a table ope
 test("the password given by its connect chip: enter on a table opens it after", async () => {
   const v = await connected();
 
-  v.askPassword(PG, false, cx, () => { v.panel = "tables"; });
+  v.askPassword(PG, false, () => { v.panel = "tables"; });
   chipClick(v, "db-pw-ok");
   expect(v.password).toBe(null);
   expect(press(v, "enter")).toBe(true);
@@ -255,7 +258,7 @@ test("the password's cancel chip or a click beside the box: the keyboard comes b
   for (const close of ["db-pw-no", "db-password"]) {
     const v = await connected();
 
-    v.askPassword(PG, false, cx);
+    v.askPassword(PG, false);
     chipClick(v, close);
     expect(v.password).toBe(null);
     expect(press(v, "enter")).toBe(true);
@@ -267,7 +270,7 @@ test("a query tab's rename left by its chips or a click beside it: the keyboard 
   for (const close of ["db-rename-no", "db-rename-ok", "db-rename"]) {
     const v = await connected();
     const { startRename } = await import("../defaults/mods/databases/menus.ts");
-    const q = v.addQuery("select 1;", cx);
+    const q = v.addQuery("select 1;");
 
     v.panel = "tables";
     v.mainTab = 0;

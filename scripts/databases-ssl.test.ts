@@ -74,10 +74,13 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -107,7 +110,9 @@ const flush = () => new Promise((r) => setTimeout(r, 5));
 
 const { connOf, connJson, isConnJson, sslProblem } = await import("../defaults/mods/databases/kinds.ts");
 const { clientFor, flavorOf, mysqlSslArgs } = await import("../defaults/mods/databases/clients.ts");
-const { readConnections, writeConnections } = await import("../defaults/mods/databases/store.ts");
+const { readConnections, changeConnections } = await import("../defaults/mods/databases/store.ts");
+const { Effect } = await import("effect");
+const { filesTest } = await import("@fireflies/kit/testing");
 const { parseDbUrl, foundInVars, parseEnvFile } = await import("../defaults/mods/databases/discover.ts");
 const { withDatabase } = await import("../defaults/mods/databases/dbs.ts");
 const { saveFound } = await import("../defaults/mods/databases/conns.ts");
@@ -122,18 +127,19 @@ const dOf = (args: readonly string[]) => args[args.indexOf("-d") + 1];
 const runArgs = () => execs.filter((a) => a[0] === "sh" && a[3] === "ff-db").map((a) => a.slice(12));
 
 describe("the field", () => {
-  test("saved and read back; an unknown value isn't a connection; absent stays absent", async () => {
+  test("saved and read back; an unknown value isn't a connection; absent stays absent", () => {
     const files = new Map<string, string>();
-    const io = { readTextFile: async (p: string) => files.get(p) ?? null, writeTextFile: async (p: string, t: string) => { files.set(p, t); return null; } };
-    await writeConnections(io, "/h", [{ ...PG, sslmode: "require" }, { ...MY, sslmode: "disable" }, { ...PG, id: "pg-2" }] as any);
+    return Effect.runPromise(Effect.provide(Effect.gen(function* () {
+    yield* changeConnections("/h", () => [{ ...PG, sslmode: "require" }, { ...MY, sslmode: "disable" }, { ...PG, id: "pg-2" }] as any);
     const doc = JSON.parse([...files.values()][0]!);
     expect(doc.connections.map((c: any) => c.sslmode)).toEqual(["require", "disable", undefined]);
-    const back = await readConnections(io, "/h");
+    const back = yield* readConnections("/h");
     expect(back.map((c) => c.sslmode)).toEqual(["require", "disable", undefined]);
     expect("sslmode" in back[2]!).toBe(false);
     expect(isConnJson({ ...connJson(PG as any), sslmode: "false" })).toBe(false);
     expect(isConnJson({ ...connJson(PG as any), sslmode: "verify-full" })).toBe(true);
     expect(connOf({ ...connJson(PG as any), sslmode: "verify-ca" }).sslmode).toBe("verify-ca");
+    }), filesTest(files).layer));
   });
 
   test("a picked database keeps it", () => {
@@ -315,7 +321,7 @@ describe("databases.connect", () => {
     await flush(); await flush();
     expect(v.sent[0]?.sslmode).toBe("disable");
     expect(runArgs().map(dOf)).toContain("dbname='lantern' sslmode=disable");
-    await saveFound(v, v.sent[0], cx);
+    await runView(saveFound(v, v.sent[0]));
     const file = written.filter(([p]) => p.endsWith("/data/databases/connections.json")).at(-1);
     expect(JSON.parse(file?.[1] ?? "{}").connections[0]).toMatchObject({ host: "127.0.0.1", port: 15432, sslmode: "disable" });
   });

@@ -10,12 +10,14 @@
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import type { Column } from "@fireflies/viewer/table";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt, QueryTab } from "./state.ts";
 import { cellAt, colWidth, columnsOf, measuredWidth, moveGrid, rowsIn, sortedWidth } from "./grid.ts";
 import { loadRows } from "./session.ts";
 import { cellMenu, columnMenu, tabMenu } from "./menus.ts";
 import { openExport } from "./export-form.ts";
+import { nowMs } from "./app.ts";
 import { saveQueries } from "./queries.ts";
 import { stageNull, startEdit, undoCell } from "./cell-edit.ts";
 import type { ColumnLayout, GridColumn, Shown } from "./columns.ts";
@@ -31,7 +33,7 @@ const measured = new WeakMap<ResultSet, readonly Column[]>();
 export function colsOf(set: ResultSet): readonly Column[] {
   const known = measured.get(set);
 
-  if (known) return known;
+  if (known !== undefined) return known;
 
   const cols = columnsOf(set);
 
@@ -62,7 +64,7 @@ export interface GridNow {
 export function rowsLayout(v: DbView): ColumnLayout {
   const b = v.rows.browse;
 
-  if (!b || !v.active) return v.columnsAt?.layout ?? keptLayout("");
+  if (b === null || v.active === null) return v.columnsAt?.layout ?? keptLayout("");
 
   const key = tableKey(v.active.id, b.table.schema, b.table.name);
 
@@ -73,7 +75,7 @@ export function rowsLayout(v: DbView): ColumnLayout {
 
 /** The sorted column at least as wide as its name and its mark (" ↓"), however narrow it was made. */
 export function marked(cols: GridColumn[], sort: { readonly column: string } | null): GridColumn[] {
-  return cols.map((c) => {
+  return Arr.map(cols, (c) => {
     const least = sortedWidth(c.name);
 
     return c.name === sort?.column && colWidth(c) < least ? { ...c, px: least } : c;
@@ -84,10 +86,10 @@ export function marked(cols: GridColumn[], sort: { readonly column: string } | n
 export function shownGrid(v: DbView): GridNow | null {
   const q = v.shownQuery();
 
-  if (q) {
+  if (q !== null) {
     const raw = q.outcome?.results[q.shown]?.set ?? null;
 
-    if (!raw) return null;
+    if (raw === null) return null;
 
     const nums = colsOf(raw);
     const shown = shownOf(raw, q.layout, q.sort, (i) => nums[i]?.num ?? false);
@@ -100,7 +102,7 @@ export function shownGrid(v: DbView): GridNow | null {
 
   const raw = v.rows.set;
 
-  if (!raw) return null;
+  if (raw === null) return null;
 
   const layout = rowsLayout(v);
   const shown = shownOf(raw, layout, null);
@@ -111,11 +113,11 @@ export function shownGrid(v: DbView): GridNow | null {
     arrange: (l, keep) => {
       const key = v.columnsAt?.key;
 
-      if (!key) return;
+      if (key === undefined || Str.isEmpty(key)) return;
 
       v.columnsAt = { key, layout: l };
 
-      if (keep) keepLayout(key, l);
+      if (keep) keepLayout(key, l, nowMs());
     },
     sort: v.rows.browse?.sort ?? null, q: null,
   };
@@ -131,7 +133,7 @@ export const rawRow = (g: GridNow, r: number): number => g.shown.rows?.[r] ?? r;
 function move(v: DbView, dr: number, dc: number, stretch = false): void {
   const g = shownGrid(v);
 
-  if (!g || !g.set.rows.length) return;
+  if (g === null || g.set.rows.length === 0) return;
 
   const at = moveGrid(g.at, g.set, g.cols, dr, dc, rowsIn(v.gridSize.height), v.gridSize.width);
 
@@ -163,9 +165,9 @@ export type RowFormat = "tsv" | "json" | "csv" | "insert";
 
 /** Rows (shown indexes; the range's when none are given) in a format. */
 export function rowsText(v: DbView, g: GridNow, format: RowFormat, rows: readonly number[] = rangeRows(g)): string {
-  if (format === "tsv") return rows.map((r) => copied(g.set, { r0: r, r1: r, c0: 0, c1: Math.max(0, g.set.columns.length - 1) })).join("\n");
+  if (format === "tsv") return Arr.join(Arr.map(rows, (r) => copied(g.set, { r0: r, r1: r, c0: 0, c1: Math.max(0, g.set.columns.length - 1) })), "\n");
 
-  const set = rowsOf(g.raw, rows.map((r) => rawRow(g, r)), v.rows.browse?.rowid && g.place === "rows" ? ["rowid"] : []);
+  const set = rowsOf(g.raw, Arr.map(rows, (r) => rawRow(g, r)), v.rows.browse?.rowid === true && g.place === "rows" ? ["rowid"] : []);
 
   if (format === "json") return toJson(set);
 
@@ -174,7 +176,7 @@ export function rowsText(v: DbView, g: GridNow, format: RowFormat, rows: readonl
   const b = v.rows.browse;
   const kind = v.active?.kind ?? "sqlite";
 
-  return toInserts(set, kind, b && g.place === "rows" ? qualified(kind, b.table) : quoteName(kind, g.q?.name ?? "result"));
+  return toInserts(set, kind, b !== null && g.place === "rows" ? qualified(kind, b.table) : quoteName(kind, g.q?.name ?? "result"));
 }
 
 /** A grid's actions; false when the action means nothing here. */
@@ -191,26 +193,26 @@ export function gridAct(v: DbView, place: "rows" | "results", action: string, cx
     case "select-right": move(v, 0, 1, true); break;
     case "select-down": move(v, 1, 0, true); break;
     case "select-up": move(v, -1, 0, true); break;
-    case "select-all": if (g) g.put(everything(g.at, g.set)); break;
-    case "select-row": if (g) selectRow(g); break;
-    case "unselect": if (!g || !hasRange(g.at)) return false; g.put(unselected(g.at)); break;
+    case "select-all": if (g !== null) g.put(everything(g.at, g.set)); break;
+    case "select-row": if (g !== null) selectRow(g); break;
+    case "unselect": if (g === null || !hasRange(g.at)) return false; g.put(unselected(g.at)); break;
     case "first": move(v, -big, 0); break;
     case "last": move(v, big, 0); break;
     case "value": showValue(v); break;
-    case "copy": if (g) copy(v, copyText(g), cx); break;
-    case "copy-row": if (g) copy(v, rowsText(v, g, "tsv"), cx); break;
-    case "menu": if (g) cellMenu(v, g.at.row, g.at.col, cx); break;
-    case "column-menu": if (g) columnMenu(v, g.at.col, cx); break;
+    case "copy": if (g !== null) copy(v, copyText(g), cx); break;
+    case "copy-row": if (g !== null) copy(v, rowsText(v, g, "tsv"), cx); break;
+    case "menu": if (g !== null) cellMenu(v, g.at.row, g.at.col, cx); break;
+    case "column-menu": if (g !== null) columnMenu(v, g.at.col, cx); break;
     case "tab-menu": tabMenu(v, v.mainTab, cx); break;
     case "export": exportShown(v, cx); break;
     case "cell-edit": startEdit(v); break;
     case "wider":
-    case "narrower": if (g) widen(v, g, g.at.col, action === "wider" ? WIDTH_STEP : -WIDTH_STEP); break;
-    case "hide": if (g) hideColumn(v, g, g.at.col); break;
-    case "sort": if (g) sortColumn(v, g.set.columns[g.at.col] ?? null, cx); break;
+    case "narrower": if (g !== null) widen(v, g, g.at.col, action === "wider" ? WIDTH_STEP : -WIDTH_STEP); break;
+    case "hide": if (g !== null) hideColumn(v, g, g.at.col); break;
+    case "sort": if (g !== null) sortColumn(v, g.set.columns[g.at.col] ?? null); break;
     case "tab-next":
     case "tab-prev": v.mainTab = (v.mainTab + (action === "tab-next" ? 1 : v.queries.length)) % (v.queries.length + 1); v.focusShown(); break;
-    default: return place === "rows" ? rowsAct(v, action, cx) : resultsAct(v, action, cx);
+    default: return place === "rows" ? rowsAct(v, action) : resultsAct(v, action, cx);
   }
 
   return true;
@@ -220,7 +222,7 @@ export function gridAct(v: DbView, place: "rows" | "results", action: string, cx
 export function copy(v: DbView, text: string, cx: Context): void {
   cx.write_to_clipboard(text);
 
-  const lines = text.split("\n").length;
+  const lines = Str.split(text, "\n").length;
 
   v.say(lines > 1 ? `copied ${lines} lines` : "copied", "done");
 }
@@ -238,7 +240,7 @@ function selectRow(g: GridNow): void {
 export function widen(v: DbView, g: GridNow, col: number, by: number): void {
   const c = g.cols[col];
 
-  if (!c) return;
+  if (c === undefined) return;
 
   const now = c.px ?? measuredWidth(c);
   // A sorted column keeps its mark whole.
@@ -266,7 +268,7 @@ export function hideColumn(v: DbView, g: GridNow, col: number): void {
   const name = g.set.columns[col] ?? "";
   const next = hide(g.layout, g.raw.columns, name);
 
-  if (!next) {
+  if (next === null) {
     v.say("the last column shown stays", "failed");
 
     return;
@@ -301,32 +303,32 @@ export function moveTo(g: GridNow, col: number, to: number | null): void {
 export function exportShown(v: DbView, cx: Context): void {
   const q = v.shownQuery();
   const set = q?.outcome?.results[q.shown]?.set ?? null;
-  const t = v.rows.browse ? v.catalog.tables.find((x) => x.name === v.rows.browse?.table.name && x.schema === v.rows.browse.table.schema) : undefined;
+  const t = v.rows.browse !== null ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === v.rows.browse?.table.name && x.schema === v.rows.browse.table.schema)) : undefined;
 
-  if (q && set) openExport(v, { result: set, name: q.name }, cx);
-  else if (!q && t) openExport(v, { table: t }, cx);
+  if (q !== null && set !== null) openExport(v, { result: set, name: q.name }, cx);
+  else if (q === null && t !== undefined) openExport(v, { table: t }, cx);
 }
 
-function rowsAct(v: DbView, action: string, cx: Context): boolean {
+function rowsAct(v: DbView, action: string): boolean {
   const b = v.rows.browse;
 
-  if (!b) return false;
+  if (b === null) return false;
 
   switch (action) {
     case "cell-null": stageNull(v); break;
     case "cell-undo": undoCell(v); break;
     case "filter": openFilter(v); break;
     case "page-next":
-      if (v.rows.set && v.rows.set.rows.length >= b.limit) {
+      if (v.rows.set !== null && v.rows.set.rows.length >= b.limit) {
         v.rows.browse = { ...b, offset: b.offset + b.limit };
-        void loadRows(v, cx);
+        v.run(loadRows(v), { key: "rows" });
       }
 
       break;
     case "page-prev":
       if (b.offset > 0) {
         v.rows.browse = { ...b, offset: Math.max(0, b.offset - b.limit) };
-        void loadRows(v, cx);
+        v.run(loadRows(v), { key: "rows" });
       }
 
       break;
@@ -338,16 +340,16 @@ function rowsAct(v: DbView, action: string, cx: Context): boolean {
 
 /** s on a column: the Rows tab asks the database (ORDER BY), a result sorts what came back. Each
  *  goes ascending, descending, then as it was. */
-export function sortColumn(v: DbView, column: string | null, cx: Context): void {
+export function sortColumn(v: DbView, column: string | null): void {
   const q = v.shownQuery();
 
-  if (!q) {
-    sortBy(v, column, cx);
+  if (q === null) {
+    sortBy(v, column);
 
     return;
   }
 
-  if (!column) return;
+  if (column === null || Str.isEmpty(column)) return;
 
   const s = q.sort;
 
@@ -358,28 +360,28 @@ export function sortColumn(v: DbView, column: string | null, cx: Context): void 
 export function setLocalSort(v: DbView, q: QueryTab, sort: QueryTab["sort"]): void {
   q.sort = sort;
   q.at = { ...q.at, anchor: null };
-  v.say(sort ? `sorted here: the ${q.outcome?.cut ? "first rows that came back" : "rows that came back"}, by ${sort.column} ${sort.desc ? "↓" : "↑"}` : "as the database answered", "done");
+  v.say(sort !== null ? `sorted here: the ${q.outcome?.cut === true ? "first rows that came back" : "rows that came back"}, by ${sort.column} ${sort.desc ? "↓" : "↑"}` : "as the database answered", "done");
 }
 
 /** Sorts the Rows tab by a column: ascending, then descending, then as the table has them. */
-export function sortBy(v: DbView, column: string | null, cx: Context): void {
+export function sortBy(v: DbView, column: string | null): void {
   const b = v.rows.browse;
 
-  if (!b || !column) return;
+  if (b === null || (column === null || Str.isEmpty(column))) return;
 
   const s = b.sort;
 
-  setSort(v, s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true }, cx);
+  setSort(v, s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true });
 }
 
 /** The Rows tab's ORDER BY set (null: none), read again from the first page. */
-export function setSort(v: DbView, sort: { readonly column: string; readonly desc: boolean } | null, cx: Context): void {
+export function setSort(v: DbView, sort: { readonly column: string; readonly desc: boolean } | null): void {
   const b = v.rows.browse;
 
-  if (!b) return;
+  if (b === null) return;
 
   v.rows.browse = { ...b, sort, offset: 0 };
-  void loadRows(v, cx, true);
+  v.run(loadRows(v, true), { key: "rows" });
 }
 
 /** The filter line opens with the filter as it is (or `text`, the caret after it). */
@@ -400,17 +402,17 @@ export function equalsSql(v: DbView, column: string, value: Cell): string {
 }
 
 /** The Rows tab filtered to a condition at once (a read, from the first page). */
-export function filterTo(v: DbView, where: string, cx: Context): void {
+export function filterTo(v: DbView, where: string): void {
   const b = v.rows.browse;
 
-  if (!b) return;
+  if (b === null) return;
 
   v.rows.browse = { ...b, filter: where, offset: 0 };
-  void loadRows(v, cx);
+  v.run(loadRows(v), { key: "rows" });
 }
 
 /** The filter line's text applied (enter), from the first page. */
-export function applyFilter(v: DbView, cx: Context): void {
+export function applyFilter(v: DbView): void {
   const b = v.rows.browse;
   const text = v.filterInput?.value() ?? "";
 
@@ -418,16 +420,16 @@ export function applyFilter(v: DbView, cx: Context): void {
   v.filterInput = null;
   v.focusSelf();
 
-  if (!b) return;
+  if (b === null) return;
 
-  v.rows.browse = { ...b, filter: text.trim(), offset: 0 };
-  void loadRows(v, cx);
+  v.rows.browse = { ...b, filter: Str.trim(text), offset: 0 };
+  v.run(loadRows(v), { key: "rows" });
 }
 
 function resultsAct(v: DbView, action: string, cx: Context): boolean {
   const q = v.shownQuery();
 
-  if (!q) return false;
+  if (q === null) return false;
 
   switch (action) {
     case "edit": q.inResults = false; q.editor.focus(); break;
@@ -442,10 +444,10 @@ function resultsAct(v: DbView, action: string, cx: Context): boolean {
 
 /** Closes a query tab (its text goes; the connection keeps the others). */
 export function closeQuery(v: DbView, q: QueryTab, _cx: Context): void {
-  v.queries = v.queries.filter((x) => x !== q);
+  v.queries = Arr.filter(v.queries, (x) => x !== q);
   v.mainTab = Math.min(v.mainTab, v.queries.length);
   v.queriesDirty = true;
-  void saveQueries(v);
+  v.run(saveQueries(v));
   v.focusShown();
 }
 

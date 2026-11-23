@@ -6,9 +6,10 @@
 // a run going on with its cancel). The grids' pointer work is handlers().
 
 import { div } from "gpui-kit";
-import type { Context, Element, MouseButtonEvent } from "gpui-kit";
+import type { Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr, Match, Option, String as Str } from "effect";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
 import type { TabMore } from "./kit.ts";
@@ -42,13 +43,13 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
   const put = (row: number, col: number) => {
     const g = now();
 
-    if (g) g.put({ ...g.at, row, col, anchor: null });
+    if (g !== null) g.put({ ...g.at, row, col, anchor: null });
   };
 
   const focus = () => {
     v.panel = "main";
 
-    if (q) q.inResults = true;
+    if (q !== null) q.inResults = true;
 
     v.focusSelf();
   };
@@ -57,11 +58,11 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
 
   return {
     pick: (row, col, shift, e) => {
-      if (!q) settleEdit(v);
+      if (q === null) settleEdit(v);
 
       const g = now();
 
-      if (g && shift) g.put(stretched(g.at, row, col));
+      if (g !== null && shift) g.put(stretched(g.at, row, col));
       else {
         put(row, col);
         // A drag from here selects the cells it passes over.
@@ -71,7 +72,7 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
             const m = cellOf(to);
             const x = now();
 
-            if (m && x) x.put({ ...x.at, anchor: { row, col }, row: Number(m[1]), col: Number(m[2]) });
+            if (m !== null && x !== null) x.put({ ...x.at, anchor: { row, col }, row: Number(m[1]), col: Number(m[2]) });
           },
         });
       }
@@ -80,17 +81,17 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
     },
     // A double click edits a table's cell; anything else shows its whole value.
     open: (row, col) => {
-      if (!q) settleEdit(v);
+      if (q === null) settleEdit(v);
 
       put(row, col);
 
-      if (q || "why" in editableNow(v) || !startEdit(v)) showValue(v);
+      if (q !== null || "why" in editableNow(v) || !startEdit(v)) showValue(v);
     },
     // A right click inside the selection keeps it (its menu copies it).
     menu: (row, col, cx, e) => {
       const g = now();
 
-      if (!g || !hasRange(g.at) || !inRange(rangeOf(g.at), row, col)) put(row, col);
+      if (g === null || !hasRange(g.at) || !inRange(rangeOf(g.at), row, col)) put(row, col);
 
       focus();
       atPointer(v, () => cellMenu(v, row, col, cx), e);
@@ -103,9 +104,9 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
     gutter: (row, shift, e) => {
       const g = now();
 
-      if (!g) return;
+      if (g === null) return;
 
-      if (!q) settleEdit(v);
+      if (q === null) settleEdit(v);
 
       const r = rangeOf(g.at);
       const from = shift ? (hasRange(g.at) && wholeRows(r, g.set.columns.length) ? g.at.anchor?.row ?? g.at.row : g.at.row) : row;
@@ -120,7 +121,7 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
             const m = /^row:(\d+)$/.exec(to);
             const x = now();
 
-            if (m && x) x.put(rowsSelected(x.at, x.set, row, Number(m[1])));
+            if (m !== null && x !== null) x.put(rowsSelected(x.at, x.set, row, Number(m[1])));
           },
         });
       }
@@ -130,7 +131,7 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
       atPointer(v, () => rowMenu(v, row, cx), e);
     },
     scroll: (by, across, cx) => v.scrollGrid(by, across, cx),
-    target: (el, key) => dropTarget(t, el, v, key, key.startsWith("col:")),
+    target: (el, key) => dropTarget(t, el, v, key, Str.startsWith("col:")(key)),
   };
 }
 
@@ -140,7 +141,7 @@ function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col:
   const g = now();
   const c = g?.cols[col];
 
-  if (!g || !c) return;
+  if (g === null || c === undefined) return;
 
   focus();
 
@@ -177,17 +178,17 @@ function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col:
   // A click sorts; dragged, it moves the column (or its name goes into a query).
   pressAt(v, e, {
     kind: "column", label: name, takes: ["col:", "editor:"],
-    click: (x) => sortColumn(v, name, x),
-    drop: (to, x) => {
+    click: () => sortColumn(v, name),
+    drop: (to) => {
       const at = /^col:(\d+)$/.exec(to ?? "");
       const g2 = now();
 
-      if (at && g2) {
+      if (at !== null && g2 !== null) {
         const target = Number(at[1]);
 
         // Dropped on a header: it takes that header's place (after it when moving right).
         moveTo(g2, col, col < target ? (target + 1 < g2.set.columns.length ? target + 1 : null) : target);
-      } else if (to?.startsWith("editor:")) insertName(v, quoteName(kind, name), x);
+      } else if (to !== null && Str.startsWith("editor:")(to)) insertName(v, quoteName(kind, name));
     },
   });
 }
@@ -208,12 +209,12 @@ function overlayOf(v: DbView, g: GridNow): GridOverlay {
 function headerTips(v: DbView, g: GridNow): string[] {
   const s = v.struct.data;
 
-  return g.set.columns.map((name) => {
-    const c = s?.columns.find((x) => x.name === name);
+  return Arr.map(g.set.columns, (name) => {
+    const c = Option.getOrUndefined(Arr.findFirst(s?.columns ?? [], (x) => x.name === name));
 
-    if (!c) return name;
+    if (c === undefined) return name;
 
-    return [name, c.type, c.pk ? "primary key" : "", c.nullable ? "" : "not null", c.default !== null ? `default ${c.default}` : ""].filter(Boolean).join(" · ");
+    return Arr.join(Arr.filter([name, c.type, c.pk ? "primary key" : "", c.nullable ? "" : "not null", c.default !== null ? `default ${c.default}` : ""], Boolean), " · ");
   });
 }
 
@@ -236,14 +237,14 @@ function gridBox(t: Theme, v: DbView, id: string, el: Element): Element {
 function orderPart(t: Theme, v: DbView): Element | null {
   const b = v.rows.browse;
 
-  if (!b?.sort) return null;
+  if (b?.sort === null || b?.sort === undefined) return null;
 
   const sort = b.sort;
 
   return h_flex().id("rows-order").relative().flex_none().gap(6).items_center().tooltip("the database sorts the rows: this is in the statement the window runs · s on a column, or click its header")
     .child(div().text_color(t.ansi5).child("order by"))
-    .child(div().text_color(t.foreground).child(orderSql(v.active?.kind ?? "sqlite", sort).replace(/^order by /, "")))
-    .child(chip(t, "rows-order-clear", "✕", false, (cx) => setSort(v, null, cx)));
+    .child(div().text_color(t.foreground).child(Str.replace(/^order by /, "")(orderSql(v.active?.kind ?? "sqlite", sort))))
+    .child(chip(t, "rows-order-clear", "✕", false, () => setSort(v, null)));
 }
 
 /** The WHERE line over the Rows grid: the input while typing, else the filter as it is; the
@@ -258,13 +259,13 @@ function filterLine(t: Theme, v: DbView): Element {
     .child(div().relative().text_color(t.accent).child("/"))
     .child(div().relative().text_color(t.ansi5).child("where"));
 
-  if (v.rows.filtering && input) {
+  if (v.rows.filtering && input !== null) {
     return row.child(div().relative().flex_1().border(1).border_color(t.accent).px(6).child(Input.new(input).text_size(11).text_color(t.foreground)))
       .child(div().relative().text_color(t.dim).child("enter apply · esc"))
-      .when(order !== null, (el) => (order ? el.child(order) : el));
+      .when(order !== null, (el) => (order !== null ? el.child(order) : el));
   }
 
-  return row.child(div().id("rows-filter-text").relative().flex_1().truncate().cursor_pointer().text_color(now ? t.foreground : t.dim)
+  return row.child(div().id("rows-filter-text").relative().flex_1().truncate().cursor_pointer().text_color(Str.isNonEmpty(now) ? t.foreground : t.dim)
     .tooltip("/ · a WHERE clause, read by the database")
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
@@ -272,8 +273,8 @@ function filterLine(t: Theme, v: DbView): Element {
       cx.notify();
     })
     .child(now || "every row · / to filter"))
-    .when(Boolean(now), (el) => el.child(h_flex().id("rows-filter-clear-tip").relative().flex_none().tooltip("every row again · T: the tab's menu").child(chip(t, "rows-filter-clear", "✕ clear", false, (cx) => filterTo(v, "", cx)))))
-    .when(order !== null, (el) => (order ? el.child(order) : el));
+    .when(Boolean(now), (el) => el.child(h_flex().id("rows-filter-clear-tip").relative().flex_none().tooltip("every row again · T: the tab's menu").child(chip(t, "rows-filter-clear", "✕ clear", false, () => filterTo(v, "")))))
+    .when(order !== null, (el) => (order !== null ? el.child(order) : el));
 }
 
 /** The pager under the Rows grid: which rows, of how many, ‹ ›. */
@@ -281,15 +282,15 @@ function pager(t: Theme, v: DbView): Element {
   const b = v.rows.browse;
   const n = v.rows.set?.rows.length ?? 0;
 
-  if (!b) return div();
+  if (b === null) return div();
 
-  const from = n ? b.offset + 1 : 0;
+  const from = n !== 0 ? b.offset + 1 : 0;
   const total = v.rows.total;
   const more = n >= b.limit;
 
-  const page = (by: number, cx: Context) => {
+  const page = (by: number) => {
     v.rows.browse = { ...b, offset: Math.max(0, b.offset + by * b.limit) };
-    void loadRows(v, cx);
+    v.run(loadRows(v), { key: "rows" });
   };
 
   return h_flex().id("rows-pager").h(22).flex_none().px(10).gap(10).items_center().text_color(t.dim)
@@ -300,34 +301,34 @@ function pager(t: Theme, v: DbView): Element {
       const g = shownGrid(v);
       const hidden = g?.shown.hidden ?? 0;
 
-      return g && hidden ? el.child(h_flex().id("rows-hidden-tip").flex_none().tooltip("O on a column: its menu hides or shows").child(chip(t, "rows-hidden", `${hidden} hidden · show`, false, () => showColumns(g)))) : el;
+      return g !== null && hidden !== 0 ? el.child(h_flex().id("rows-hidden-tip").flex_none().tooltip("O on a column: its menu hides or shows").child(chip(t, "rows-hidden", `${hidden} hidden · show`, false, () => showColumns(g)))) : el;
     })
-    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, (cx) => page(-1, cx), b.offset > 0 ? t.foreground : edgeTone(t))))
-    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, (cx) => page(1, cx), more ? t.foreground : edgeTone(t))));
+    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, () => page(-1), b.offset > 0 ? t.foreground : edgeTone(t))))
+    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, () => page(1), more ? t.foreground : edgeTone(t))));
 }
 
 function rowsBody(t: Theme, v: DbView, active: boolean): Element {
-  if (!v.active) return empty(t, "Nothing open", "[1] connect · [2] pick a table · ctrl-n a query", 8);
+  if (v.active === null) return empty(t, "Nothing open", "[1] connect · [2] pick a table · ctrl-n a query", 8);
 
   const b = v.rows.browse;
 
-  if (!b) return empty(t, "Pick a table", "in [2]: enter shows its rows here, its structure in [3]", 6);
+  if (b === null) return empty(t, "Pick a table", "in [2]: enter shows its rows here, its structure in [3]", 6);
 
   const set = v.rows.set;
   const g = shownGrid(v);
   const types = v.columnTypes();
 
-  const body = v.rows.error ? empty(t, "It didn't answer", v.rows.error, 1)
-    : !set || !g ? empty(t, "reading…", null, null)
-    : !set.rows.length ? empty(t, b.filter ? "No row matches" : "No rows", b.filter ? `where ${b.filter}` : null, null)
+  const body = v.rows.error !== null && Str.isNonEmpty(v.rows.error) ? empty(t, "It didn't answer", v.rows.error, 1)
+    : set === null || g === null ? empty(t, "reading…", null, null)
+    : set.rows.length === 0 ? empty(t, Str.isNonEmpty(b.filter) ? "No row matches" : "No rows", Str.isNonEmpty(b.filter) ? `where ${b.filter}` : null, null)
     : grid(t, {
       id: "rows-grid", width: v.gridSize.width, height: v.gridSize.height, active, sort: b.sort,
-      types: types ? g.shown.cols.map((c) => types[c] ?? "") : undefined, tips: headerTips(v, g), overlay: overlayOf(v, g),
+      types: types !== undefined ? Arr.map(g.shown.cols, (c) => types[c] ?? "") : undefined, tips: headerTips(v, g), overlay: overlayOf(v, g),
     }, g.set, g.cols, g.at, handlers(t, v, null));
 
   const changes = changesBar(t, v);
 
-  return v_flex().size_full().child(filterLine(t, v)).child(dropTarget(t, gridBox(t, v, "rows-box", body), v, "tab:0")).when(changes !== null, (el) => (changes ? el.child(changes) : el)).child(pager(t, v));
+  return v_flex().size_full().child(filterLine(t, v)).child(dropTarget(t, gridBox(t, v, "rows-box", body), v, "tab:0")).when(changes !== null, (el) => (changes !== null ? el.child(changes) : el)).child(pager(t, v));
 }
 
 /** The line between a query's editor and its result: how it went. */
@@ -337,16 +338,16 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 
   const o = q.outcome;
 
-  if (q.running) {
+  if (q.running !== null) {
     return head.child(pip(t.working, 6, true)).child(div().text_color(t.working).child("running…"))
-      .child(div().flex_1()).child(chip(t, "result-cancel", "esc  cancel", false, (cx) => void cancelQuery(v, q, cx), t.blocked));
+      .child(div().flex_1()).child(chip(t, "result-cancel", "esc  cancel", false, () => cancelQuery(v, q), t.blocked));
   }
 
-  if (!o) return head.child(div().text_color(t.dim).child("ctrl-enter runs the statement under the caret (or the selection) · ctrl-shift-enter every one"));
+  if (o === null) return head.child(div().text_color(t.dim).child("ctrl-enter runs the statement under the caret (or the selection) · ctrl-shift-enter every one"));
 
   const r = o.results[q.shown];
   const said = resultWords(r, (q.verdicts[r?.index ?? 0] ?? "read") !== "read");
-  const sets = o.results.length > 1 ? o.results.map((x, i) => h_flex().id(`result-${i}-tip`).flex_none().tooltip("statement's result · < > step through them").child(chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; }))) : [];
+  const sets = o.results.length > 1 ? Arr.map(o.results, (x, i) => h_flex().id(`result-${i}-tip`).flex_none().tooltip("statement's result · < > step through them").child(chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; }))) : [];
 
   const sort = q.sort;
 
@@ -355,11 +356,11 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
     // A sort of what came back, said as such: the database's order isn't this.
     .when(sort !== null, (el) => el.child(h_flex().id("result-sort").flex_none().gap(4).items_center()
       .tooltip("sorted in the window, not by the database: only the rows that came back · s again, or ✕, for the order they came in")
-      .child(div().text_color(t.ansi5).child(`sorted here by ${sort?.column ?? ""} ${sort?.desc ? "↓" : "↑"}`))
+      .child(div().text_color(t.ansi5).child(`sorted here by ${sort?.column ?? ""} ${sort?.desc === true ? "↓" : "↑"}`))
       .child(chip(t, "result-sort-clear", "✕", false, () => setLocalSort(v, q, null)))))
     .when(o.cut, (el) => el.child(div().text_color(t.ansi3).child("cut: the first rows only")))
     .when(o.error !== null, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.blocked)
-      .child(`✕ ${o.error?.message ?? ""}${o.error?.line ? ` · line ${o.error.line}${o.error.col ? `, col ${o.error.col}` : ""}` : ""}${o.error?.hint ? ` · ${o.error.hint}` : ""}`)))
+      .child(`✕ ${o.error?.message ?? ""}${o.error?.line !== null && o.error?.line !== undefined && o.error?.line !== 0 ? ` · line ${o.error.line}${o.error.col !== null && o.error.col !== 0 ? `, col ${o.error.col}` : ""}` : ""}${o.error?.hint !== null && o.error?.hint !== undefined && Str.isNonEmpty(o.error?.hint) ? ` · ${o.error.hint}` : ""}`)))
     .child(div().flex_1())
     .children(sets)
     .child(div().text_color(t.dim).child(`${q.ms ?? 0} ms`));
@@ -372,9 +373,9 @@ function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
   const split = editorDivider(v.queryBox);
   const edH = v.dividers.size(split);
 
-  const result = !o || q.running ? div().flex_1()
-    : set && set.columns.length && g ? grid(t, { id: `q${q.id}-grid`, width: v.gridSize.width, height: v.gridSize.height, active: active && q.inResults, sort: q.sort, types: g.set.types }, g.set, g.cols, g.at, handlers(t, v, q))
-    : empty(t, o.error ? "Nothing to show: it stopped at the error" : "No rows", o.error ? "the error is underlined in the statement above; fix it and run it again" : null, null);
+  const result = o === null || q.running !== null ? div().flex_1()
+    : set !== null && set.columns.length !== 0 && g !== null ? grid(t, { id: `q${q.id}-grid`, width: v.gridSize.width, height: v.gridSize.height, active: active && q.inResults, sort: q.sort, types: g.set.types }, g.set, g.cols, g.at, handlers(t, v, q))
+    : empty(t, o.error !== null ? "Nothing to show: it stopped at the error" : "No rows", o.error !== null ? "the error is underlined in the statement above; fix it and run it again" : null, null);
 
   return v_flex().size_full()
     .on_size_change((drawn, cx) => {
@@ -401,23 +402,23 @@ function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
 
 /** The main view's right label: what's shown and how to run. */
 function mainRight(t: Theme, v: DbView, q: QueryTab | null): Element {
-  if (q) return div().text_color(t.dim).child(q.running ? "running · esc cancels" : `${v.active?.name ?? "not connected"} · ctrl-enter run`);
+  if (q !== null) return div().text_color(t.dim).child(q.running !== null ? "running · esc cancels" : `${v.active?.name ?? "not connected"} · ctrl-enter run`);
 
   const b = v.rows.browse;
   const n = counted(liveEdits(v)).cells;
-  const name = div().text_color(t.dim).child(b ? `${b.table.schema ? `${b.table.schema}.` : ""}${b.table.name}` : "");
+  const name = div().text_color(t.dim).child(b !== null ? `${b.table.schema !== null && Str.isNonEmpty(b.table.schema) ? `${b.table.schema}.` : ""}${b.table.name}` : "");
 
-  return n ? h_flex().gap(6).items_center().child(name).child(div().text_color(t.ansi3).child(`· ${changesWord(n)}`)) : name;
+  return n !== 0 ? h_flex().gap(6).items_center().child(name).child(div().text_color(t.ansi3).child(`· ${changesWord(n)}`)) : name;
 }
 
 /** Query tab `from` (1-based) moved to the place of tab `to` (0: first), the shown tab with it. */
 export function moveQuery(v: DbView, from: number, to: RegExpExecArray | null): void {
   const q = v.queries[from - 1];
 
-  if (!q || !to) return;
+  if (q === undefined || to === null) return;
 
   const at = Math.max(0, Number(to[1]) - 1);
-  const list = v.queries.filter((x) => x !== q);
+  const list = Arr.filter(v.queries, (x) => x !== q);
 
   list.splice(Math.min(at, list.length), 0, q);
   v.queries = list;
@@ -429,10 +430,10 @@ export function moveQuery(v: DbView, from: number, to: RegExpExecArray | null): 
 export function mainPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "main";
   const q = v.shownQuery();
-  const tabs: (readonly [string, string])[] = [["0", "Rows"], ...v.queries.map((x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
+  const tabs: (readonly [string, string])[] = [["0", "Rows"], ...Arr.map(v.queries, (x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
 
-  const pick = (key: string, cx: Context) => {
-    if (key === "+") v.addQuery("", cx);
+  const pick = (key: string) => {
+    if (key === "+") v.addQuery("");
     else {
       v.mainTab = Number(key);
       v.panel = "main";
@@ -440,7 +441,7 @@ export function mainPanel(t: Theme, v: DbView): Element {
     }
   };
 
-  const body = q ? queryBody(t, v, q, active) : rowsBody(t, v, active);
+  const body = q !== null ? queryBody(t, v, q, active) : rowsBody(t, v, active);
 
   const more: TabMore = {
     // A query tab drags to another place; dropped on Rows, it goes first.
@@ -448,18 +449,22 @@ export function mainPanel(t: Theme, v: DbView): Element {
       const n = Number(key);
       const tab = v.queries[n - 1];
 
-      if (tab) pressAt(v, e, { kind: "tab", label: tab.name, takes: ["tab:"], drop: (to) => moveQuery(v, n, /^tab:(\d+)$/.exec(to ?? "")) });
+      if (tab !== undefined) pressAt(v, e, { kind: "tab", label: tab.name, takes: ["tab:"], drop: (to) => moveQuery(v, n, /^tab:(\d+)$/.exec(to ?? "")) });
     },
     open: (key) => {
       const tab = v.queries[Number(key) - 1];
 
-      if (tab) startRename(v, tab);
+      if (tab !== undefined) startRename(v, tab);
     },
     menu: (key, cx, e) => {
       if (key !== "+") atPointer(v, () => tabMenu(v, Number(key), cx), e);
     },
     dress: (key, el) => (key === "+" ? el : dropTarget(t, el, v, `tab:${key}`)),
-    tip: (key) => (key === "+" ? "new query tab · ctrl-n" : key === "0" ? "the table's rows · drop a table here to open it · T: its menu" : "double click: rename · drag: another place · T: its menu"),
+    tip: (key) => Match.value(key).pipe(
+      Match.when("+", () => "new query tab · ctrl-n"),
+      Match.when("0", () => "the table's rows · drop a table here to open it · T: its menu"),
+      Match.orElse(() => "double click: rename · drag: another place · T: its menu"),
+    ),
   };
 
   return panel(t, "p-main", titleTabs(t, "main", PANEL_KEY.main, tabs, String(v.mainTab), active, pick, more), active, body, {

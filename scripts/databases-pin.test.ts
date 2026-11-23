@@ -4,6 +4,7 @@
 // fixture), its failures. herdr, kubectl, psql, hc and the ports are stand-ins: no cluster touched.
 // Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { Effect } from "effect";
 
 let sharedState: Record<string, unknown> = {};
 const files = new Map<string, string>();
@@ -79,10 +80,13 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -175,9 +179,9 @@ test("the contract's forward: checked as a secret's names are, local the connect
 });
 
 test("the start: the k8s mod's own arguments for the shared fixture, and the command the ask shows", () => {
-  expect(forwardStartArgs(FORWARD as any, "postgres")).toEqual(FORWARD_FIXTURE);
+  expect(Effect.runSync(forwardStartArgs(FORWARD as any, "postgres"))).toEqual(FORWARD_FIXTURE);
   expect(forwardCommand(FORWARD as any)).toBe("kubectl --context nightjar-dev -n glowworm port-forward pod/glowworm-pg-1 25432:5432 --address 127.0.0.1");
-  expect(forwardStartArgs({ ...FORWARD, kubectl: "/nix/store/x-kubectl/bin/kubectl" } as any, "postgres")).toContain("/nix/store/x-kubectl/bin/kubectl");
+  expect(Effect.runSync(forwardStartArgs({ ...FORWARD, kubectl: "/nix/store/x-kubectl/bin/kubectl" } as any, "postgres"))).toContain("/nix/store/x-kubectl/bin/kubectl");
 });
 
 test("a request with a bad forward is refused: nothing listed, nothing checked", async () => {
@@ -211,7 +215,7 @@ test("pinned in one window: every other window lists it at its next tick, a rest
   expect(drawnText(a)).toContain("pinned · every window");
   // The other window: its tick reads the file again.
   expect(b.saved).toEqual([]);
-  b.tick(cx);
+  await runView(b.tick());
   await until(() => b.saved.length === 1);
   expect(b.saved[0]).toMatchObject({ name: "glowworm-pg-1 (nightjar-dev/glowworm)", source: SOURCE, forward: FORWARD, origin: "saved" });
   expect(drawnText(b)).toContain("pinned · every window");
@@ -230,7 +234,7 @@ test("pinned in one window: every other window lists it at its next tick, a rest
   expect(c.ask.text).toBe("Unpin glowworm-pg-1 (nightjar-dev/glowworm)? Every Databases window drops it; its password stays in the cluster's secret; its history goes.");
   c.key(key("y"), cx);
   await until(() => c.saved.length === 0);
-  a.tick(cx);
+  await runView(a.tick());
   await until(() => a.saved.length === 0);
   expect(JSON.parse(files.get(HOME_FILE) ?? "{}").connections).toEqual([]);
 });
@@ -243,7 +247,7 @@ test("two windows pin at once from stale lists: both are kept (each change is ma
   receive(a, { kind: "sqlite", path: "/w/moths.db", name: "moths.db" }, cx);
   receive(b, { kind: "sqlite", path: "/w/lanterns.db", name: "lanterns.db" }, cx);
   await flush(); await flush();
-  await Promise.all([saveFound(a, a.sent[0], cx), saveFound(b, b.sent[0], cx)]);
+  await Promise.all([runView(saveFound(a, a.sent[0])), runView(saveFound(b, b.sent[0]))]);
   expect(JSON.parse(files.get(HOME_FILE) ?? "{}").connections.map((x: any) => x.name).sort()).toEqual(["lanterns.db", "moths.db"]);
 });
 

@@ -41,8 +41,9 @@ import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Size } from
 import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
-import { props, theme, nextCommand, shared, setShared, closeOverlay, exec } from "herdr";
-import { readShared, writeShared } from "./guard.ts";
+import { props, theme, shared, setShared, closeOverlay } from "herdr";
+import { Array as Arr, Clock, Deferred, Effect, Option, Result, Schema, String as Str } from "effect";
+import { Commands, readShared, redraw, writeShared } from "@fireflies/kit";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
@@ -50,7 +51,7 @@ import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
 import type { ConnectArgs, KeptCopy, Alive, Ask, Catalog, ForwardAsk, ServerDbs, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
-import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
+import { DbPropsSchema, STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart } from "./state.ts";
 import type { Place } from "./keys.ts";
 import { keyName } from "./keys.ts";
 import { act, setPanel } from "./actions.ts";
@@ -68,7 +69,9 @@ import type { ExportForm } from "./export-form.ts";
 import { here, start, command, handoverOut, newSlot, restoreFound } from "./opening.ts";
 import type { SpacePlace } from "./lastview.ts";
 import { shownSpace } from "./lastview.ts";
-import { IO, clientOf, dataHome } from "./session.ts";
+import { clientOf, dataHome } from "./session.ts";
+import { nowMs, runtime } from "./app.ts";
+import type { DbFx, DbRun } from "./app.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import type { FolderEnv } from "./folderenv.ts";
 import type { Setup } from "./clients.ts";
@@ -93,6 +96,10 @@ import { keepSizes, keptSizes } from "./layout.ts";
 
 const NO_PROPS: DbProps = {};
 const BEAT = 4000;
+const TICK = "1 second";
+
+/** The props as they came (another shape: none, the shown space's folder then). */
+const propsOf = Schema.decodeUnknownOption(DbPropsSchema);
 
 export default class Databases extends View {
   overlay: string | null = null;
@@ -109,8 +116,12 @@ export default class Databases extends View {
   handle: FocusHandle | null = null;
   closed = false;
   beatAt = 0;
-  /** The view's own cx (cx.spawn's): it holds across an await and into a later call. */
+  /** init's context (made to be held): the commands loop's, for the actions it starts. */
   own: AsyncContext | null = null;
+  /** This copy's handle on the mod's runtime: every read, loop and save runs through it. */
+  fx: DbFx | null = null;
+  /** The clock read once per render (every countdown on it agrees). */
+  now = 0;
 
   // ---- connections
   saved: Conn[] = [];
@@ -148,8 +159,9 @@ export default class Databases extends View {
   pinnedAt = 0;
   /** How this machine gets its programs (the install line a missing client offers). */
   setup: Setup = "other";
-  /** The private folder (0700) runs hand files over in. */
+  /** The private folder (0700) runs hand files over in; why there is none, when it couldn't be made. */
   dir: string | null = null;
+  dirProblem: string | null = null;
 
   // ---- panels
   panel: PanelId = "conns";
@@ -213,10 +225,12 @@ export default class Databases extends View {
   seen = { conns: { at: -1 }, tables: { at: -1 }, structure: { at: -1 }, log: { at: -1 } };
 
   override init(p: Props | undefined, cx: AsyncContext): void {
-    const given = props() ?? p;
-    const pr = isDbProps(given) ? given : NO_PROPS;
+    const pr = Option.getOrElse(propsOf(props() ?? p), () => NO_PROPS);
     const h = pr.folder !== undefined ? { folder: pr.folder, on: pr.on ?? null } : here();
+    const fx = runtime.attach(cx, (message) => this.say(message, "failed"));
 
+    this.fx = fx;
+    this.own = cx;
     this.overlay = pr.overlay ?? null;
     this.slot = pr.slot ?? null;
     this.dividers = new Dividers(keptSizes(this.overlay !== null), (sizes) => keepSizes(this.overlay !== null, sizes));
@@ -228,84 +242,116 @@ export default class Databases extends View {
     this.handle.focus();
 
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
-    if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.focusShown());
+    if (this.overlay !== null) fx.run(Effect.forEach([60, 190, 350], (ms) => Effect.andThen(Effect.sleep(ms), Effect.sync(() => this.focusShown())), { concurrency: 1 }));
 
     this.beat();
-    cx.spawn(async (cx) => {
-      this.own = cx;
-      this.dir = await privateDir(IO);
-      void setupOf(exec).then((s) => {
-        this.setup = s;
-      });
-      this.saved = await readConnections(IO, dataHome());
-      this.pinnedAt = Date.now();
-      // The folder's environment loads beside the first connect (a client may come from it).
-      const env = loadFolderEnv(this, cx);
+    fx.run(this.opening(pr));
+    fx.run(Effect.forever(Effect.andThen(Effect.sleep(TICK), this.tick())), { redraw: false });
+    fx.run(Effect.forever(Commands.use((c) => c.next).pipe(
+      Effect.tap((name) => Effect.sync(() => command(this, name, cx))),
+      Effect.andThen(redraw),
+    )), { redraw: false });
+  }
 
-      await start(this, pr, cx);
-      await discover(this, cx, env);
-      restoreFound(this, cx);
+  /** Runs `effect` for this copy (`key`: a run under the same key replaces the one before). */
+  run<A, E>(effect: Effect.Effect<A, E, DbRun>, options?: { readonly key?: string }): void {
+    this.fx?.run(effect, options);
+  }
+
+  /** The window's start: its private folder, the pinned connections, where it was (or what was
+   *  sent), the folder's connections, each listed kind's client. */
+  opening(pr: DbProps): Effect.Effect<void, never, DbRun> {
+    return Effect.gen({ self: this }, function* () {
+      const dir = yield* Effect.result(privateDir);
+
+      if (Result.isSuccess(dir)) this.dir = dir.success;
+      else this.dirProblem = dir.failure.message;
+
+      this.run(Effect.map(setupOf, (s) => {
+        this.setup = s;
+      }));
+
+      const saved = yield* Effect.result(readConnections(dataHome()));
+
+      if (Result.isSuccess(saved)) this.saved = saved.success;
+      else this.say(`the pinned connections couldn't be read: ${saved.failure.message}`, "failed");
+
+      this.pinnedAt = yield* Clock.currentTimeMillis;
+
+      // The folder's environment loads beside the first connect (a client may come from it).
+      this.run(loadFolderEnv(this));
+      yield* start(this, pr);
+      yield* discover(this);
+
+      restoreFound(this);
       // Each listed kind's client looked for once the folder's environment is known: a row whose
       // client is missing says so before it's connected to.
-      await env;
-      await Promise.all([...new Set(connList(this).map((c) => c.kind))].map((k) => clientOf(this, k)));
-      cx.notify();
+      const env = this.env;
+
+      if (env.kind === "loading") yield* Deferred.await(env.done);
+
+      yield* Effect.forEach(Arr.dedupe(Arr.map(connList(this), (c) => c.kind)), (k) => clientOf(this, k), { concurrency: "unbounded", discard: true });
     });
-    cx.timer.every(1000, (cx) => this.tick(cx));
-    cx.spawn(async (cx) => {
-      for (;;) {
-        command(this, await nextCommand(), cx);
-        cx.notify();
+  }
+
+  /** A window's note that it's open (nocturne's toggle reads it), renewed every few seconds. */
+  beat(): void {
+    if (this.overlay === null) return;
+
+    this.beatAt = nowMs();
+    writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: this.beatAt });
+  }
+
+  /** Every second: the beat, another window's pins, the focus coming back, the reads' seconds,
+   *  the query tabs kept, an old note gone. */
+  tick(): Effect.Effect<void, never, DbRun> {
+    return Effect.gen({ self: this }, function* () {
+      const now = yield* Clock.currentTimeMillis;
+
+      if (now - this.beatAt >= BEAT) this.beat();
+
+      // Another window changed the pinned connections: read them again.
+      yield* syncPinned(this);
+
+      // The window got the keyboard back after a while: its connection is asked once more.
+      if (this.focusAt !== 0) {
+        this.focusAt = 0;
+        focusArrived(this, now);
+      }
+
+      // A read's seconds count up where it's shown; one past its deadline ends.
+      if (this.reads.length !== 0) {
+        overdue(this, now);
+        yield* redraw;
+      }
+
+      if (this.queriesDirty) this.run(saveQueries(this), { key: "queries" });
+
+      if (this.note !== null && this.note.tone !== "working" && now - this.note.at > 6000) {
+        this.note = null;
+        yield* redraw;
       }
     });
   }
 
-  /** A window's note that it's open (nocturne's toggle), renewed every few seconds. */
-  beat(): void {
-    if (!this.overlay) return;
-
-    this.beatAt = Date.now();
-    writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: this.beatAt });
-  }
-
-  tick(cx: Context): void {
-    if (Date.now() - this.beatAt >= BEAT) this.beat();
-
-    // Another window changed the pinned connections: read them again.
-    void syncPinned(this, cx);
-
-    // The window got the keyboard back after a while: its connection is asked once more.
-    if (this.focusAt) {
-      this.focusAt = 0;
-      focusArrived(this, cx);
-    }
-
-    // A read's seconds count up where it's shown; one past its deadline ends.
-    if (this.reads.length) {
-      overdue(this);
-      cx.notify();
-    }
-
-    if (this.queriesDirty) void saveQueries(this);
-
-    if (this.note && this.note.tone !== "working" && Date.now() - this.note.at > 6000) {
-      this.note = null;
-      cx.notify();
-    }
-  }
-
-  override async close(): Promise<void> {
+  override close(): Promise<void> {
     this.closed = true;
 
     const w = readShared(shared, WINDOW_KEY, null);
 
-    if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
+    if (this.overlay !== null && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
 
     this.secrets.clear();
     this.sourced.clear();
-    await saveQueries(this);
 
-    if (this.dir) await removeDir(IO, this.dir);
+    const dir = this.dir;
+    const last = Effect.andThen(Effect.ignore(saveQueries(this)), dir === null ? Effect.void : removeDir(dir));
+
+    // Every read and loop of this copy is interrupted; its query tabs are kept and its folder goes on the
+    // mod's runtime (as github's cache write), so the close waits for them and no run of the copy can stop them.
+    void this.fx?.close();
+
+    return runtime.runtime.runPromise(Effect.andThen(Effect.yieldNow, last));
   }
 
   // ---- what the modules ask of the view
@@ -314,16 +360,16 @@ export default class Databases extends View {
   closeWindow(): void {
     const id = this.overlay;
 
-    if (id) beforeLeaving(this, "close", () => closeOverlay(id));
+    if (id !== null && Str.isNonEmpty(id)) beforeLeaving(this, "close", () => closeOverlay(id));
   }
 
   /** The keyboard back to the view (or the shown query's editor). */
   focusShown(): void {
-    if (this.closed || this.form || this.password || this.exporting || this.rename) return;
+    if (this.closed || this.form !== null || this.password !== null || this.exporting !== null || this.rename !== null) return;
 
     const q = this.shownQuery();
 
-    if (this.panel === "main" && q && !q.inResults) q.editor.focus();
+    if (this.panel === "main" && q !== null && !q.inResults) q.editor.focus();
     else this.handle?.focus();
   }
 
@@ -332,7 +378,7 @@ export default class Databases extends View {
   }
 
   say(text: string, tone: Note["tone"]): void {
-    this.note = noteOf(text, tone);
+    this.note = { text, tone, at: nowMs() };
   }
 
   /** The shown query tab, or null on the Rows tab. */
@@ -342,7 +388,7 @@ export default class Databases extends View {
 
   /** The room the dividers share: the view, its body inside its padding, the shown query's box. */
   room(): Room {
-    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() ? this.queryBox : null };
+    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() !== null ? this.queryBox : null };
   }
 
   /** Where keys go now. */
@@ -351,7 +397,7 @@ export default class Databases extends View {
 
     const q = this.shownQuery();
 
-    return q ? (q.inResults ? "results" : "editor") : "rows";
+    return q !== null ? (q.inResults ? "results" : "editor") : "rows";
   }
 
   connected(c: Conn, ok: boolean): void {
@@ -360,25 +406,25 @@ export default class Databases extends View {
 
   /** A table's rows as last known (its count or the server's estimate). */
   tableRows(t: Pick<TableRef, "schema" | "name">): number | null {
-    return this.catalog.tables.find((x) => x.name === t.name && x.schema === t.schema)?.rows ?? null;
+    return Option.getOrUndefined(Arr.findFirst(this.catalog.tables, (x) => x.name === t.name && x.schema === t.schema))?.rows ?? null;
   }
 
-  refreshCatalog(cx: Context): void {
-    void loadTables(this, cx);
+  refreshCatalog(): void {
+    this.run(loadTables(this), { key: "tables" });
   }
 
-  askPassword(c: Conn, keychain: boolean, cx: Context, then?: () => void): void {
-    askPassword(this, c, keychain, cx, then);
+  askPassword(c: Conn, keychain: boolean, then?: () => void): void {
+    askPassword(this, c, keychain, then);
   }
 
-  connectTo(c: Conn, cx: Context): void {
-    void connect(this, c, cx);
+  connectTo(c: Conn): void {
+    this.run(connect(this, c));
   }
 
-  addQuery(text: string, cx: Context): QueryTab {
+  addQuery(text: string): QueryTab {
     const q = newQuery(this, text);
     // The caret after the text: what's typed or dropped next follows it.
-    const lines = text.split("\n");
+    const lines = Str.split(text, "\n");
 
     q.editor.set_cursor(lines.length - 1, lines.at(-1)?.length ?? 0);
     this.queries.push(q);
@@ -386,13 +432,12 @@ export default class Databases extends View {
     this.panel = "main";
     this.queriesDirty = true;
     q.editor.focus();
-    cx.notify();
 
     return q;
   }
 
-  loadQueries(c: Conn, cx: Context): Promise<void> {
-    return loadQueries(this, c, cx);
+  loadQueries(c: Conn): void {
+    this.run(loadQueries(this, c), { key: "queries" });
   }
 
   logLine(line: LogLine): void {
@@ -404,16 +449,8 @@ export default class Databases extends View {
     act(this, "window", "history", cx);
   }
 
-  /** An action in a place (a click's way to what a key does). */
-  /** The cx for work that awaits or keeps it for later: the view's own. A handler's speaks for
-   *  its call only and refuses once that call has returned, so a read started by a key or a click
-   *  would end in "cx is no longer valid" at its first await. */
-  held(cx: Context): Context {
-    return this.own ?? cx;
-  }
-
   act(place: Place, action: string, cx: Context): boolean {
-    return act(this, place, action, this.held(cx));
+    return act(this, place, action, cx);
   }
 
   setPanel(p: PanelId): void {
@@ -421,21 +458,21 @@ export default class Databases extends View {
   }
 
   setTablesTab(key: string, _cx: Context): void {
-    const tab = TABLES_TABS.find((x) => x === key);
+    const tab = Option.getOrUndefined(Arr.findFirst(TABLES_TABS, (x) => x === key));
 
-    if (tab) this.tablesTab = tab;
+    if (tab !== undefined) this.tablesTab = tab;
 
     this.tableAt = 0;
     this.setPanel("tables");
 
     // The server's databases, read each time the tab is shown (one small catalog read).
-    if (tab === "databases" && !dbsNow(this)?.busy) void loadDatabases(this, _cx);
+    if (tab === "databases" && dbsNow(this)?.busy !== true) this.run(loadDatabases(this));
   }
 
   setStructTab(key: string, _cx: Context): void {
-    const tab = STRUCT_TABS.find((x) => x === key);
+    const tab = Option.getOrUndefined(Arr.findFirst(STRUCT_TABS, (x) => x === key));
 
-    if (tab) this.structTab = tab;
+    if (tab !== undefined) this.structTab = tab;
 
     this.structAt = 0;
     this.setPanel("structure");
@@ -445,7 +482,7 @@ export default class Databases extends View {
   scrollGrid(by: number, across: number, _cx: Context): void {
     const g = shownGrid(this);
 
-    if (g) g.put(scrollGrid(g.at, g.set, g.cols, by, across, this.gridSize.height));
+    if (g !== null) g.put(scrollGrid(g.at, g.set, g.cols, by, across, this.gridSize.height));
   }
 
   /** The Rows grid's column types, from the table's structure. */
@@ -453,20 +490,18 @@ export default class Databases extends View {
     const set = this.rows.set;
     const s = this.struct.data;
 
-    if (!set || !s || this.struct.table?.name !== this.rows.browse?.table.name) return undefined;
+    if (set === null || s === null || this.struct.table?.name !== this.rows.browse?.table.name) return undefined;
 
-    return set.columns.map((c) => s.columns.find((x) => x.name === c)?.type ?? "");
+    return Arr.map(set.columns, (c) => Option.getOrUndefined(Arr.findFirst(s.columns, (x) => x.name === c))?.type ?? "");
   }
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
-  move(cx: Context): void {
-    beforeLeaving(this, this.overlay ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
+  move(): void {
+    beforeLeaving(this, this.overlay !== null && Str.isNonEmpty(this.overlay) ? "move into a pane" : "move out to a window", () => handoverOut(this));
   }
 
   key(e: KeyEvent, cx: Context): void {
-    // What the key starts may await or keep its cx: it gets the view's own. The event is cx's.
-    const own = this.held(cx);
-    const taken = modalKey(this, e, own);
+    const taken = modalKey(this, e, cx);
 
     // A text field's key, left unclaimed: a claimed one never reaches the field (popups.ts).
     if (taken === "typing") return;
@@ -480,7 +515,7 @@ export default class Databases extends View {
 
     const place = this.place();
 
-    if (act(this, place, keyName(e), own)) {
+    if (act(this, place, keyName(e), cx)) {
       cx.stop_propagation();
       cx.notify();
     }
@@ -488,11 +523,13 @@ export default class Databases extends View {
 
   override render(): Element {
     const t = theme();
+
+    this.now = nowMs();
     const handle = this.handle;
     // The keyboard coming back to the view (the tick asks the connection again: connstate.ts).
     const focused = handle?.is_focused() ?? false;
 
-    if (focused && !this.hadFocus) this.focusAt = Date.now();
+    if (focused && !this.hadFocus) this.focusAt = this.now;
 
     this.hadFocus = focused;
     const formOpen = Boolean(this.form || this.exporting);
@@ -500,7 +537,7 @@ export default class Databases extends View {
     const view = v_flex().id("databases").relative().size_full().bg(t.background).text_size(11).text_color(t.foreground)
       .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.muted));
 
-    return (handle ? view.track_focus(handle) : view)
+    return (handle !== null ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
       .map((el) => tracking(el, this.dividers, {
@@ -515,7 +552,7 @@ export default class Databases extends View {
       }))
       // A file dropped from outside: a SQLite file opens as a connection (drops.ts).
       .on_drop((e, cx) => {
-        dropFiles(this, e.paths, cx);
+        dropFiles(this, e.paths);
         cx.notify();
       })
       .on_size_change((drawn, cx) => {
@@ -531,12 +568,12 @@ export default class Databases extends View {
       .map((el) => {
         const m = menuLayer(t, this);
 
-        return m ? el.child(m) : el;
+        return m !== null ? el.child(m) : el;
       })
       .map((el) => {
         const g = ghost(t, this);
 
-        return g ? el.child(g) : el;
+        return g !== null ? el.child(g) : el;
       });
   }
 }

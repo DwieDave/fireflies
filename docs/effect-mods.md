@@ -848,6 +848,38 @@ Left: its tests load the mod after `mock.module("herdr")` and `await import` at
 the top (as git's and notifications' do): the views read the theme, props,
 settings and the shown space from herdr directly in a render.
 
+**Wave 1: databases, done (2026-11-23).** The whole mod in the Effect pass
+(`effect_sources` names `defaults/mods/databases`): its 2,639 findings fixed,
+its guard.ts and guards.ts gone. The clients (psql, mysql, sqlite3 through
+`sh`), `security`, `direnv`, kubectl's forward through `Hc` and `mktemp` /
+`rm` run through `Exec`; connections.json, the history, the query tabs and
+the exports through `Files`; libSQL's HTTP through `fetchClient` and
+`policy` with no retry (fx.ts `Libsql`: a statement may have landed). Each
+copy attaches to the mod's runtime (app.ts) in `init`; its opening, command
+loop, tick, every read (reads.ts: one per panel, stoppable, a late one left
+unheard), every run of SQL, the connection checks, the forward's start and
+the folder's environment are runs on it, ended by `close`. The query tabs'
+save and the private folder's removal run on the mod's runtime after the
+copy's runs are interrupted (as github's cache write). The pickers stay
+`Effect.promise` over herdr's `pickFile` / `pickFolder` at the edge (they
+don't reject; Developer, 2026-11-23). Its tests run the window's effects
+through scripts/databases-host.ts (`viewRun` on the mod's runtime over the
+herdr stand-in, `runReal` / `realServices` for real programs and files on
+the kit's test layers). What a read of it showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| A write another window beat, a file it couldn't read and one it couldn't write all looked alike: any failure retried five times and dropped | store.ts | retried on `StaleFile` alone; a `FileError` or a file of another shape (`DecodeError`, "left as it is") is said |
+| A keychain that couldn't run read as "no password" | secrets.ts | `KeychainError` / `ExecError`, said where the password was wanted |
+| Every read, run, check and timer a `cx.spawn` or `cx.timer`: nothing stopped them when the window closed | main.ts, reads.ts, session.ts, connstate.ts, forward.ts | runs on the copy's runtime; `fx.close()` ends them |
+| A run the stop killed stayed "running…" in the Log | session.ts | settled as stopped (`ok: false`) when interrupted |
+| The folder's environment, interrupted while loading, left the runs waiting on it waiting for ever | folderenv.ts | its `Deferred` is released whatever ends the load |
+| Closing a query tab, closing the others, or disconnecting built the tabs' save and dropped it: the tabs were kept only at the next tick, and a disconnect's not at all | act-grid.ts, menus.ts, actions.ts | run on the window, with the tabs as they were when asked (databases-view.test.ts) |
+| The kept column arrangements decoded whole: one entry of another shape dropped every table's | columns.ts | the kit's `mapOf`, entry by entry |
+| The dragged sizes a hand-made guard | layout.ts | `@fireflies/dividers`' `SizesSchema` |
+| A pane's slot from `Date.now()` and `Math.random()`; a history entry's age read the clock itself | opening.ts, menus.ts | the runtime's Clock and Random; one clock read per menu |
+| JSON written with `JSON.stringify` (a label, a request body, the tabs, an export) | kube.ts, hrana.ts, queries.ts, export.ts, grid.ts | through Schema (`encodeEffect` where it runs in an effect) |
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings

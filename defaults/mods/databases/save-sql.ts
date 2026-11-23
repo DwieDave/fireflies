@@ -10,6 +10,7 @@
 // the same statements with every value bound to a `?`. Also what a failed
 // save's error says, in the row's words.
 
+import { Array as Arr } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell, Outcome } from "./parse-out.ts";
 import type { ScriptStatement } from "./script.ts";
@@ -74,7 +75,7 @@ function updateOf(t: SaveTarget, edits: Edits, key: readonly Cell[], cells: Read
     args.push(...p.args);
   }
 
-  edits.keyCols.forEach((k, i) => {
+  Arr.forEach(edits.keyCols, (k, i) => {
     const v = key[i] ?? null;
     const p = valuePart(t, v, typeOf(t.types.get(k) ?? (k === "rowid" ? "integer" : "")));
 
@@ -98,7 +99,7 @@ function updateOf(t: SaveTarget, edits: Edits, key: readonly Cell[], cells: Read
     if (t.bind && change.was !== null) whereArgs.push({ type: "text", value: change.was });
   }
 
-  return { sql: `UPDATE ${qualified(t.kind, edits.table)} SET ${sets.join(", ")} WHERE ${conds.join(" AND ")}`, args: [...args, ...whereArgs], where: words.join(", ") };
+  return { sql: `UPDATE ${qualified(t.kind, edits.table)} SET ${Arr.join(sets, ", ")} WHERE ${Arr.join(conds, " AND ")}`, args: [...args, ...whereArgs], where: Arr.join(words, ", ") };
 }
 
 /** The save's statements, in order, or why one change can't be written. */
@@ -129,11 +130,11 @@ export function saveStatements(t: SaveTarget, edits: Edits): { readonly statemen
 export function saveError(statements: readonly SaveStatement[], o: Outcome): string | null {
   const e = o.error;
 
-  if (!e) return null;
+  if (e === null) return null;
 
   const st = e.index !== null ? statements[e.index] : undefined;
 
-  if (!st) return `${e.message} · nothing was saved`;
+  if (st === undefined) return `${e.message} · nothing was saved`;
 
   if (st.role === "guard") return `${st.where}: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved`;
 

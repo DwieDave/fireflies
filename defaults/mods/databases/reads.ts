@@ -7,9 +7,11 @@
 // is left to finish unheard. The engine has no setTimeout: the window's tick
 // (every second) ends the reads past their deadline (overdue).
 
-import type { Context } from "gpui-kit";
-import { exec, writeTextFile } from "herdr";
+import { Array as Arr, Clock, Deferred, Effect, Option } from "effect";
+import { redraw } from "@fireflies/kit";
 import { cancel } from "./runner.ts";
+import { nowMs } from "./app.ts";
+import type { DbRun } from "./app.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The panel a read is for (where its words and stop chip are drawn). */
@@ -36,50 +38,44 @@ export type Ended<T> = { readonly value: T } | { readonly stopped: true } | { re
 let ids = 0;
 
 /** Runs `work` as a read of `panel`: listed while it runs; `started(nonce)` makes it stoppable by
- *  interrupting the client. A throw in `work` comes back as a thrown error, the read unlisted. */
-export async function reading<T>(v: DbView, what: string, panel: ReadPanel, cx: Context, work: (started: (nonce: string) => void) => Promise<T>, deadline: number | null = null): Promise<Ended<T>> {
-  cx = v.held(cx);
+ *  interrupting the client. Stopped or late, the work is interrupted (a client run is also
+ *  cancelled by its nonce; a program's answer that comes after is dropped). A failure of `work`
+ *  is the read's, the read unlisted however it ends. */
+export const reading = <A, E, R>(v: DbView, what: string, panel: ReadPanel, work: (started: (nonce: string) => void) => Effect.Effect<A, E, R>, deadline: number | null = null): Effect.Effect<Ended<A>, E, R | DbRun> => Effect.gen(function* () {
+  const ended = Deferred.makeUnsafe<Ended<A>>();
+  const at = yield* Clock.currentTimeMillis;
 
-  let settle: (e: Ended<T>) => void = () => {};
-
-  const ended = new Promise<Ended<T>>((resolve) => {
-    settle = resolve;
-  });
-
-  const at = Date.now();
+  const unlist = (read: Read) => {
+    v.reads = Arr.filter(v.reads, (r) => r !== read);
+  };
 
   const read: Read = {
     id: ++ids, what, panel, at, until: deadline === null ? null : at + deadline, nonce: null,
     end: (how) => {
-      if (!v.reads.includes(read)) return;
+      if (!Arr.contains(v.reads, read)) return;
 
-      v.reads = v.reads.filter((r) => r !== read);
-      settle(how === "stopped" ? { stopped: true } : { late: deadline ?? Date.now() - at });
+      unlist(read);
+      Deferred.doneUnsafe(ended, Effect.succeed(how === "stopped" ? { stopped: true } : { late: deadline ?? nowMs() - at }));
 
-      if (read.nonce && v.dir) void cancel({ exec, writeTextFile }, v.dir, read.nonce);
+      if (read.nonce !== null && v.dir !== null) v.run(cancel(v.dir, read.nonce));
     },
   };
 
   v.reads = [...v.reads, read];
-  cx.notify();
+  yield* redraw;
 
-  const done = work((n) => {
+  const done = Effect.map(work((n) => {
     read.nonce = n;
-  }).then((value): Ended<T> => ({ value }));
+  }), (value): Ended<A> => ({ value }));
 
-  try {
-    return await Promise.race([done, ended]);
-  } finally {
-    v.reads = v.reads.filter((r) => r !== read);
-    cx.notify();
-  }
-}
+  return yield* Effect.raceFirst(done, Deferred.await(ended)).pipe(Effect.ensuring(Effect.andThen(Effect.sync(() => unlist(read)), redraw)));
+});
 
 /** The read shown in a panel (the newest), or null. */
-export const readIn = (v: DbView, panel: ReadPanel): Read | null => v.reads.filter((r) => r.panel === panel).at(-1) ?? null;
+export const readIn = (v: DbView, panel: ReadPanel): Read | null => Option.getOrNull(Arr.findLast(v.reads, (r) => r.panel === panel));
 
 /** A read's words with its seconds: "reading the tables… 4 s". */
-export function readWords(r: Read, now = Date.now()): string {
+export function readWords(r: Read, now: number): string {
   const s = Math.floor((now - r.at) / 1000);
 
   return `${r.what}… ${s} s`;
@@ -87,7 +83,7 @@ export function readWords(r: Read, now = Date.now()): string {
 
 /** Stops every read (esc while one runs; the stop chip): true when there was one. */
 export function stopReads(v: DbView, panel: ReadPanel | null = null): boolean {
-  const list = v.reads.filter((r) => panel === null || r.panel === panel);
+  const list = Arr.filter(v.reads, (r) => panel === null || r.panel === panel);
 
   for (const r of list) r.end("stopped");
 
@@ -95,7 +91,7 @@ export function stopReads(v: DbView, panel: ReadPanel | null = null): boolean {
 }
 
 /** Ends the reads past their deadline (the window's tick). */
-export function overdue(v: DbView, now = Date.now()): void {
+export function overdue(v: DbView, now: number): void {
   for (const r of v.reads) if (r.until !== null && now >= r.until) r.end("late");
 }
 

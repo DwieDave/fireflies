@@ -68,7 +68,7 @@ let clipboard = "";
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
@@ -254,7 +254,7 @@ test.skipIf(!SQLITE)("o sorts the table by ORDER BY (shown on the WHERE line), a
   await until(() => !v.rows.busy && v.rows.browse.sort === null);
   expect(render(v)).not.toContain("order by");
   // A query's result: its own sort, NULL last, the header marked and the line saying it's here.
-  const q = v.addQuery("select id, note from lanterns where id <= 3 order by id;", cx);
+  const q = v.addQuery("select id, note from lanterns where id <= 3 order by id;");
   const { runQuery } = await import("../defaults/mods/databases/query.ts");
   runQuery(v, q, false, cx);
   await until(() => q.outcome !== null && !q.running);
@@ -569,7 +569,7 @@ test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Ro
   sharedState = {};
   const v = await opened();
   // A new tab's caret is after its text (a name dropped goes there).
-  const q = v.addQuery("select *\nfrom ", cx);
+  const q = v.addQuery("select *\nfrom ");
   expect(q.editor.caretAt).toEqual({ line: 1, col: 5 });
   q.editor.cursor = () => ({ line: 0, col: 14 });
   let put = "";
@@ -596,7 +596,7 @@ test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Ro
   expect(v.press).toBe(null);
   // Query tabs: the third onto the first's place.
   v.queries = [];
-  for (const n of ["a", "b", "c"]) v.addQuery(n, cx).name = n;
+  for (const n of ["a", "b", "c"]) v.addQuery(n).name = n;
   const { moveQuery } = await import("../defaults/mods/databases/main-view.ts");
   moveQuery(v, 3, /^tab:(\d+)$/.exec("tab:1"));
   expect([v.queries.map((x: any) => x.name), v.mainTab]).toEqual([["c", "a", "b"], 1]);
@@ -621,14 +621,14 @@ test.skipIf(!SQLITE)("files dropped on the window: a SQLite file connects (not s
   const file = join(dirOf, "moths.sql");
   writeFileSync(file, "delete from lanterns;");
   const { dropFiles } = ux.drops;
-  dropFiles(v, ["/x/notes.txt"], cx);
+  dropFiles(v, ["/x/notes.txt"]);
   expect(v.note.text).toBe("only a SQLite file (.db, .sqlite, .sqlite3, .db3) or a .sql file opens here");
-  dropFiles(v, [file], cx);
+  dropFiles(v, [file]);
   await until(() => v.queries.some((q: any) => q.name === "moths"));
   expect(v.shownQuery().editor.value()).toBe("delete from lanterns;");
   expect(v.ask).toBe(null);
   expect(sql("select count(*) from lanterns")).toBe("250");
-  dropFiles(v, [DB], cx);
+  dropFiles(v, [DB]);
   expect(v.sent[0]).toMatchObject({ kind: "sqlite", path: DB, origin: "sent", from: "dropped here" });
   await until(() => !v.catalog.busy && v.active?.origin === "sent");
   expect(v.catalog.tables.map((t: any) => t.name)).toContain("lanterns");
@@ -637,7 +637,7 @@ test.skipIf(!SQLITE)("files dropped on the window: a SQLite file connects (not s
 test.skipIf(!SQLITE)("a tab renamed (a double click, its menu): enter keeps it, esc leaves it, the window's keys type in it", async () => {
   seed();
   const v = await opened();
-  const q = v.addQuery("", cx);
+  const q = v.addQuery("");
   ux.menus.startRename(v, q);
   for (const k of ["o", "O", "q", "{", "H", "?", "1"]) expect(v.key(key(k), cx)).toBe(undefined);
   const { modalKey } = await import("../defaults/mods/databases/popups.ts");

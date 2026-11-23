@@ -15,6 +15,7 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
 import { keysKey, keysView } from "@fireflies/keyhelp";
@@ -41,7 +42,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
   }
 
   if (ask.step === 1 && (k === "y" || k === "enter")) {
-    if (ask.verdict.risk === "destructive" && ask.input) {
+    if (ask.verdict.risk === "destructive" && ask.input !== null) {
       ask.step = 2;
       ask.input.focus();
 
@@ -61,7 +62,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
 
   const want = ask.verdict.target ?? "yes";
 
-  if ((ask.input?.value() ?? "").trim() !== want) {
+  if (Str.trim((ask.input?.value() ?? "")) !== want) {
     v.say(`type ${want} to go on, or esc`, "failed");
 
     return true;
@@ -79,7 +80,7 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
 export function digitsOf(rows: Menu["rows"]): (number | null)[] {
   let n = 0;
 
-  return rows.map((r) => (r.key || n >= 9 ? null : ++n));
+  return Arr.map(rows, (r) => ((r.key !== undefined && Str.isNonEmpty(r.key)) || n >= 9 ? null : ++n));
 }
 
 function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
@@ -96,9 +97,9 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
     row?.go();
   } else {
     // A row's own key (as the panel has it) runs it from the menu too.
-    const row = m.rows.find((r) => r.key === k);
+    const row = Option.getOrUndefined(Arr.findFirst(m.rows, (r) => r.key === k));
 
-    if (row) {
+    if (row !== undefined) {
       v.menu = null;
       row.go();
     }
@@ -106,9 +107,9 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
 }
 
 /** A line input's keys (the filter, the find): enter keeps it, esc drops it; the rest is typing. */
-function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
+function lineKey(v: DbView, e: KeyEvent): Taken {
   if (v.rows.filtering) {
-    if (e.key === "enter") applyFilter(v, cx);
+    if (e.key === "enter") applyFilter(v);
     else if (e.key === "escape") {
       v.rows.filtering = false;
       v.filterInput = null;
@@ -120,7 +121,7 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
 
   const find = v.tableFind;
 
-  if (!find) return false;
+  if (find === null) return false;
 
   if (e.key === "escape") {
     v.tableFind = null;
@@ -190,29 +191,29 @@ function passwordKey(v: DbView, e: KeyEvent): Taken {
 
 /** Hands a key to what's over the view: taken, "typing" (the focused field's), or not. */
 export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
-  if (v.forwardAsk) return forwardAskKey(v, v.forwardAsk, e, cx);
+  if (v.forwardAsk !== null) return forwardAskKey(v, v.forwardAsk, e, cx);
 
-  if (v.form) return v.form.key(e, cx);
+  if (v.form !== null) return v.form.key(e, cx);
 
-  if (v.exporting) return v.exporting.key(e, cx);
+  if (v.exporting !== null) return v.exporting.key(e, cx);
 
-  if (v.password) return passwordKey(v, e);
+  if (v.password !== null) return passwordKey(v, e);
 
-  if (v.rename) return renameKey(v, e);
+  if (v.rename !== null) return renameKey(v, e);
 
-  if (v.review) {
-    reviewKey(v, e, cx);
+  if (v.review !== null) {
+    reviewKey(v, e);
 
     return true;
   }
 
   const ask = v.ask;
 
-  if (ask) return askKey(v, ask, e);
+  if (ask !== null) return askKey(v, ask, e);
 
   const m = v.menu;
 
-  if (m) {
+  if (m !== null) {
     menuKey(v, m, e);
 
     return true;
@@ -220,23 +221,23 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
 
   const edit = editKey(v, e);
 
-  if (edit) return edit;
+  if (edit !== false) return edit;
 
   // The SQL editor has the keyboard: its typing (a ? too) is its own, not the window's.
-  if (!v.help && v.place() === "editor" && v.shownQuery()?.editor.focused()) return "typing";
+  if (!v.help && v.place() === "editor" && v.shownQuery()?.editor.focused() === true) return "typing";
 
   // A line being typed in (the WHERE filter, the find) takes its ? too.
-  if (v.rows.filtering || v.findTyping) return lineKey(v, e, cx);
+  if (v.rows.filtering || v.findTyping) return lineKey(v, e);
 
   const help = keysKey(e, v.help);
 
-  if (help || v.help) {
-    if (help) v.help = help === "toggle" ? !v.help : false;
+  if (help !== null || v.help) {
+    if (help !== null) v.help = help === "toggle" ? !v.help : false;
 
     return true;
   }
 
-  return lineKey(v, e, cx);
+  return lineKey(v, e);
 }
 
 /** The ask, in the bar over the keys: y / esc, then for a destructive one the name typed. */
@@ -249,7 +250,7 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
     .child(div().relative().text_color(danger ? t.ansi1 : t.ansi3).child(danger ? "✕" : "!"))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(ask.text));
 
-  if (ask.step === 2 && ask.input) {
+  if (ask.step === 2 && ask.input !== null) {
     return bar.child(div().relative().text_color(t.dim).child(`type ${ask.verdict.target ?? "yes"}`))
       .child(div().relative().w(180).border(1).border_color(t.ansi1).px(6).child(Input.new(ask.input).text_size(12).text_color(t.foreground)))
       .child(chip(t, "db-ask-no", "esc  no", false, () => dropAsk(v)));
@@ -257,7 +258,7 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
 
   return bar
     .child(chip(t, "db-ask-yes", danger ? "y  yes, then its name" : "y  run", false, () => {
-      if (danger && ask.input) {
+      if (danger && ask.input !== null) {
         ask.step = 2;
         ask.input.focus();
       } else {
@@ -296,14 +297,14 @@ export function keyedAt(v: DbView, m: Menu): Rect | null {
 
   if (m.keyed === "tab") return tabAnchor(v);
 
-  return m.keyed ? rowAnchor(v, m.keyed) : null;
+  return m.keyed !== null && m.keyed !== undefined ? rowAnchor(v, m.keyed) : null;
 }
 
 /** The menu's size: narrower when it stands at something (a press, a cell, a row), as tall as its rows. */
 export function menuSize(v: DbView, m: Menu): Box {
   return {
-    width: Math.min(m.near || keyedAt(v, m) ? 380 : 560, v.size.width - 40),
-    height: Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0)),
+    width: Math.min((m.near !== null && m.near !== undefined) || keyedAt(v, m) !== null ? 380 : 560, v.size.width - 40),
+    height: Math.min(440, v.size.height - 80, 26 + Arr.reduce(m.rows, 0, (n, r) => n + (r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24))),
   };
 }
 
@@ -312,14 +313,14 @@ export function menuSize(v: DbView, m: Menu): Box {
 export function menuLayer(t: Theme, v: DbView): Element | null {
   const m = v.menu;
 
-  if (!m) return null;
+  if (m === null) return null;
 
   const digits = digitsOf(m.rows);
   const { width: w, height: h } = menuSize(v, m);
   // What a key's menu stands at is found now, not when it opened: the window may have been resized since.
   const at = placeMenu({ width: w, height: h }, v.size, m.near ?? keyedAt(v, m));
 
-  const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
+  const rows = Arr.map(m.rows, (r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub !== undefined && Str.isNonEmpty(r.sub) ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edge(t)}55`))
     .when(i === m.at, (el) => el.children(band(t, true)))
     .on_click((_e, cx) => {
@@ -327,9 +328,9 @@ export function menuLayer(t: Theme, v: DbView): Element | null {
       r.go();
       cx.notify();
     })
-    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(digits[i] ? String(digits[i]) : ""))
+    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(digits[i] !== null && digits[i] !== undefined && digits[i] !== 0 ? String(digits[i]) : ""))
     .child(v_flex().relative().flex_1().min_w(0)
-      .child(div().truncate().text_color(r.danger ? t.blocked : i === m.at ? t.foreground : t.muted).child(r.label))
+      .child(div().truncate().text_color(r.danger === true ? t.blocked : i === m.at ? t.foreground : t.muted).child(r.label))
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? ""))))
     .when(Boolean(r.key), (el) => el.child(div().relative().flex_none().text_color(t.accent).child(r.key ?? ""))));
 
@@ -344,7 +345,7 @@ export function menuLayer(t: Theme, v: DbView): Element | null {
 function renamePanel(t: Theme, v: DbView): Element {
   const r = v.rename;
 
-  if (!r) return div();
+  if (r === null) return div();
 
   return centered("db-rename", v_flex().id("db-rename-box").w(Math.min(380, v.size.width - 40)).bg(t.background).border(1).border_color(t.accent).p(14).gap(10)
     .child(div().text_color(t.foreground).child(`Rename ${r.tab.name}`))
@@ -357,17 +358,17 @@ function renamePanel(t: Theme, v: DbView): Element {
 function passwordPanel(t: Theme, v: DbView): Element {
   const pw = v.password;
 
-  if (!pw) return div();
+  if (pw === null) return div();
 
-  const c = [...v.saved, ...v.sent, ...v.found.map((f) => f.conn)].find((x) => x.id === pw.conn);
+  const c = Option.getOrUndefined(Arr.findFirst([...v.saved, ...v.sent, ...Arr.map(v.found, (f) => f.conn)], (x) => x.id === pw.conn));
 
   return centered("db-password", v_flex().id("db-password-box").w(Math.min(420, v.size.width - 40)).bg(t.background).border(1).border_color(t.accent).p(14).gap(10)
     .child(div().text_color(t.foreground).child(`Password for ${c?.name ?? "the connection"}`))
     .map((el) => {
       // Asked because a cluster's secret couldn't be read (or was refused): why, in words.
-      const read = c ? v.sourced.get(c.id) : undefined;
+      const read = c !== undefined ? v.sourced.get(c.id) : undefined;
 
-      return read && !read.ok ? el.child(div().id("db-pw-why").text_size(10).text_color(t.blocked).child(read.text)) : el;
+      return read !== undefined && !read.ok ? el.child(div().id("db-pw-why").text_size(10).text_color(t.blocked).child(read.text)) : el;
     })
     .child(div().border(1).border_color(t.accent).px(8).py(4).child(Input.new(pw.input).text_size(12).text_color(t.foreground)))
     .child(div().text_size(10).text_color(t.dim).child(c?.secret === "keychain" ? "kept in the system keychain" : "kept in this window's memory until it closes; never written anywhere"))
@@ -384,17 +385,17 @@ export function overBody(t: Theme, v: DbView): Element[] {
     out.push(keysView(t, { id: "db-help", title: "Databases", list: helpSections(v.place()), close: () => { v.help = false; } }));
   }
 
-  if (v.review) out.push(reviewPanel(t, v));
+  if (v.review !== null) out.push(reviewPanel(t, v));
 
-  if (v.password) out.push(passwordPanel(t, v));
+  if (v.password !== null) out.push(passwordPanel(t, v));
 
-  if (v.rename) out.push(renamePanel(t, v));
+  if (v.rename !== null) out.push(renamePanel(t, v));
 
-  if (v.form) out.push(v.form.draw(t));
+  if (v.form !== null) out.push(v.form.draw(t));
 
-  if (v.exporting) out.push(v.exporting.draw(t));
+  if (v.exporting !== null) out.push(v.exporting.draw(t));
 
-  if (v.forwardAsk) out.push(forwardAskPanel(t, v, v.forwardAsk, (id, box, close) => centered(id, box, close)));
+  if (v.forwardAsk !== null) out.push(forwardAskPanel(t, v, v.forwardAsk, (id, box, close) => centered(id, box, close)));
 
   return out;
 }

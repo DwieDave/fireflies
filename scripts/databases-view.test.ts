@@ -76,12 +76,15 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
 const { command } = await import("../defaults/mods/databases/opening.ts");
 const { runQuery } = await import("../defaults/mods/databases/query.ts");
+const { runtime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(runtime);
 
 function open(p: any) {
   propsNow = p;
@@ -223,7 +226,7 @@ test("the form: a URL pasted into the host fills the fields; a typed password go
   v.form.inputs.get("host").set_value("postgres://ada:pa%24s@db.local:6543/lantern");
   v.form.fromUrl();
   expect(["host", "port", "user", "database", "password"].map((f) => v.form.value(f))).toEqual(["db.local", "6543", "ada", "lantern", "pa$s"]);
-  await v.form.save(cx);
+  await runView(v.form.save());
   const saved = v.saved[0];
   expect(saved).toMatchObject({ kind: "postgres", host: "db.local", port: 6543, secret: "keychain" });
   const kc = written.find(([p]) => p.startsWith("/tmp/fireflies-db.abc/k-"));
@@ -239,7 +242,7 @@ test("the form: a URL pasted into the host fills the fields; a typed password go
   v.form.inputs.get("host").set_value("db.local");
   v.form.inputs.get("password").set_value("pw2");
   written.length = 0;
-  await v.form.save(cx);
+  await runView(v.form.save());
   const second = v.saved.at(-1);
   expect(second).toMatchObject({ host: "db.local", secret: "ask" });
   expect(v.secrets.get(second.id)).toBe("pw2");
@@ -253,9 +256,35 @@ async function withQuery(conn: any, sql: string) {
   v.dir = "/tmp/fireflies-db.abc";
   v.saved = [conn];
   v.active = conn;
-  const q = v.addQuery(sql, cx);
+  const q = v.addQuery(sql);
   return { v, q };
 }
+
+test("closing a query tab, the others, or disconnecting writes the connection's tabs at once, as they were", async () => {
+  const { loadQueries } = await import("../defaults/mods/databases/queries.ts");
+  const { closeQuery } = await import("../defaults/mods/databases/act-grid.ts");
+  const { closeOthers } = await import("../defaults/mods/databases/menus.ts");
+  const { disconnect } = await import("../defaults/mods/databases/actions.ts");
+  const FILE = "/tmp/herdr-test/data/databases/queries/sq-1.json";
+  const tabs = () => JSON.parse(written.filter(([p]) => p === FILE).at(-1)?.[1] ?? "null")?.tabs.map((t: any) => t.text);
+  fresh();
+  const { v } = await withQuery(LITE, "");
+  await runView(loadQueries(v, LITE));
+  v.queries[0].editor.set_value("select 1;");
+  const b = v.addQuery("select 2;");
+  const c = v.addQuery("select 3;");
+  closeQuery(v, c, cx);
+  await flush();
+  expect(tabs()).toEqual(["select 1;", "select 2;"]);
+  closeOthers(v, b);
+  await flush();
+  expect(tabs()).toEqual(["select 2;"]);
+  b.editor.set_value("select 4;");
+  disconnect(v);
+  await flush();
+  expect(v.active).toBeNull();
+  expect(tabs()).toEqual(["select 4;"]);
+});
 
 test("a write asks once; a DROP asks, then wants its name typed; nothing runs before", async () => {
   fresh();
@@ -415,7 +444,7 @@ test("a query's editor and result split: a divider between them, + in the result
   v.size = { width: 1100, height: 720 };
   v.bodyH = 664;
   v.queryBox = 500;
-  const q = v.addQuery("select 1", cx);
+  const q = v.addQuery("select 1");
   q.inResults = true;
   const ids = (d: [string, any[]][]) => d.filter(([m]) => m === "id").map(([, a]) => a[0]);
   expect(ids(render(v))).toContain(`q${q.id}-split`);

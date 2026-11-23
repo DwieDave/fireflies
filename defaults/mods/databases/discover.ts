@@ -5,6 +5,7 @@
 // otherwise. A password or token found with them is handed back apart from
 // the connection (Found.secret): the window keeps it in memory only.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Conn, Kind, SslMode } from "./kinds.ts";
 import { baseName, isSslMode } from "./kinds.ts";
 
@@ -36,16 +37,17 @@ export const ENV_FILES = [".env", ".env.local", ".env.development", ".env.develo
 export function parseEnvFile(text: string): Map<string, string> {
   const out = new Map<string, string>();
 
-  for (const raw of text.split(/\r?\n/)) {
+  for (const raw of Str.split(text, /\r?\n/)) {
     const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(raw);
 
-    if (!m?.[1]) continue;
+    if (m?.[1] === undefined || Str.isEmpty(m?.[1])) continue;
 
-    let v = (m[2] ?? "").trim();
+    let v = Str.trim((m[2] ?? ""));
     const q = v[0];
+    // A quoted value ends at its closing quote (its index in the rest, after the opening one).
+    const closing = q === '"' || q === "'" ? Str.indexOf(q)(Str.slice(1)(v)) : Option.none();
 
-    if ((q === '"' || q === "'") && v.indexOf(q, 1) > 0) v = v.slice(1, v.indexOf(q, 1));
-    else v = v.replace(/\s+#.*$/, "");
+    v = Option.isSome(closing) ? Str.slice(1, closing.value + 1)(v) : Str.replace(/\s+#.*$/, "")(v);
 
     out.set(m[1], v);
   }
@@ -99,9 +101,9 @@ const MYSQL_MODES: ReadonlyMap<string, SslMode> = new Map([
 export function sslOfQuery(kind: Kind, query: string): SslMode | undefined {
   let out: SslMode | undefined;
 
-  for (const pair of query.split("&")) {
-    const [k = "", raw = ""] = pair.split("=");
-    const value = dec(raw).toLowerCase();
+  for (const pair of Str.split(query, "&")) {
+    const [k = "", raw = ""] = Str.split(pair, "=");
+    const value = Str.toLowerCase(dec(raw));
 
     if (k === "sslmode" && isSslMode(value)) out = value;
     else if (kind === "mysql" && (k === "ssl-mode" || k === "sslMode")) out = MYSQL_MODES.get(value) ?? out;
@@ -113,43 +115,43 @@ export function sslOfQuery(kind: Kind, query: string): SslMode | undefined {
 /** A server URL's parts: scheme://user:password@host:port/database?params. */
 function serverUrl(kind: Kind, rest: string): DbUrl {
   const m = /^\/\/(?:([^:@/]*)(?::([^@/]*))?@)?([^/:?]*|\[[^\]]*\])(?::(\d+))?(?:\/([^?]*))?/.exec(rest);
-  const password = m?.[2] ? dec(m[2]) : null;
-  const user = m?.[1] ? dec(m[1]) : undefined;
+  const password = m?.[2] !== undefined && Str.isNonEmpty(m?.[2]) ? dec(m[2]) : null;
+  const user = m?.[1] !== undefined && Str.isNonEmpty(m?.[1]) ? dec(m[1]) : undefined;
   const host = m?.[3] || undefined;
-  const port = m?.[4] ? Number(m[4]) : undefined;
-  const database = m?.[5] ? dec(m[5]) : undefined;
+  const port = m?.[4] !== undefined && Str.isNonEmpty(m?.[4]) ? Number(m[4]) : undefined;
+  const database = m?.[5] !== undefined && Str.isNonEmpty(m?.[5]) ? dec(m[5]) : undefined;
 
-  const sslmode = sslOfQuery(kind, rest.split("?")[1] ?? "");
+  const sslmode = sslOfQuery(kind, Str.split(rest, "?")[1] ?? "");
 
-  return withParts(sslmode ? { kind, password, sslmode } : { kind, password }, { user, host, port, database });
+  return withParts(sslmode !== undefined ? { kind, password, sslmode } : { kind, password }, { user, host, port, database });
 }
 
 /** A libSQL URL: its token (authToken in the query) taken out. */
 function libsqlUrl(scheme: string, rest: string): DbUrl {
-  const [base = "", query = ""] = rest.split("?");
-  const token = query.split("&").map((p) => p.split("=")).find(([k]) => k === "authToken" || k === "auth_token")?.[1] ?? null;
-  const url = `${scheme === "libsql" ? "libsql" : scheme}:${base}`.replace(/\/+$/, "");
+  const [base = "", query = ""] = Str.split(rest, "?");
+  const token = Option.getOrUndefined(Arr.findFirst(Arr.map(Str.split(query, "&"), (p) => Str.split(p, "=")), ([k]) => k === "authToken" || k === "auth_token"))?.[1] ?? null;
+  const url = Str.replace(/\/+$/, "")(`${scheme === "libsql" ? "libsql" : scheme}:${base}`);
 
-  return { kind: "libsql", url, password: token ? dec(token) : null };
+  return { kind: "libsql", url, password: token !== null && Str.isNonEmpty(token) ? dec(token) : null };
 }
 
 /** A database URL's parts, or null. `folder` resolves a relative file. */
 export function parseDbUrl(text: string, folder = ""): DbUrl | null {
-  const m = /^([a-z][a-z0-9+]*):(.*)$/i.exec(text.trim());
-  const scheme = m?.[1]?.toLowerCase() ?? "";
-  const kind = SCHEMES.get(scheme.replace(/\+.*$/, ""));
+  const m = /^([a-z][a-z0-9+]*):(.*)$/i.exec(Str.trim(text));
+  const scheme = Str.toLowerCase(m?.[1] ?? "");
+  const kind = SCHEMES.get(Str.replace(/\+.*$/, "")(scheme));
   const rest = m?.[2] ?? "";
 
-  if (!kind) return null;
+  if (kind === undefined) return null;
 
-  if (kind === "libsql" || (scheme === "https" && rest.includes("turso.io"))) return libsqlUrl(scheme, rest);
+  if (kind === "libsql" || (scheme === "https" && Str.includes("turso.io")(rest))) return libsqlUrl(scheme, rest);
 
   if (kind === "sqlite") {
     // sqlite:///abs, sqlite:rel, file:./dev.db (Prisma), file:/abs
-    const p = rest.replace(/^\/\/(?=\/)/, "").replace(/\?.*$/, "");
-    const path = p.startsWith("/") ? p : `${folder.replace(/\/$/, "")}/${p.replace(/^\.\//, "")}`;
+    const p = Str.replace(/\?.*$/, "")(Str.replace(/^\/\/(?=\/)/, "")(rest));
+    const path = Str.startsWith("/")(p) ? p : `${Str.replace(/\/$/, "")(folder)}/${Str.replace(/^\.\//, "")(p)}`;
 
-    return p ? { kind, path, password: null } : null;
+    return Str.isNonEmpty(p) ? { kind, path, password: null } : null;
   }
 
   return serverUrl(kind, rest);
@@ -169,14 +171,14 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
   const token = get("TURSO_AUTH_TOKEN") ?? get("LIBSQL_AUTH_TOKEN") ?? get("DATABASE_AUTH_TOKEN");
 
   for (const [name, value] of vars) {
-    if (!value || !looksLikeUrlName(name)) continue;
+    if ((value === null || Str.isEmpty(value)) || !looksLikeUrlName(name)) continue;
 
     const u = parseDbUrl(value, folder);
 
-    if (!u) continue;
+    if (u === null) continue;
 
     const { password, ...parts } = u;
-    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: password || (u.kind === "libsql" && token) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
+    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: (password !== null && Str.isNonEmpty(password)) || (u.kind === "libsql" && token !== null && Str.isNonEmpty(token)) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
 
     out.push({ conn, secret: password ?? (u.kind === "libsql" ? token : null) });
   }
@@ -184,13 +186,13 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
   const host = get("PGHOST");
   const db = get("PGDATABASE");
 
-  if (host || db) {
+  if ((host !== null && Str.isNonEmpty(host)) || (db !== null && Str.isNonEmpty(db))) {
     const pw = get("PGPASSWORD");
 
-    const base = { id: foundId(`${source}:PG`), name: db ?? "PGHOST", kind: "postgres" as const, readonly: true, secret: pw ? "ask" as const : "none" as const, origin: "found" as const, from: `${source} · PG*` };
+    const base = { id: foundId(`${source}:PG`), name: db ?? "PGHOST", kind: "postgres" as const, readonly: true, secret: pw !== null && Str.isNonEmpty(pw) ? "ask" as const : "none" as const, origin: "found" as const, from: `${source} · PG*` };
     const port = get("PGPORT");
     const ssl = get("PGSSLMODE");
-    const parts: ServerParts = { host: host ?? undefined, port: port ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined };
+    const parts: ServerParts = { host: host ?? undefined, port: port !== null && Str.isNonEmpty(port) ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined };
     const conn: Conn = withParts(isSslMode(ssl) ? { ...base, sslmode: ssl } : base, parts);
 
     out.push({ conn, secret: pw });
@@ -201,7 +203,7 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
 
 /** A SQLite file found in the folder. */
 export function foundFile(path: string, folder: string): Found {
-  const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : baseName(path);
+  const rel = Str.startsWith(`${folder}/`)(path) ? Str.slice(folder.length + 1)(path) : baseName(path);
 
   return { conn: { id: foundId(`file:${path}`), name: rel, kind: "sqlite", path, readonly: true, secret: "none", origin: "found", from: "a file in the folder" }, secret: null };
 }
@@ -211,7 +213,7 @@ export function foundFile(path: string, folder: string): Found {
 export const FIND_SCRIPT = 'cd "$1" 2>/dev/null || exit 0; find . -maxdepth 4 \\( -name node_modules -o -name .git -o -name target -o -name .direnv -o -name dist -o -name build -o -name .venv -o -name vendor \\) -prune -o -type f \\( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" -o -name "*.db3" \\) -size +0 -print 2>/dev/null | head -n 200 | while IFS= read -r f; do [ "$(head -c 15 "$f" 2>/dev/null)" = "SQLite format 3" ] && printf "%s\\n" "$1/${f#./}"; done | head -n 40';
 
 /** What makes two found connections the same one (direnv often loads the .env too). */
-const sameKey = (c: Conn): string => [c.name, c.kind, c.host, c.port, c.user, c.database, c.path, c.url, c.sslmode].join("|");
+const sameKey = (c: Conn): string => Arr.join(Arr.map([c.name, c.kind, c.host, c.port, c.user, c.database, c.path, c.url, c.sslmode], (x) => (x === undefined ? "" : String(x))), "|");
 
 /** Every connection found once: a later list's (a later .env file, direnv) wins for the same one. */
 export function mergeFound(lists: readonly (readonly Found[])[]): Found[] {

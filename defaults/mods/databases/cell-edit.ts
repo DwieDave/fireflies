@@ -8,8 +8,10 @@
 // Leaving the table, reading it again or closing the window with changes
 // staged asks first: save, discard or stay.
 
-import type { Context, KeyEvent } from "gpui-kit";
+import type { KeyEvent } from "gpui-kit";
 import { InputState } from "gpui-base";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
+import { redraw } from "@fireflies/kit";
 import type { Editability, GridFacts } from "./edits.ts";
 import { cellRefusal, changeAt, changesWord, counted, editability, noEdits, shownCell, stage, unstage } from "./edits.ts";
 import { refusal, typeOf } from "./quote.ts";
@@ -22,29 +24,30 @@ import { moveGrid, rowsIn } from "./grid.ts";
 import { loadRows, needsPassword, runOn } from "./session.ts";
 import { openMenu } from "./menus.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** The facts the Rows grid's editability is worked out from. */
 export function gridFacts(v: DbView): GridFacts {
   const c = v.active;
   const b = v.rows.browse;
-  const t = b ? v.catalog.tables.find((x) => x.name === b.table.name && x.schema === b.table.schema) ?? null : null;
-  const columns = b && v.struct.data && v.struct.table?.name === b.table.name && v.struct.table.schema === b.table.schema ? v.struct.data.columns : null;
+  const t = b !== null ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === b.table.name && x.schema === b.table.schema)) ?? null : null;
+  const columns = b !== null && v.struct.data !== null && v.struct.table?.name === b.table.name && v.struct.table.schema === b.table.schema ? v.struct.data.columns : null;
 
   return {
-    kind: c?.kind ?? "sqlite", connName: c?.name ?? "", readonly: c?.readonly ?? false, grid: v.shownQuery() ? "results" : "rows",
+    kind: c?.kind ?? "sqlite", connName: c?.name ?? "", readonly: c?.readonly ?? false, grid: v.shownQuery() !== null ? "results" : "rows",
     browse: b, table: t, columns, set: v.rows.set,
   };
 }
 
 /** Whether the shown grid's rows can be edited now. */
-export const editableNow = (v: DbView): Editability => (v.active ? editability(gridFacts(v)) : { why: "connect first" });
+export const editableNow = (v: DbView): Editability => (v.active !== null ? editability(gridFacts(v)) : { why: "connect first" });
 
 /** The changes staged on the shown table (null when there are none, or they're another table's). */
 export function liveEdits(v: DbView): DbView["edits"] {
   const e = v.edits;
   const b = v.rows.browse;
 
-  return e && b && v.active?.id === e.conn && e.table.name === b.table.name && e.table.schema === b.table.schema ? e : null;
+  return e !== null && b !== null && v.active?.id === e.conn && e.table.name === b.table.name && e.table.schema === b.table.schema ? e : null;
 }
 
 /** The cursor's cell: why it can't be edited, or its column and value. */
@@ -52,15 +55,15 @@ function cursorCell(v: DbView): { readonly why: string } | { readonly column: st
   const e = editableNow(v);
   const set = v.rows.set;
 
-  if ("why" in e || !set) return { why: "why" in e ? e.why : "no rows to edit" };
+  if ("why" in e || set === null) return { why: "why" in e ? e.why : "no rows to edit" };
 
   // The cursor is on a shown column (some may be hidden or moved): its name and place as read.
   const g = shownGrid(v);
   const column = g?.set.columns[v.rows.at.col] ?? "";
-  const value = shownCell(liveEdits(v), set, v.rows.at.row, g ? rawCol(g, v.rows.at.col) : v.rows.at.col);
+  const value = shownCell(liveEdits(v), set, v.rows.at.row, g !== null ? rawCol(g, v.rows.at.col) : v.rows.at.col);
   const why = cellRefusal(e, gridFacts(v).columns, column, value);
 
-  return why ? { why } : { column, value, keyCols: e.keyCols };
+  return why !== null && Str.isNonEmpty(why) ? { why } : { column, value, keyCols: e.keyCols };
 }
 
 /** c, a double click: the cursor's cell becomes an input holding its value. */
@@ -87,7 +90,7 @@ export function startEdit(v: DbView): boolean {
 }
 
 /** The column as the structure has it (its declared type, whether it takes NULL). */
-const columnOf = (v: DbView, column: string): ColumnInfo | undefined => gridFacts(v).columns?.find((x) => x.name === column);
+const columnOf = (v: DbView, column: string): ColumnInfo | undefined => Option.getOrUndefined(Arr.findFirst(gridFacts(v).columns ?? [], (x) => x.name === column));
 
 /** A value staged on a shown cell (the edits made for this table when there are none yet). */
 function stageCell(v: DbView, row: number, column: string, value: string | null): string | null {
@@ -96,12 +99,12 @@ function stageCell(v: DbView, row: number, column: string, value: string | null)
   const b = v.rows.browse;
   const e = editableNow(v);
 
-  if (!set || !c || !b || "why" in e) return "why" in e ? e.why : "no rows to edit";
+  if (set === null || c === null || b === null || "why" in e) return "why" in e ? e.why : "no rows to edit";
 
   const col = columnOf(v, column);
   const why = value === null && col?.nullable === false ? "it can't be NULL (NOT NULL)" : refusal(value, typeOf(col?.type ?? ""));
 
-  if (why) return `${column}: ${why}`;
+  if (why !== null && Str.isNonEmpty(why)) return `${column}: ${why}`;
 
   v.edits = stage(liveEdits(v) ?? noEdits(c.id, b.table, e.keyCols), set, row, column, value);
 
@@ -112,11 +115,11 @@ function stageCell(v: DbView, row: number, column: string, value: string | null)
 export function keepEdit(v: DbView): boolean {
   const edit = v.cellEdit;
 
-  if (!edit) return true;
+  if (edit === null) return true;
 
   const why = stageCell(v, edit.row, edit.column, edit.isNull && edit.input.value() === "" ? null : edit.input.value());
 
-  if (why) {
+  if (why !== null && Str.isNonEmpty(why)) {
     v.say(why, "failed");
 
     return false;
@@ -136,7 +139,7 @@ export function dropEdit(v: DbView): void {
 
 /** The rows are read again: an edit going on is kept if it can be, else dropped. */
 export function settleEdit(v: DbView): void {
-  if (v.cellEdit && !keepEdit(v)) dropEdit(v);
+  if (v.cellEdit !== null && !keepEdit(v)) dropEdit(v);
 }
 
 /** tab / shift-tab: kept, then the next (previous) cell that can be edited, wrapping to the next row. */
@@ -144,7 +147,7 @@ export function nextEdit(v: DbView, by: 1 | -1): void {
   const g = shownGrid(v);
   const set = g?.set;
 
-  if (!g || !set || !keepEdit(v)) return;
+  if (g === null || set === undefined || !keepEdit(v)) return;
 
   const width = set.columns.length;
 
@@ -170,7 +173,7 @@ export function nextEdit(v: DbView, by: 1 | -1): void {
 export function editKey(v: DbView, e: KeyEvent): Taken {
   const edit = v.cellEdit;
 
-  if (!edit) return false;
+  if (edit === null) return false;
 
   // The keyboard went to another panel (a click on a table in [2]): the edit is kept if it can
   // be, else dropped, and the key is that panel's (enter opens the table, not the cell's value).
@@ -195,7 +198,7 @@ export function editKey(v: DbView, e: KeyEvent): Taken {
 export function toggleNull(v: DbView): void {
   const edit = v.cellEdit;
 
-  if (!edit) return;
+  if (edit === null) return;
 
   edit.isNull = !edit.isNull;
 
@@ -209,7 +212,7 @@ export function toggleNull(v: DbView): void {
 export function setCell(v: DbView, text: string): void {
   const edit = v.cellEdit;
 
-  if (edit) {
+  if (edit !== null) {
     edit.input.set_value(text);
     edit.isNull = false;
 
@@ -219,7 +222,7 @@ export function setCell(v: DbView, text: string): void {
   const cell = cursorCell(v);
   const why = "why" in cell ? cell.why : stageCell(v, v.rows.at.row, cell.column, text);
 
-  if (why) v.say(why, "failed");
+  if (why !== null && Str.isNonEmpty(why)) v.say(why, "failed");
 }
 
 /** N: the cursor's cell staged as NULL. */
@@ -227,7 +230,7 @@ export function stageNull(v: DbView): void {
   const cell = cursorCell(v);
   const why = "why" in cell ? cell.why : stageCell(v, v.rows.at.row, cell.column, null);
 
-  if (why) v.say(why, "failed");
+  if (why !== null && Str.isNonEmpty(why)) v.say(why, "failed");
 }
 
 /** u: the cursor's cell back to what was read. */
@@ -236,7 +239,7 @@ export function undoCell(v: DbView): void {
   const set = v.rows.set;
   const column = shownGrid(v)?.set.columns[v.rows.at.col] ?? "";
 
-  if (!e || !set || !changeAt(e, set, v.rows.at.row, column)) {
+  if (e === null || set === null || changeAt(e, set, v.rows.at.row, column) === null) {
     v.say("no change on this cell", "failed");
 
     return;
@@ -250,7 +253,7 @@ export function undoCell(v: DbView): void {
 export function discardAll(v: DbView): void {
   const n = counted(v.edits).cells;
 
-  if (!n) {
+  if (n === 0) {
     v.say("no changes to discard", "failed");
 
     return;
@@ -267,9 +270,9 @@ export function openReview(v: DbView, then: (() => void) | null = null): void {
   const c = v.active;
   const e = v.edits;
 
-  if (v.cellEdit && !keepEdit(v)) return;
+  if (v.cellEdit !== null && !keepEdit(v)) return;
 
-  if (!c || !e || !counted(e).cells) {
+  if (c === null || e === null || counted(e).cells === 0) {
     v.say("nothing to save: c changes a cell", "failed");
 
     return;
@@ -281,7 +284,7 @@ export function openReview(v: DbView, then: (() => void) | null = null): void {
     return;
   }
 
-  const types = new Map((v.struct.table?.name === e.table.name ? v.struct.data?.columns ?? [] : []).map((x) => [x.name, x.type] as const));
+  const types = new Map(Arr.map((v.struct.table?.name === e.table.name ? v.struct.data?.columns ?? [] : []), (x) => [x.name, x.type] as const));
   const built = saveStatements({ kind: c.kind, bind: c.kind === "libsql" && Boolean(c.url), types }, e);
 
   if ("refused" in built) {
@@ -294,41 +297,38 @@ export function openReview(v: DbView, then: (() => void) | null = null): void {
 }
 
 /** y in the review: the statements run; saved, the rows are read again and the marks go. */
-export function runSave(v: DbView, cx: Context): void {
+export function runSave(v: DbView): void {
   const r = v.review;
   const c = v.active;
 
-  if (!r || r.busy || !c) return;
+  if (r === null || r.busy || c === null) return;
 
-  const go = () => void save(v, r.statements, cx);
+  const go = () => v.run(save(v, r.statements));
 
-  if (needsPassword(v, c)) v.askPassword(c, false, cx, go);
+  if (needsPassword(v, c)) v.askPassword(c, false, go);
   else go();
 }
 
-async function save(v: DbView, statements: readonly SaveStatement[], cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+const save = (v: DbView, statements: readonly SaveStatement[]): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   const r = v.review;
   const c = v.active;
 
-  if (!r || !c) return;
+  if (r === null || c === null) return;
 
   r.busy = true;
   r.error = null;
-  cx.notify();
+  yield* redraw;
 
-  const o = await runOn(v, c, statements);
+  const o = yield* runOn(v, c, statements);
   const failed = saveError(statements, o);
 
   r.busy = false;
 
-  for (const s of statements.filter((x) => x.role === "update")) v.logLine({ sql: s.text, ok: !failed, ms: o.ms, said: failed ? "rolled back" : "saved", conn: c.name });
+  for (const s of Arr.filter(statements, (x) => x.role === "update")) v.logLine({ sql: s.text, ok: (failed === null || Str.isEmpty(failed)), ms: o.ms, said: failed !== null && Str.isNonEmpty(failed) ? "rolled back" : "saved", conn: c.name });
 
-  if (failed) {
+  if (failed !== null && Str.isNonEmpty(failed)) {
     r.error = { index: o.error?.index ?? null, message: failed };
     v.say(failed, "failed");
-    cx.notify();
 
     return;
   }
@@ -336,10 +336,9 @@ async function save(v: DbView, statements: readonly SaveStatement[], cx: Context
   v.review = null;
   v.edits = null;
   v.say(`saved ${changesWord(r.cells)} to ${r.table}`, "done");
-  void loadRows(v, cx, true);
+  v.run(loadRows(v, true), { key: "rows" });
   r.after?.();
-  cx.notify();
-}
+});
 
 /** Before leaving the table (another table, another connection, reading again, closing): with
  *  changes staged, ask (save first, discard, or stay); else go on. */
@@ -348,7 +347,7 @@ export function beforeLeaving(v: DbView, what: string, then: () => void): void {
 
   const n = counted(v.edits).cells;
 
-  if (!n) {
+  if (n === 0) {
     then();
 
     return;

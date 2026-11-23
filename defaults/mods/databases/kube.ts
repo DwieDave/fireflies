@@ -12,16 +12,23 @@
 //   "secret": { "from": "kubernetes", "context": …, "namespace": …, "name": …, "key": …,
 //               "userKey"?: …, "databaseKey"?: …, "kubectl"?: "kubectl" | "/abs/…/kubectl" }
 
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, object } from "./guard.ts";
+import { Array as Arr, Effect, Option, Schema, String as Str } from "effect";
 import type { ExecResult } from "herdr";
+import { Exec } from "@fireflies/kit";
 
 /** Where a connection's password is in a cluster (the connect request's `secret`, a saved one's `source`). */
-export const isKubeSource = object({ from: literal("kubernetes"), context: isString, namespace: isString, name: isString, key: isString }, {
-  userKey: isString, databaseKey: isString, kubectl: isString,
+export const KubeSourceSchema = Schema.Struct({
+  from: Schema.Literal("kubernetes"),
+  context: Schema.String,
+  namespace: Schema.String,
+  name: Schema.String,
+  key: Schema.String,
+  userKey: Schema.optionalKey(Schema.String),
+  databaseKey: Schema.optionalKey(Schema.String),
+  kubectl: Schema.optionalKey(Schema.String),
 });
 
-export type KubeSource = Guarded<typeof isKubeSource>;
+export type KubeSource = typeof KubeSourceSchema.Type;
 
 /** A DNS label (a namespace), a DNS subdomain (a secret's name), a secret's key (kubernetes' own rules). */
 const NAMESPACE = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/;
@@ -31,13 +38,20 @@ const KUBECTL = /^(kubectl|\/[^\0\n\r]*\/kubectl)$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 /** A kubeconfig context's name: anything printable, not too long. */
-const contextOk = (c: string): boolean => Boolean(c) && c.length <= 253 && ![...c].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+const contextOk = (c: string): boolean => Str.isNonEmpty(c) && Str.length(c) <= 253 && !Arr.some(Arr.fromIterable(c), control);
+
+/** A control character (below space, or DEL). */
+const control = (ch: string): boolean => {
+  const n = Option.getOrElse(Str.codePointAt(ch, 0), () => 0);
+
+  return n < 0x20 || n === 0x7f;
+};
 
 /** Why the window won't read this source for a connection to `host`, or null. */
 export function kubeProblem(s: KubeSource, kind: string, host: string | undefined): string | null {
   if (kind !== "postgres" && kind !== "mysql") return "a secret is read only for Postgres and MySQL";
 
-  if (!host || !LOOPBACK.has(host)) return "a secret is read only for a server on this machine (127.0.0.1, a port-forward)";
+  if ((host === undefined || Str.isEmpty(host)) || !LOOPBACK.has(host)) return "a secret is read only for a server on this machine (127.0.0.1, a port-forward)";
 
   if (!contextOk(s.context)) return "its context isn't a context's name";
 
@@ -53,11 +67,11 @@ export function kubeProblem(s: KubeSource, kind: string, host: string | undefine
 }
 
 /** The keys one read prints, in order: the password's, then the user's and the database's when named. */
-const keysOf = (s: KubeSource): string[] => [s.key, ...(s.userKey ? [s.userKey] : []), ...(s.databaseKey ? [s.databaseKey] : [])];
+const keysOf = (s: KubeSource): string[] => [s.key, ...(s.userKey !== undefined && Str.isNonEmpty(s.userKey) ? [s.userKey] : []), ...(s.databaseKey !== undefined && Str.isNonEmpty(s.databaseKey) ? [s.databaseKey] : [])];
 
 /** The template: each key's base64 on a line of its own (an absent key: an empty line). */
 export function kubeTemplate(s: KubeSource): string {
-  return `{{with .data}}${keysOf(s).map((k) => `{{with index . "${k}"}}{{.}}{{end}}{{"\\n"}}`).join("")}{{end}}`;
+  return `{{with .data}}${Arr.join(Arr.map(keysOf(s), (k) => `{{with index . "${k}"}}{{.}}{{end}}{{"\\n"}}`), "")}{{end}}`;
 }
 
 /** A program and its arguments. */
@@ -92,17 +106,17 @@ const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /** base64's bytes, or null when it isn't base64 (the engine has no atob). */
 export function base64Bytes(b64: string): number[] | null {
-  const clean = b64.replace(/\s+/g, "").replace(/=+$/, "");
+  const clean = Str.replace(/=+$/, "")(Str.replace(/\s+/g, "")(b64));
   const out: number[] = [];
   let acc = 0;
   let bits = 0;
 
   for (const ch of clean) {
-    const v = B64.indexOf(ch);
+    const at = Str.indexOf(ch)(B64);
 
-    if (v < 0) return null;
+    if (Option.isNone(at)) return null;
 
-    acc = ((acc << 6) | v) & 0xffffff;
+    acc = ((acc << 6) | at.value) & 0xffffff;
     bits += 6;
 
     if (bits >= 8) {
@@ -122,7 +136,7 @@ export function utf8(bytes: readonly number[]): string | null {
     const b = bytes[i] ?? 0;
     const n = b < 0x80 ? 0 : b >> 5 === 6 ? 1 : b >> 4 === 14 ? 2 : b >> 3 === 30 ? 3 : -1;
 
-    if (n < 0 || i + n >= bytes.length + (n ? 0 : 1)) return null;
+    if (n < 0 || i + n >= bytes.length + (n !== 0 ? 0 : 1)) return null;
 
     let cp = n === 0 ? b : b & (0x3f >> n);
 
@@ -143,67 +157,64 @@ export function utf8(bytes: readonly number[]): string | null {
 
 /** A key's line decoded: its text, "" when absent, or null when it isn't text. */
 function decoded(line: string | undefined): string | null {
-  if (!line) return "";
+  if (line === undefined || Str.isEmpty(line)) return "";
 
   const bytes = base64Bytes(line);
 
-  return bytes ? utf8(bytes) : null;
+  return bytes !== null ? utf8(bytes) : null;
 }
 
 /** kubectl's answer to the read: the values, or why there are none (never the value in the words). */
 export function parseKubeRead(s: KubeSource, r: ExecResult): KubeRead | { readonly error: string } {
   if (r.code !== 0) {
-    const said = r.stderr.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+    const said = Option.getOrElse(Arr.findFirst(Arr.map(Str.split(r.stderr, "\n"), Str.trim), Str.isNonEmpty), () => "");
 
     if (r.code === 127 || (/not found|no such file/i.test(said) && !/secrets? "/.test(said))) return { error: "kubectl isn't there (not on the app's PATH)" };
 
-    return { error: said.replace(/^error:\s*/i, "") || `kubectl exited ${r.code}` };
+    const words = Str.replace(/^error:\s*/i, "")(said);
+
+    return { error: Str.isNonEmpty(words) ? words : `kubectl exited ${r.code}` };
   }
 
-  const lines = r.stdout.split("\n");
+  const lines = Str.split(r.stdout, "\n");
   const keys = keysOf(s);
-  const values = keys.map((_k, i) => decoded(lines[i]));
-  const bad = keys.find((_k, i) => values[i] === null);
+  const values = Arr.map(keys, (_k, i) => decoded(lines[i]));
+  const bad = Option.getOrUndefined(Arr.findFirst(keys, (_k, i) => values[i] === null));
 
-  if (bad) return { error: `the secret's ${bad} isn't text` };
+  if (bad !== undefined && Str.isNonEmpty(bad)) return { error: `the secret's ${bad} isn't text` };
 
-  const [password = "", ...rest] = values.map((x) => x ?? "");
+  const [password = "", ...rest] = Arr.map(values, (x) => x ?? "");
 
-  if (!password) return { error: `the secret ${s.name} has no ${s.key}` };
+  if (Str.isEmpty(password)) return { error: `the secret ${s.name} has no ${s.key}` };
 
   const out: ReadDraft = { password };
   let i = 0;
 
-  if (s.userKey) {
+  if (s.userKey !== undefined && Str.isNonEmpty(s.userKey)) {
     const u = rest[i++];
 
-    if (u) out.user = u;
+    if (u !== undefined && Str.isNonEmpty(u)) out.user = u;
   }
 
-  if (s.databaseKey) {
+  if (s.databaseKey !== undefined && Str.isNonEmpty(s.databaseKey)) {
     const d = rest[i];
 
-    if (d) out.database = d;
+    if (d !== undefined && Str.isNonEmpty(d)) out.database = d;
   }
 
   return out;
 }
 
-/** exec, as the read takes it (herdr's; a test's stand-in). */
-export type KubeExec = (cmd: string, args: string[], options?: { timeout?: number }) => Promise<ExecResult>;
-
-/** Reads the source (one kubectl call): the values into the caller's memory, or why not. */
-export async function readKube(exec: KubeExec, s: KubeSource): Promise<KubeRead | { readonly error: string }> {
+/** Reads the source (one kubectl call): the values into the caller's memory, or why not (a kubectl
+ *  that couldn't run says so: its `ExecError` in words). */
+export const readKube = (s: KubeSource): Effect.Effect<KubeRead | { readonly error: string }, never, Exec> => {
   const { program, args } = kubeReadArgs(s);
 
-  try {
-    return parseKubeRead(s, await exec(program, args, { timeout: 15000 }));
-  } catch (error) {
-    const said = error instanceof Error ? error.message : String(error);
-
-    return { error: /not found|no such file|ENOENT/i.test(said) ? "kubectl isn't there (not on the app's PATH)" : said };
-  }
-}
+  return Exec.use((x) => x.run(program, args, { timeout: 15000 })).pipe(
+    Effect.map((r) => parseKubeRead(s, r)),
+    Effect.catchTag("ExecError", (e) => Effect.succeed({ error: /not found|no such file|ENOENT/i.test(e.message) ? "kubectl isn't there (not on the app's PATH)" : e.message })),
+  );
+};
 
 // ---- the port-forward a connection came from (the contract's `forward`)
 //   "forward": { "context": …, "namespace": …, "target": "pod/<name>" | "svc/…" | "deploy/…" | "sts/…",
@@ -213,9 +224,16 @@ export async function readKube(exec: KubeExec, s: KubeSource): Promise<KubeRead 
 // starts one: forwardStartArgs is its startArgs, word for word.
 
 /** The forward a connection came from: what `kubectl port-forward` it is. */
-export const isKubeForward = object({ context: isString, namespace: isString, target: isString, remote: isNumber, local: isNumber }, { kubectl: isString });
+export const KubeForwardSchema = Schema.Struct({
+  context: Schema.String,
+  namespace: Schema.String,
+  target: Schema.String,
+  remote: Schema.Finite,
+  local: Schema.Finite,
+  kubectl: Schema.optionalKey(Schema.String),
+});
 
-export type KubeForward = Guarded<typeof isKubeForward>;
+export type KubeForward = typeof KubeForwardSchema.Type;
 
 /** A forward's target: a pod, a service, a deployment or a statefulset by its name. */
 const TARGET = /^(pod|svc|deploy|sts)\/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/;
@@ -226,7 +244,7 @@ const isPort = (n: number): boolean => Number.isInteger(n) && n >= 1 && n <= 655
 export function forwardProblem(f: KubeForward, kind: string, host: string | undefined, port: number | undefined): string | null {
   if (kind !== "postgres" && kind !== "mysql") return "a forward is kept only for Postgres and MySQL";
 
-  if (!host || !LOOPBACK.has(host)) return "a forward is kept only for a server on this machine (127.0.0.1)";
+  if ((host === undefined || Str.isEmpty(host)) || !LOOPBACK.has(host)) return "a forward is kept only for a server on this machine (127.0.0.1)";
 
   if (!contextOk(f.context)) return "its forward's context isn't a context's name";
 
@@ -247,9 +265,31 @@ export function forwardProblem(f: KubeForward, kind: string, host: string | unde
 export const FORWARD_LABEL = "k8s.forward" as const;
 
 /** The forward's note in its label (the k8s mod's noteFor, key for key and in its order). */
-export function forwardNote(f: KubeForward, kind: "postgres" | "mysql") {
-  return { context: f.context, namespace: f.namespace, target: f.target, local: f.local, remote: f.remote, db: kind, web: null, name: f.target.replace(/^[a-z]+\//, "") };
+export const ForwardNoteSchema = Schema.Struct({
+  context: Schema.String,
+  namespace: Schema.String,
+  target: Schema.String,
+  local: Schema.Finite,
+  remote: Schema.Finite,
+  db: Schema.Literals(["postgres", "mysql"]),
+  web: Schema.Null,
+  name: Schema.String,
+});
+
+export type ForwardNote = typeof ForwardNoteSchema.Type;
+
+export function forwardNote(f: KubeForward, kind: "postgres" | "mysql"): ForwardNote {
+  return { context: f.context, namespace: f.namespace, target: f.target, local: f.local, remote: f.remote, db: kind, web: null, name: Str.replace(/^[a-z]+\//, "")(f.target) };
 }
+
+/** A note as the label's text (JSON). */
+export const noteText = Schema.encodeEffect(Schema.fromJsonString(ForwardNoteSchema));
+
+/** What a forward's label says of it, as this window finds one (the k8s mod writes more: a web
+ *  port, a database's kind): none for a label in another shape. */
+export const ForwardLabelSchema = Schema.Struct({ context: Schema.String, namespace: Schema.String, target: Schema.String, local: Schema.Finite });
+
+export const labelOf = Schema.decodeUnknownOption(Schema.fromJsonString(ForwardLabelSchema));
 
 /** kubectl port-forward's argv (the program first). */
 export function forwardArgv(f: KubeForward): string[] {
@@ -258,16 +298,16 @@ export function forwardArgv(f: KubeForward): string[] {
 
 /** hc's arguments that start it: a terminal of its own in the background, labelled as the k8s mod
  *  labels its forwards (so its window lists it, and stops it). */
-export function forwardStartArgs(f: KubeForward, kind: "postgres" | "mysql"): string[] {
+export const forwardStartArgs = (f: KubeForward, kind: "postgres" | "mysql"): Effect.Effect<string[], Schema.SchemaError> => {
   const n = forwardNote(f, kind);
 
-  return [
+  return Effect.map(noteText(n), (label) => [
     "run", "--bg", "--no-parent", "--no-notify", "--json",
-    "--label", `${FORWARD_LABEL}=${JSON.stringify(n)}`,
+    "--label", `${FORWARD_LABEL}=${label}`,
     "--label", `nocturne.name=forward ${n.name} :${n.local}`,
     "--", ...forwardArgv(f),
-  ];
-}
+  ]);
+};
 
 /** The command in words, as the ask shows it. */
-export const forwardCommand = (f: KubeForward): string => forwardArgv(f).join(" ");
+export const forwardCommand = (f: KubeForward): string => Arr.join(forwardArgv(f), " ");

@@ -62,7 +62,7 @@ mock.module("gpui-base", () => ({
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard() {},
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard() {},
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
@@ -273,7 +273,7 @@ test.skipIf(!SQLITE)("what isn't edited says why: a read-only connection, a quer
   ro.key(key("w"), cx);
   expect(ro.note.text).toBe("nothing to save: c changes a cell");
   const v = await opened();
-  const q = v.addQuery("select 1", cx);
+  const q = v.addQuery("select 1");
   q.inResults = true;
   q.outcome = { results: [{ index: 0, set: { columns: ["1"], rows: [["1"]] }, affected: null, tag: null }], error: null, cut: false };
   v.key(key("c"), cx);

@@ -83,10 +83,13 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -428,7 +431,7 @@ test("the focus coming back after a while asks the connection once more; a dead 
   // Shortly after an answer: nothing is asked.
   v.handle = { focus() {}, is_focused: () => true, release: () => true };
   render(v);
-  v.tick(cx);
+  await runView(v.tick());
   expect(runs().length).toBe(n);
   // A while after: one select 1.
   v.handle = { focus() {}, is_focused: () => false, release: () => true };
@@ -437,7 +440,7 @@ test("the focus coming back after a while asks the connection once more; a dead 
   gone = true;
   v.handle = { focus() {}, is_focused: () => true, release: () => true };
   render(v);
-  v.tick(cx);
+  await runView(v.tick());
   await until(() => !v.checking);
   expect(runs().length).toBe(n + 1);
   expect(files.get(`/tmp/fireflies-db.abc/q-${execs.filter((a) => a[3] === "ff-db").at(-1)?.[5]}.sql`)).toContain("select 1;");
@@ -479,7 +482,7 @@ test("narrow: the mark stays, its words go (in its hover)", async () => {
 test("b and C type in the window's fields", async () => {
   reset();
   const v = await sent();
-  const q = v.addQuery("", cx);
+  const q = v.addQuery("");
   const { startRename } = await import("../defaults/mods/databases/menus.ts");
   startRename(v, q);
   expect(["b", "C"].map((k) => modalKey(v, key(k), cx))).toEqual(["typing", "typing"]);
@@ -526,7 +529,7 @@ describe.skipIf(!PG_BIN)("a real PostgreSQL 18 on 127.0.0.1:25433", () => {
       expect(v.catalog.tables.map((t: any) => `${t.schema}.${t.name}:${t.type}`)).toEqual(["lanterns.lanterns:table", "moths.moths:table", "moths.bright:view"]);
       // Sizes on demand.
       const { loadDatabases } = await import("../defaults/mods/databases/dbs.ts");
-      await loadDatabases(v, cx, true);
+      await runView(loadDatabases(v, true));
       expect(v.dbs.list.every((d: any) => typeof d.size === "number" && d.size > 0)).toBe(true);
       // The server stops: the next read turns the mark.
       Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", join(base, "data"), "-m", "immediate", "stop"], { stdout: "ignore", stderr: "ignore" });

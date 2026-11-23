@@ -18,7 +18,9 @@ import { pipelineBody } from "../defaults/mods/databases/hrana.ts";
 import { scriptOf } from "../defaults/mods/databases/script.ts";
 import { run } from "../defaults/mods/databases/runner.ts";
 import { sqliteArgs } from "../defaults/mods/databases/clients.ts";
-import { parseSqlite, csvSet } from "../defaults/mods/databases/parse-out.ts";
+import { parsePsql, parseSqlite, csvSet } from "../defaults/mods/databases/parse-out.ts";
+import { Effect } from "effect";
+import { runReal } from "./databases-host.ts";
 import { browseSql } from "../defaults/mods/databases/catalog.ts";
 
 const SQLITE = Bun.which("sqlite3") !== null;
@@ -217,7 +219,7 @@ describe("the save's statements", () => {
     const u = r.statements[3];
     expect(u?.text).toBe("UPDATE \"lanterns\" SET \"name\" = ?, \"lumens\" = ? WHERE \"id\" = ? AND CAST(\"name\" AS TEXT) = ? AND \"lumens\" IS NULL");
     expect(u?.args).toEqual([{ type: "null" }, { type: "integer", value: "120" }, { type: "integer", value: "2" }, { type: "text", value: "Wisp" }]);
-    const body = JSON.parse(pipelineBody(r.statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text }))));
+    const body = JSON.parse(Effect.runSync(pipelineBody(r.statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })))));
     expect(body.requests[0].batch.steps[3]).toEqual({ stmt: { sql: u?.text, args: [{ type: "null" }, { type: "integer", value: "120" }, { type: "integer", value: "2" }, { type: "text", value: "Wisp" }] }, condition: { type: "ok", step: 2 } });
     // No value of the person's in any statement's text.
     expect(r.statements.some((s) => s.text.includes("it's lit") || s.text.includes("Wisp"))).toBe(false);
@@ -239,20 +241,6 @@ describe("the save's statements", () => {
   });
 });
 
-/** herdr's exec and writeTextFile, for real. */
-const io = {
-  exec: async (cmd: string, args: string[] = []) => {
-    const p = Bun.spawn([cmd, ...args], { stdout: "pipe", stderr: "pipe" });
-    const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-    return { code: await p.exited, stdout, stderr };
-  },
-  writeTextFile: async (path: string, text: string, expected: string | null) => {
-    if (expected === null && existsSync(path)) throw new Error("exists");
-    writeFileSync(path, text);
-    return null;
-  },
-};
-
 describe("a real round trip on a throwaway SQLite file", () => {
   const dir = mkdtempSync(join(tmpdir(), "ff-dbedit-"));
   const db = join(dir, "lantern.db");
@@ -260,16 +248,16 @@ describe("a real round trip on a throwaway SQLite file", () => {
   const rows = () => csvSet(sql("select id, name, lumens, glow from lanterns order by id"))?.rows;
   const types = new Map([["id", "integer"], ["name", "text"], ["lumens", "integer"], ["glow", "real"]]);
 
-  async function save(e: ReturnType<typeof noEdits>) {
+  const save = (e: ReturnType<typeof noEdits>) => Effect.gen(function* () {
     const r = saveStatements({ kind: "sqlite", bind: false, types }, e);
     if (!("statements" in r)) throw new Error(r.refused);
     const script = scriptOf("sqlite", r.statements).text;
-    const out = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: sqliteArgs(db, false), script });
+    const out = yield* run({ kind: "sqlite", dir, program: "sqlite3", args: sqliteArgs(db, false), script });
     const o = parseSqlite(out.stdout, out.stderr, out.code, r.statements.map((s) => s.text), out.cut, r.statements.map((s) => s.risk !== "read"));
     return saveError(r.statements, o);
-  }
+  });
 
-  test.skipIf(!SQLITE)("edit → save → read again: quotes, a NULL, '' and a float that doesn't print short", async () => {
+  test.skipIf(!SQLITE)("edit → save → read again: quotes, a NULL, '' and a float that doesn't print short", () => runReal(Effect.gen(function* () {
     Bun.spawnSync(["sqlite3", db, "create table lanterns(id integer primary key, name text not null default '', lumens integer, glow real); insert into lanterns values (1,'Ember',400,0.1+0.2),(2,'Wisp',null,1.5),(3,'Moth',650,null);"]);
     const read = csvSet(sql("select * from lanterns order by id"));
     if (!read) throw new Error("no rows");
@@ -278,18 +266,18 @@ describe("a real round trip on a throwaway SQLite file", () => {
     e = stage(e, read, 0, "glow", "2.5");
     e = stage(e, read, 1, "lumens", null);
     e = stage(e, read, 2, "name", "");
-    expect(await save(e)).toBe(null);
+    expect(yield* save(e)).toBe(null);
     expect(rows()).toEqual([["1", "'; DROP TABLE lanterns; --", "400", "2.5"], ["2", "Wisp", null, "1.5"], ["3", "", "650", null]]);
     // Each awkward value round-trips exactly.
     for (const v of NASTY) {
       const now = csvSet(sql("select * from lanterns order by id"));
       if (!now) throw new Error("no rows");
-      expect(await save(stage(noEdits("x", TABLE, ["id"]), now, 1, "name", v))).toBe(null);
+      expect(yield* save(stage(noEdits("x", TABLE, ["id"]), now, 1, "name", v))).toBe(null);
       expect(rows()?.[1]?.[1]).toBe(v);
     }
-  });
+  })));
 
-  test.skipIf(!SQLITE)("a row changed elsewhere since it was read: refused at its guard, and the other rows' changes not written either", async () => {
+  test.skipIf(!SQLITE)("a row changed elsewhere since it was read: refused at its guard, and the other rows' changes not written either", () => runReal(Effect.gen(function* () {
     const read = csvSet(sql("select * from lanterns order by id"));
     if (!read) throw new Error("no rows");
     let e = noEdits("x", TABLE, ["id"]);
@@ -298,40 +286,40 @@ describe("a real round trip on a throwaway SQLite file", () => {
     // Someone else changes row 3 after it was read.
     Bun.spawnSync(["sqlite3", db, "update lanterns set lumens = 999 where id = 3"]);
     const before = rows();
-    expect(await save(e)).toBe("id = 3: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved");
+    expect(yield* save(e)).toBe("id = 3: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved");
     expect(rows()).toEqual(before);
-  });
+  })));
 
-  test.skipIf(!SQLITE)("a statement the database refuses: the run stops, nothing written, the error names the row", async () => {
+  test.skipIf(!SQLITE)("a statement the database refuses: the run stops, nothing written, the error names the row", () => runReal(Effect.gen(function* () {
     const read = csvSet(sql("select * from lanterns order by id"));
     if (!read) throw new Error("no rows");
     let e = noEdits("x", TABLE, ["id"]);
     e = stage(e, read, 0, "lumens", "7");
     e = stage(e, read, 1, "name", null);
     const before = rows();
-    expect(await save(e)).toBe("id = 2: NOT NULL constraint failed: lanterns.name · nothing was saved");
+    expect(yield* save(e)).toBe("id = 2: NOT NULL constraint failed: lanterns.name · nothing was saved");
     expect(rows()).toEqual(before);
-  });
+  })));
 
-  test.skipIf(!SQLITE)("a float read back as sqlite3 printed it still matches its old-value check", async () => {
+  test.skipIf(!SQLITE)("a float read back as sqlite3 printed it still matches its old-value check", () => runReal(Effect.gen(function* () {
     Bun.spawnSync(["sqlite3", db, "update lanterns set glow = 0.1 + 0.2 where id = 2"]);
     const read = csvSet(sql("select * from lanterns order by id"));
     if (!read) throw new Error("no rows");
-    expect(await save(stage(noEdits("x", TABLE, ["id"]), read, 1, "glow", "0.75"))).toBe(null);
+    expect(yield* save(stage(noEdits("x", TABLE, ["id"]), read, 1, "glow", "0.75"))).toBe(null);
     expect(rows()?.[1]?.[3]).toBe("0.75");
-  });
+  })));
 
-  test.skipIf(!SQLITE)("a table without a primary key, edited by its rowid", async () => {
+  test.skipIf(!SQLITE)("a table without a primary key, edited by its rowid", () => runReal(Effect.gen(function* () {
     Bun.spawnSync(["sqlite3", db, "create table notes(body text); insert into notes values ('a'),('b');"]);
     const read = csvSet(sql("select rowid, * from notes"));
     if (!read) throw new Error("no rows");
     const r = saveStatements({ kind: "sqlite", bind: false, types: new Map([["body", "text"]]) }, stage(noEdits("x", { schema: null, name: "notes" }, ["rowid"]), read, 1, "body", "b!"));
     if (!("statements" in r)) throw new Error("refused");
     expect(r.statements[1]?.text).toBe("UPDATE \"notes\" SET \"body\" = 'b!' WHERE \"rowid\" = 2 AND CAST(\"body\" AS TEXT) = 'b'");
-    const out = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: sqliteArgs(db, false), script: scriptOf("sqlite", r.statements).text });
+    const out = yield* run({ kind: "sqlite", dir, program: "sqlite3", args: sqliteArgs(db, false), script: scriptOf("sqlite", r.statements).text });
     expect(out.code).toBe(0);
     expect(csvSet(sql("select body from notes order by rowid"))?.rows).toEqual([["a"], ["b!"]]);
-  });
+  })));
 });
 
 /** A throwaway PostgreSQL's bin folder (FF_TEST_PG_BIN; skipped without one): initdb in a temp
@@ -346,20 +334,19 @@ describe.skipIf(!PG_BIN)("a real round trip on a throwaway PostgreSQL", () => {
   const sql = (q: string) => csvSet(sh("psql", [...psqlArgs, "-c", q]).stdout.toString())?.rows;
   const types = new Map([["id", "integer"], ["name", "text"], ["lit", "boolean"], ["code", "character(3)"], ["glow", "real"]]);
 
-  async function save(e: ReturnType<typeof noEdits>) {
+  const save = (e: ReturnType<typeof noEdits>) => Effect.gen(function* () {
     const r = saveStatements({ kind: "postgres", bind: false, types }, e);
     if (!("statements" in r)) throw new Error(r.refused);
-    const { parsePsql } = await import("../defaults/mods/databases/parse-out.ts");
-    const out = await run(io, { kind: "postgres", dir: base, program: join(PG_BIN, "psql"), args: psqlArgs, script: scriptOf("postgres", r.statements).text });
+    const out = yield* run({ kind: "postgres", dir: base, program: join(PG_BIN, "psql"), args: psqlArgs, script: scriptOf("postgres", r.statements).text });
     return saveError(r.statements, parsePsql(out.stdout, out.stderr, out.code, r.statements.map((s) => s.risk !== "read"), out.cut));
-  }
+  });
 
-  test("saved, a row changed elsewhere refused at its guard, a refused value rolled back", async () => {
+  test("saved, a row changed elsewhere refused at its guard, a refused value rolled back", () => {
     expect(sh("initdb", ["-D", data, "-A", "trust", "-U", process.env.USER ?? "postgres"]).exitCode).toBe(0);
     // The server keeps no pipe of ours open (its output goes to a log), so the start returns.
     const started = Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", data, "-l", join(base, "log"), "-o", `-k ${base} -c listen_addresses=''`, "-w", "start"], { stdout: "ignore", stderr: "ignore" });
     expect(started.exitCode).toBe(0);
-    try {
+    return runReal(Effect.gen(function* () {
       sh("psql", [...psqlArgs, "-c", "create table lanterns(id integer primary key, name text not null, lit boolean, code character(3), glow real); insert into lanterns values (1,'Ember',true,'ab',0.1),(2,'Wisp',null,'x',1.5);"]);
       const read = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
       if (!read) throw new Error("no rows");
@@ -368,7 +355,7 @@ describe.skipIf(!PG_BIN)("a real round trip on a throwaway PostgreSQL", () => {
       e = stage(e, read, 0, "lit", "no");
       e = stage(e, read, 1, "code", "yz");
       e = stage(e, read, 1, "glow", "2.25");
-      expect(await save(e)).toBe(null);
+      expect(yield* save(e)).toBe(null);
       expect(sql("select id, name, lit, code, glow from lanterns order by id")).toEqual([["1", "it's a\\b 灯", "f", "ab ", "0.1"], ["2", "Wisp", null, "yz ", "2.25"]]);
       // Changed elsewhere after it was read: the guard stops it, nothing written.
       const again = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
@@ -377,17 +364,17 @@ describe.skipIf(!PG_BIN)("a real round trip on a throwaway PostgreSQL", () => {
       f = stage(f, again, 0, "name", "mine");
       f = stage(f, again, 1, "name", "mine too");
       sh("psql", [...psqlArgs, "-c", "update lanterns set name = 'theirs' where id = 2"]);
-      expect(await save(f)).toBe("id = 2: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved");
+      expect(yield* save(f)).toBe("id = 2: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved");
       expect(sql("select name from lanterns order by id")).toEqual([["it's a\\b 灯"], ["theirs"]]);
       // NOT NULL refused by the server: rolled back, the row named.
       const third = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
       if (!third) throw new Error("no rows");
       const g = stage(stage(noEdits("x", TABLE, ["id"]), third, 0, "lit", "yes"), third, 1, "name", null);
-      expect(await save(g)).toContain("id = 2: null value in column \"name\"");
+      expect(yield* save(g)).toContain("id = 2: null value in column \"name\"");
       expect(sql("select lit from lanterns where id = 1")).toEqual([["f"]]);
-    } finally {
+    }).pipe(Effect.ensuring(Effect.sync(() => {
       Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", data, "-m", "immediate", "stop"], { stdout: "ignore", stderr: "ignore" });
       Bun.spawnSync(["rm", "-rf", base]);
-    }
+    }))));
   }, 60000);
 });

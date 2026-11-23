@@ -3,15 +3,14 @@
 // or in memory while the window is open: secrets.ts), and how one is named and
 // placed in words. Pure, so scripts/databases-*.test.ts check it.
 
-import type { Guarded } from "./guard.ts";
-import { isBoolean, isNumber, isString, literal, object } from "./guard.ts";
+import { Array as Arr, Effect, Option, Random, Schema, String as Str } from "effect";
 import type { KubeForward, KubeSource } from "./kube.ts";
-import { isKubeForward, isKubeSource } from "./kube.ts";
+import { KubeForwardSchema, KubeSourceSchema } from "./kube.ts";
 
 /** The kinds of database the window speaks. */
-export const isKind = literal("postgres", "mysql", "sqlite", "libsql");
+export const KindSchema = Schema.Literals(["postgres", "mysql", "sqlite", "libsql"]);
 
-export type Kind = Guarded<typeof isKind>;
+export type Kind = typeof KindSchema.Type;
 
 export const KINDS: readonly Kind[] = ["postgres", "mysql", "sqlite", "libsql"];
 
@@ -21,9 +20,9 @@ export const KINDS: readonly Kind[] = ["postgres", "mysql", "sqlite", "libsql"];
  *  pgpass    the client's own file (~/.pgpass, ~/.my.cnf), read by the client
  *  kubernetes  a cluster's secret (`source`, kube.ts), read with kubectl at each connect into memory
  *  none      it has none (a SQLite file, a local server that trusts its socket) */
-export const isSecret = literal("keychain", "ask", "pgpass", "kubernetes", "none");
+export const SecretSchema = Schema.Literals(["keychain", "ask", "pgpass", "kubernetes", "none"]);
 
-export type Secret = Guarded<typeof isSecret>;
+export type Secret = typeof SecretSchema.Type;
 
 /** How a server connection asks for TLS, in libpq's names (sslmode): disable (never), allow and
  *  prefer (when the server offers it), require (always, the certificate unchecked), verify-ca (a
@@ -32,16 +31,19 @@ export type Secret = Guarded<typeof isSecret>;
  *  each client gets). */
 export const SSL_MODES = ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] as const;
 
-export const isSslMode = literal(...SSL_MODES);
+export const SslModeSchema = Schema.Literals(SSL_MODES);
 
-export type SslMode = Guarded<typeof isSslMode>;
+export type SslMode = typeof SslModeSchema.Type;
+
+/** Whether `value` (any text: a connect request's) is an sslmode. */
+export const isSslMode = Schema.is(SslModeSchema);
 
 /** Whether the kind speaks to a server that may take TLS (the kinds with an sslmode). */
 export const speaksTls = (kind: Kind): boolean => kind === "postgres" || kind === "mysql";
 
 /** Why `value` (a connect request's, any text) can't be an sslmode, or null. */
 export function sslProblem(value: string): string | null {
-  return isSslMode(value) ? null : `sslmode ${JSON.stringify(value)} isn't one of ${SSL_MODES.join(", ")}`;
+  return isSslMode(value) ? null : `sslmode "${value}" isn't one of ${Arr.join(SSL_MODES, ", ")}`;
 }
 
 /** Where a connection came from: saved by the person, found in the shown
@@ -50,12 +52,27 @@ export type Origin = "saved" | "found" | "sent";
 
 /** A connection as connections.json keeps it (and as found / sent ones are
  *  held in memory): no secret in any field. */
-export const isConnJson = object({ id: isString, name: isString, kind: isKind }, {
-  host: isString, port: isNumber, user: isString, database: isString, path: isString, url: isString, readonly: isBoolean, secret: isSecret,
-  source: isKubeSource, forward: isKubeForward, sslmode: isSslMode,
+export const ConnJsonSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  kind: KindSchema,
+  host: Schema.optionalKey(Schema.String),
+  port: Schema.optionalKey(Schema.Finite),
+  user: Schema.optionalKey(Schema.String),
+  database: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+  url: Schema.optionalKey(Schema.String),
+  readonly: Schema.optionalKey(Schema.Boolean),
+  secret: Schema.optionalKey(SecretSchema),
+  source: Schema.optionalKey(KubeSourceSchema),
+  forward: Schema.optionalKey(KubeForwardSchema),
+  sslmode: Schema.optionalKey(SslModeSchema),
 });
 
-export type ConnJson = Guarded<typeof isConnJson>;
+export type ConnJson = typeof ConnJsonSchema.Type;
+
+/** Whether a value is a kept connection. */
+export const isConnJson = Schema.is(ConnJsonSchema);
 
 /** A connection the window works with. */
 export interface Conn {
@@ -91,7 +108,7 @@ export function connOf(j: ConnJson): Conn {
   const secret = j.secret ?? (j.kind === "sqlite" ? "none" : "keychain");
 
   // A cluster's secret without its source (an edited file): asked instead.
-  return { ...j, readonly: j.readonly ?? false, secret: secret === "kubernetes" && !j.source ? "ask" : secret, origin: "saved" };
+  return { ...j, readonly: j.readonly ?? false, secret: secret === "kubernetes" && j.source === undefined ? "ask" : secret, origin: "saved" };
 }
 
 /** What connections.json keeps of a connection: the fields, never its origin's words or a secret. */
@@ -111,29 +128,30 @@ export const KIND_NAME = { postgres: "Postgres", mysql: "MySQL · MariaDB", sqli
 export const DEFAULT_PORT = { postgres: 5432, mysql: 3306, sqlite: 0, libsql: 0 } as const satisfies { readonly [K in Kind]: number };
 
 /** Whether the kind works on a file here (SQLite, a local libSQL file) rather than a server. */
-export const onFile = (c: Pick<Conn, "kind" | "url">): boolean => c.kind === "sqlite" || (c.kind === "libsql" && !c.url);
+export const onFile = (c: Pick<Conn, "kind" | "url">): boolean => c.kind === "sqlite" || (c.kind === "libsql" && (c.url === undefined || Str.isEmpty(c.url)));
 
 /** The last part of a path. */
-export const baseName = (path: string): string => path.split("/").filter(Boolean).at(-1) ?? path;
+export const baseName = (path: string): string => Arr.filter(Str.split(path, "/"), Boolean).at(-1) ?? path;
 
 /** `~/…` for a path under home. */
-export const tilde = (path: string, home: string): string => (home && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
+export const tilde = (path: string, home: string): string => (Str.isNonEmpty(home) && Str.startsWith(`${home}/`)(path) ? `~${Str.slice(home.length)(path)}` : path);
 
 /** Where a connection points, in a few words: "localhost:5432/lantern", "~/code/x/data.db", "edge.turso.io". */
 export function where(c: Conn, home = ""): string {
-  if (c.kind === "libsql" && c.url) return c.url.replace(/^[a-z]+:\/\//, "").replace(/\/$/, "");
+  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return Str.replace(/\/$/, "")(Str.replace(/^[a-z]+:\/\//, "")(c.url));
 
   if (onFile(c)) return tilde(c.path ?? "", home);
 
   const host = c.host || "localhost";
-  const port = c.port && c.port !== DEFAULT_PORT[c.kind] ? `:${c.port}` : "";
+  const port = (c.port !== undefined && c.port !== 0) && c.port !== DEFAULT_PORT[c.kind] ? `:${c.port}` : "";
 
-  return `${host}${port}${c.database ? `/${c.database}` : ""}`;
+  return `${host}${port}${c.database !== undefined && Str.isNonEmpty(c.database) ? `/${c.database}` : ""}`;
 }
 
 /** A new connection's id: its kind and a few random letters (also the keychain item's account). */
-export function newId(kind: Kind, random: () => number = Math.random): string {
-  const letters = Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)] ?? "x").join("");
+export const newId = (kind: Kind): Effect.Effect<string> => Effect.map(
+  Effect.all(Arr.replicate(Random.nextIntBetween(0, ID_LETTERS.length, { halfOpen: true }), 8), { concurrency: 1 }),
+  (picks) => `${KIND_MARK[kind]}-${Arr.join(Arr.map(picks, (n) => Option.getOrElse(Str.charAt(n)(ID_LETTERS), () => "x")), "")}`,
+);
 
-  return `${KIND_MARK[kind]}-${letters}`;
-}
+const ID_LETTERS = "abcdefghijklmnopqrstuvwxyz0123456789";

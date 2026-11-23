@@ -7,20 +7,24 @@
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, InputState } from "gpui-base";
-import { pickFolder, window as appWindow } from "herdr";
+import { window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
+import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { redraw } from "@fireflies/kit";
 import type { TableRef } from "./catalog.ts";
 import { browseSql, qualified } from "./catalog.ts";
 import type { ResultSet } from "./parse-out.ts";
 import type { Taken } from "./state.ts";
 import type { Format } from "./export.ts";
 import { FORMATS, FORMAT_NAME, exportName, exportText, writeOut } from "./export.ts";
-import { IO, runOn } from "./session.ts";
+import { runOn } from "./session.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "@fireflies/keyhelp";
 import type { default as DbView } from "./main.ts";
+import { nowMs, pickFolder } from "./app.ts";
+import type { DbRun } from "./app.ts";
 
 /** What an export is of: a table (whole, its page, its filter), or a query's result. */
 export type ExportOf = { readonly table: TableRef } | { readonly result: ResultSet; readonly name: string };
@@ -56,8 +60,8 @@ export class ExportForm {
 
     const shown = "table" in of && v.rows.browse?.table.name === of.table.name ? v.rows.browse : null;
 
-    this.which = shown?.filter ? "filtered" : "whole";
-    this.name = InputState.new({ value: exportName("table" in of ? of.table.name : of.name, "csv") });
+    this.which = shown?.filter !== undefined && Str.isNonEmpty(shown?.filter) ? "filtered" : "whole";
+    this.name = InputState.new({ value: exportName("table" in of ? of.table.name : of.name, "csv", nowMs()) });
   }
 
   /** The table's choices: the page and the filter only when it's the one shown. */
@@ -67,7 +71,7 @@ export class ExportForm {
     const b = this.v.rows.browse;
     const shown = b?.table.name === this.of.table.name;
 
-    return ["whole", ...(shown ? ["page" as const] : []), ...(shown && b?.filter ? ["filtered" as const] : [])];
+    return ["whole", ...(shown ? ["page" as const] : []), ...(shown && Str.isNonEmpty(b?.filter) ? ["filtered" as const] : [])];
   }
 
   stops(): Stop[] {
@@ -85,15 +89,15 @@ export class ExportForm {
     const s = stops[this.at];
     const a = formKey(stops, this.at, e.key === " " ? "space" : e.key, e.modifiers, e.key_char ?? null);
 
-    if (!a || a.act === "type") return "typing";
+    if (a === null || a.act === "type") return "typing";
 
     if (this.busy) return true;
 
     switch (a.act) {
       case "move": this.at = a.to; this.focus(); break;
-      case "submit": void this.go(cx); break;
+      case "submit": this.v.run(this.go()); break;
       case "cancel": this.close(); break;
-      case "press": if (s?.id === "cancel") this.close(); else void this.go(cx); break;
+      case "press": if (s?.id === "cancel") this.close(); else this.v.run(this.go()); break;
       case "step":
       case "open": this.step(s?.id ?? "", a.act === "step" ? a.by : 1); break;
       default: break;
@@ -114,7 +118,7 @@ export class ExportForm {
 
     if (id === "format") {
       this.format = turn(FORMATS, this.format);
-      this.name.set_value(this.name.value().replace(/\.[a-z]+$/, `.${this.format}`));
+      this.name.set_value(Str.replace(/\.[a-z]+$/, `.${this.format}`)(this.name.value()));
     } else if (id === "to") this.toFile = !this.toFile;
     else if (id === "which") this.which = turn(this.whichList(), this.which);
   }
@@ -125,91 +129,91 @@ export class ExportForm {
   }
 
   /** The rows to export, read again where they must be. */
-  async rows(): Promise<{ readonly set: ResultSet } | { readonly error: string }> {
+  rows(): Effect.Effect<{ readonly set: ResultSet } | { readonly error: string }, never, DbRun> {
     const of = this.of;
 
-    if (!("table" in of)) return { set: of.result };
+    if (!("table" in of)) return Effect.succeed({ set: of.result });
 
     const v = this.v;
     const c = v.active;
     const b = v.rows.browse;
 
-    if (this.which === "page" && v.rows.set) return { set: v.rows.set };
+    if (this.which === "page" && v.rows.set !== null) return Effect.succeed({ set: v.rows.set });
 
-    if (!c) return { error: "not connected" };
+    if (c === null) return Effect.succeed({ error: "not connected" });
 
-    const filter = this.which === "filtered" && b ? b.filter : "";
+    const filter = this.which === "filtered" && b !== null ? b.filter : "";
     const sql = browseSql(c.kind, { table: of.table, sort: b?.table.name === of.table.name ? b.sort : null, filter, offset: 0, limit: 1_000_000_000 });
 
-    if ("refused" in sql) return { error: sql.refused };
+    if ("refused" in sql) return Effect.succeed({ error: sql.refused });
 
-    const o = await runOn(v, c, sql.statements.slice(0, 1), undefined, EXPORT_LIMIT);
-
-    if (o.error) return { error: o.error.message };
-
-    return { set: o.results[0]?.set ?? { columns: [], rows: [] } };
+    return Effect.map(runOn(v, c, sql.statements.slice(0, 1), undefined, EXPORT_LIMIT), (o) => (o.error !== null ? { error: o.error.message } : { set: o.results[0]?.set ?? { columns: [], rows: [] } }));
   }
 
-  async go(cx: Context): Promise<void> {
-    cx = this.v.held(cx);
+  /** Exports: the rows read (again where they must be), written or copied, said in the bar. */
+  go(): Effect.Effect<void, never, DbRun> {
+    return Effect.gen({ self: this }, function* () {
+      const v = this.v;
+      const c = v.active;
 
-    const v = this.v;
-    const c = v.active;
+      this.busy = true;
+      this.error = null;
+      yield* redraw;
 
-    this.busy = true;
-    this.error = null;
-    cx.notify();
+      const got = yield* this.rows();
 
-    const got = await this.rows();
+      if ("error" in got) {
+        this.error = got.error;
 
-    if ("error" in got) {
+        return;
+      }
+
+      const table = "table" in this.of && c !== null ? qualified(c.kind, this.of.table) : "result";
+      const set = got.set;
+      const text = exportText(set, this.format, c?.kind ?? "sqlite", table);
+      const done = yield* this.write(text);
+
+      if (done !== null && Str.isNonEmpty(done)) {
+        v.say(`${set.rows.length} rows as ${FORMAT_NAME[this.format]} ${done}`, "done");
+        this.close();
+      }
+    }).pipe(Effect.ensuring(Effect.sync(() => {
       this.busy = false;
-      this.error = got.error;
-      cx.notify();
-
-      return;
-    }
-
-    const table = "table" in this.of && c ? qualified(c.kind, this.of.table) : "result";
-    const set = got.set;
-    const text = exportText(set, this.format, c?.kind ?? "sqlite", table);
-    const done = await this.write(text, cx);
-
-    this.busy = false;
-
-    if (done) {
-      v.say(`${set.rows.length} rows as ${FORMAT_NAME[this.format]} ${done}`, "done");
-      this.close();
-    }
-
-    cx.notify();
+    })));
   }
 
   /** Writes the text where asked; says where, or null (the error is shown). */
-  async write(text: string, cx: Context): Promise<string | null> {
-    cx = this.v.held(cx);
+  write(text: string): Effect.Effect<string | null, never, DbRun> {
+    return Effect.gen({ self: this }, function* () {
+      if (!this.toFile) {
+        this.v.own?.write_to_clipboard(text);
 
-    if (!this.toFile) {
-      cx.write_to_clipboard(text);
+        return "copied";
+      }
 
-      return "copied";
-    }
+      const picked = yield* pickFolder("Export here");
+      const folder = Option.getOrNull(picked);
+      const dir = this.v.dir;
 
-    const folder = await pickFolder({ prompt: "Export here" });
-    const dir = this.v.dir;
+      if ((folder === null || Str.isEmpty(folder)) || (dir === null || Str.isEmpty(dir))) {
+        this.error = folder !== null && Str.isNonEmpty(folder) ? "the window's private folder is missing" : null;
 
-    if (!folder || !dir) {
-      this.error = folder ? "the window's private folder is missing" : null;
+        return null;
+      }
 
-      return null;
-    }
+      const name = Str.trim(this.name.value());
+      const now = yield* Clock.currentTimeMillis;
+      const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.isNonEmpty(name) ? name : exportName("export", this.format, now)}`;
 
-    const dest = `${folder.replace(/\/$/, "")}/${this.name.value().trim() || exportName("export", this.format)}`;
-    const failed = await writeOut(IO, dir, dest, text);
+      return yield* writeOut(dir, dest, text).pipe(
+        Effect.as(`to ${dest}`),
+        Effect.catch((error) => Effect.sync(() => {
+          this.error = error.message;
 
-    this.error = failed;
-
-    return failed ? null : `to ${dest}`;
+          return null;
+        })),
+      );
+    });
   }
 
   draw(t: Theme): Element {
@@ -228,16 +232,16 @@ export class ExportForm {
       .child(v_flex().id("db-export-box").relative().w(Math.min(520, this.v.size.width - 32)).bg(t.background).border(1).border_color(t.accent).on_mouse_down("left", stop)
         .child(h_flex().h(30).px(14).items_center().text_color(t.foreground).child(title))
         .child(v_flex().px(14).pb(12).gap(10)
-          .when(this.whichList().length > 1, (el) => el.child(row("which", "what", this.whichList().map((w) => pickChip(`exp-w-${w}`, WHICH_NAME[w], this.which === w, () => { this.which = w; })))))
-          .child(row("format", "format", FORMATS.map((f) => pickChip(`exp-f-${f}`, FORMAT_NAME[f], this.format === f, () => { this.format = f; }))))
+          .when(this.whichList().length > 1, (el) => el.child(row("which", "what", Arr.map(this.whichList(), (w) => pickChip(`exp-w-${w}`, WHICH_NAME[w], this.which === w, () => { this.which = w; })))))
+          .child(row("format", "format", Arr.map(FORMATS, (f) => pickChip(`exp-f-${f}`, FORMAT_NAME[f], this.format === f, () => { this.format = f; }))))
           .child(row("to", "to", [pickChip("exp-to-clip", "the clipboard", !this.toFile, () => { this.toFile = false; }), pickChip("exp-to-file", "a file…", this.toFile, () => { this.toFile = true; })]))
           .when(this.toFile, (el) => el.child(v_flex().gap(4).child(div().text_color(t.dim).child("named (the folder is asked next)"))
             .child(h_flex().h(26).px(8).items_center().border(1).border_color(on("name") ? t.accent : t.muted).child(Input.new(this.name).flex_1().text_size(12).text_color(t.foreground)))))
           .when(this.error !== null, (el) => el.child(div().text_color(t.blocked).child(this.error ?? "")))
           .child(h_flex().gap(8).justify_end()
-            .child(ring(chip(t, "exp-go", this.busy ? "exporting…" : "Export  enter", false, (cx) => void this.go(cx), t.accent), on("go"), t.accent))
+            .child(ring(chip(t, "exp-go", this.busy ? "exporting…" : "Export  enter", false, () => this.v.run(this.go()), t.accent), on("go"), t.accent))
             .child(ring(chip(t, "exp-cancel", "Cancel  esc", false, () => this.close()), on("cancel"), t.accent))))
         .child(h_flex().h(22).px(14).gap(12).items_center().text_size(11)
-          .children(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "export" }).map(([k, w], i) => hint(t, `exp-hint-${i}`, k, w)))));
+          .children(Arr.map(formHints(stops, this.at, { mac: appWindow().platform === "macos", submit: "export" }), ([k, w], i) => hint(t, `exp-hint-${i}`, k, w)))));
   }
 }

@@ -17,6 +17,7 @@ import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Column } from "@fireflies/viewer/table";
 import { table, oneLine } from "@fireflies/viewer/table";
+import { Array as Arr, Match, Option, Schema, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
 import type { GridColumn } from "./columns.ts";
@@ -34,7 +35,7 @@ const GUTTER_MIN = 28;
 
 /** The grid's columns, measured once per result (table.ts: widths, numbers). */
 export function columnsOf(set: ResultSet): readonly Column[] {
-  const text = [set.columns.map((c) => c), ...set.rows.slice(0, 400).map((r) => r.map((v) => (v === null ? "null" : v)))];
+  const text = [Arr.map(set.columns, (c) => c), ...Arr.map(set.rows.slice(0, 400), (r) => Arr.map(r, (v) => (v === null ? "null" : v)))];
 
   return table(text).cols;
 }
@@ -135,7 +136,7 @@ function cellLook(t: Theme, v: Cell, num: boolean): readonly [string, Color] {
 }
 
 function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn[], shown: readonly number[], gutter: number, h: GridHandlers): Element {
-  const cells = shown.map((i) => {
+  const cells = Arr.map(shown, (i) => {
     const name = set.columns[i] ?? "";
     const sorted = look.sort?.column === name;
     const c = cols[i] ?? { name, num: false, ch: 4 };
@@ -143,14 +144,14 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridCol
     // The name whole first: the type only where it fits beside it.
     const fits = (name.length + 2 + (look.types?.[i]?.length ?? 0)) * CH + PAD <= w;
     const type = fits ? look.types?.[i] : undefined;
-    const tip = look.tips?.[i] ?? (look.types?.[i] ? `${name} · ${look.types[i]}` : name);
+    const tip = look.tips?.[i] ?? (look.types?.[i] !== undefined && Str.isNonEmpty(look.types?.[i]) ? `${name} · ${look.types[i]}` : name);
 
     const cell = h_flex().id(`${look.id}-h-${i}`).relative().flex_none().w(w).h(HEAD).px(8).gap(6).items_center().overflow_hidden()
       .border_r(1).border_color(edgeTone(t)).cursor_pointer().tooltip(tip)
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
 
-        const x = e.local_position ? e.local_position.x / zoom() : -1;
+        const x = e.local_position !== undefined ? e.local_position.x / zoom() : -1;
 
         h.head(i, x >= w - EDGE, e, cx);
         cx.notify();
@@ -187,7 +188,7 @@ function editCell(t: Theme, look: GridLook, r: number, i: number, c: GridColumn,
 function cutTip(v: Cell, w: number): string | null {
   if (v === null || (v.length * CH + PAD <= w && !/[\r\n\t]/.test(v))) return null;
 
-  return v.length > 600 ? `${v.slice(0, 600)}…` : v;
+  return v.length > 600 ? `${Str.slice(0, 600)(v)}…` : v;
 }
 
 function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn[], shown: readonly number[], gutter: number, r: number, at: GridAt, range: Range | null, h: GridHandlers): Element {
@@ -196,25 +197,25 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
   const o = look.overlay;
   const ed = o?.editing?.row === r ? o.editing : null;
 
-  const cells = shown.map((i) => {
+  const cells = Arr.map(shown, (i) => {
     const c = cols[i] ?? { name: "", num: false, ch: 4 };
 
     if (ed?.col === i) return editCell(t, look, r, i, c, ed);
 
     const change = o?.change(r, i) ?? null;
-    const value = change ? change.now : data[i] ?? null;
+    const value = change !== null ? change.now : data[i] ?? null;
     const [text, plain] = cellLook(t, value, c.num);
-    const color = change ? t.ansi3 : plain;
+    const color = change !== null ? t.ansi3 : plain;
     const picked = cur && i === at.col;
     const w = colWidth(c);
-    const tip = change ? null : cutTip(value, w);
+    const tip = change !== null ? null : cutTip(value, w);
     const ranged = range !== null && inRange(range, r, i);
 
     const cell = div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(w).h(ROW).px(8).flex().items_center().overflow_hidden()
       .border_r(1).border_color(tone(t, 0.48))
       .when(c.num, (el) => el.justify_end())
       .when(ranged, (el) => el.child(dither(`${t.accent}33`, 1)))
-      .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
+      .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${wasWords(change?.was ?? null, oneLine)}`))
       .when(tip !== null, (el) => el.tooltip(tip ?? ""))
       .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.muted).bg(`${t.accent}1a`))
       .on_mouse_down("left", (e, cx) => {
@@ -286,10 +287,13 @@ export function grid(t: Theme, look: GridLook, set: ResultSet, cols: readonly Gr
 
 /** A wheel's move in (rows, columns): down and up by rows, sideways by a column; with shift
  *  an up-and-down wheel goes sideways. */
+/** `n`, or `or` when it rounds to none. */
+const nonZeroOr = (n: number, or: number): number => (n === 0 ? or : n);
+
 export function wheelStep(dx: number, dy: number, shift: boolean): readonly [number, number] {
   if (shift && Math.abs(dy) > Math.abs(dx)) return [0, -Math.sign(dy)];
 
-  const by = Math.abs(dy) >= Math.abs(dx) ? Math.round(-dy / ROW) || -Math.sign(dy) : 0;
+  const by = Math.abs(dy) >= Math.abs(dx) ? nonZeroOr(Math.round(-dy / ROW), -Math.sign(dy)) : 0;
   const across = Math.abs(dx) > Math.abs(dy) ? -Math.sign(dx) : 0;
 
   return [by, across];
@@ -310,20 +314,26 @@ export function scrollGrid(at: GridAt, set: ResultSet, cols: readonly GridColumn
 export const cellAt = (set: ResultSet | null, at: GridAt): Cell | undefined => set?.rows[at.row]?.[at.col];
 
 /** A row as tab-separated text (copying a row). */
-export const rowText = (set: ResultSet, r: number): string => (set.rows[r] ?? []).map((v) => (v === null ? "NULL" : v)).join("\t");
+export const rowText = (set: ResultSet, r: number): string => Arr.join(Arr.map((set.rows[r] ?? []), (v) => (v === null ? "NULL" : v)), "\t");
 
 /** A cell's whole value for reading: JSON pretty-printed when it is JSON. */
+const jsonValue = Schema.decodeOption(Schema.fromJsonString(Schema.Json));
+const prettyJson = Schema.encodeOption(Schema.fromJsonString(Schema.Json, { space: 2 }));
+
+/** A changed cell's value before, in words: NULL, an empty text said, else `shown`'s text of it. */
+export const wasWords = (was: Cell, shown: (text: string) => string): string => Match.value(was).pipe(
+  Match.when(null, () => "NULL"),
+  Match.when("", () => "'' (empty)"),
+  Match.orElse(shown),
+);
+
 export function prettyValue(v: Cell): string {
   if (v === null) return "NULL";
 
-  const s = v.trim();
+  const s = Str.trim(v);
 
-  if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
-    try {
-      return JSON.stringify(JSON.parse(s), null, 2);
-    } catch {
-      return v;
-    }
+  if ((Str.startsWith("{")(s) && Str.endsWith("}")(s)) || (Str.startsWith("[")(s) && Str.endsWith("]")(s))) {
+    return Option.getOrElse(Option.flatMap(jsonValue(s), prettyJson), () => v);
   }
 
   return v;

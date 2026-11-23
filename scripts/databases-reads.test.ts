@@ -78,10 +78,13 @@ const stores = new Map<string, Map<string, string>>();
 let clipboard = "";
 const cx: any = {
   spawn(f: Function) { void f(cx); }, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }),
-  timer: { after(_ms: number, f: Function) { f(cx); }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
+  timer: { after(ms: number, f: Function) { if (ms < 1000) f(cx); return { cancel() {} }; }, every() {} }, bind_keys() {}, write_to_clipboard: (t: string) => { clipboard = t; },
 };
 
 const { default: Databases } = await import("../defaults/mods/databases/main.ts");
+const { runtime: dbRuntime } = await import("../defaults/mods/databases/app.ts");
+const { viewRun } = await import("./databases-host.ts");
+const runView = viewRun(dbRuntime);
 const { command } = await import("../defaults/mods/databases/opening.ts");
 
 function open(p: any) {
@@ -393,7 +396,7 @@ test("a run the stop killed is said as stopped in the Log", async () => {
   kill();
   await until(() => v.log[0]?.said !== "running…");
   expect(v.log[0]).toMatchObject({ sql: "the tables", ok: false, said: "stopped" });
-  expect(v.log[0].run).toEndWith("· exit 137");
+  expect(v.log[0].run).toEndWith("· stopped");
 });
 
 test("databases.stop does what esc does to a read going on", async () => {
@@ -405,8 +408,8 @@ test("databases.stop does what esc does to a read going on", async () => {
   command(v, "databases.stop", cx);
   await until(() => !v.catalog.busy);
   expect(v.catalog.error).toBe("reading the tables: stopped · r reads again");
-  // The stopped run is named in the Log all the same (as it started: it never answered).
-  expect(v.log[0]).toMatchObject({ sql: "the tables", said: "running…" });
+  // The stopped run is named in the Log all the same: stopped, it never answered.
+  expect(v.log[0]).toMatchObject({ sql: "the tables", ok: false, said: "stopped" });
   expect(v.log[0].run).toStartWith("/usr/bin/psql -X -A --csv");
 });
 
