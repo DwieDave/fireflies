@@ -817,6 +817,37 @@ scripts/file-tree-open.test.ts.
 |---|---|---|
 | none of its own: wave 0's library move left it a subclass of the viewer that reads two shared keys through Schemas | main.ts | |
 
+**Wave 1: agent-graph, done (2026-11-23).** The whole mod in the Effect pass
+(`effect_sources` names `defaults/mods/agent-graph`): its findings fixed (422
+before), its guard.ts gone, every shape a Schema (claude.ts: a session file,
+an agent's meta, a journal line, a transcript line and its blocks, an agent,
+a run, the packed snapshot; state.ts: the terminals, its props, the session,
+the cache entry, what a copy remembers), the cache through `mapOf`
+(`agent-graph.cache`, entry by entry). Its reads through `Exec` (the
+snapshot, a feed, the tokens, a session file, the parents of nested agents)
+and `Files` (the workflow scripts), the ask through `Hc`, focusing the
+terminal through `Commands`, the shown space through `Workspace`. A copy
+attaches in `init` (fx.ts): the poll (a read, a redraw, a pause; a read that
+hangs given up after 15 s) and the command loop are runs on it, the poll
+under one key (picking a node or a session reads at once, the read under way
+gives way). Its tests run on scripts/agent-graph-host.ts (the kit's test
+layers, one herdr stand-in; the snapshot script on a real shell over a
+scratch ~/.claude). What a read of it showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| The snapshot script read times with BSD `stat -f %m`: on Linux GNU stat printed file-system status there, so every agent's times were wrong | claude.ts | GNU `stat -c %Y` first, then BSD's, then 0 (as notifications' records); scripts/agent-graph.test.ts runs the script for real |
+| A read that couldn't run (`exec`, `readTextFile`, `hc`) was `catch(() => null)`: an ask that never arrived said nothing | claude.ts, navigate.ts | `ExecError` / `FileError` caught by tag where a smaller read can leave something out (named: "the next poll asks again"); the snapshot's said on the pane ("The session can't be read: …", the last read stays); a failed ask is a toast |
+| The poll was `cx.timer.every` and `cx.spawn` with its own generation counter and busy stamp, and the command loop `cx.spawn` over `nextCommand()`, running on after the pane closed | main.ts, reading.ts | runs on the copy's runtime under one key, ended by `close()` |
+| `Date.now()` in every age, run time, the folder's last-drawn stamp and gg's timing | claude.ts, state.ts, graph.ts, feed-view.ts, stats-view.ts | the runtime's Clock: one read per render (`v.now`), `Clock.currentTimeMillis` in the reads |
+| The cache and what a copy remembers through `JSON.stringify` / `JSON.parse` and guards | reading.ts, state.ts | Schemas (`fromJsonString`), `encodeOption` for the "did it change" compare |
+| h j k l moved the selection but let the key go on to the window | main.ts | taken like every other key of the graph |
+| No menu on a node: its actions only by key or the details' chips | graph.ts, viewport.ts | node-menu.ts: at the press on a right-click, beside the selected node on `m`, the session's in the middle with nothing selected (@fireflies/menu-place); the same actions with their keys |
+
+Left: its tests load the mod after `mock.module("herdr")` and `await import` at
+the top (as git's and notifications' do): the views read the theme, props,
+settings and the shown space from herdr directly in a render.
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings

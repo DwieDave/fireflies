@@ -11,10 +11,14 @@ import type { Color, Context, Element, Point } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { Array as Arr, Option, String as Str } from "effect";
 import type { Status, Theme } from "herdr";
-import { ART, dither, pip } from "./kit.ts";
+import { pip } from "./kit.ts";
+import { boxed, dithered, fill, icon, pick } from "@fireflies/look";
 import type { Agent, Run, Snapshot } from "./claude.ts";
 import { ranFor, span } from "./claude.ts";
 import { edge } from "@fireflies/tones";
+
+/** Nocturne's art (Claude's mark). */
+const ART = "mods/nocturne/art";
 
 // Sizes at zoom 1; dims(z) scales them (zooming lays the graph out again,
 // text and all, so it stays crisp).
@@ -265,7 +269,7 @@ export function place(root: GraphNode, d: Dims = dims()): Placed {
 
 /** A dithered line segment. */
 function seg(color: Color, x: number, y: number, w: number, h: number): Element {
-  return div().absolute().left(x).top(y).w(Math.max(1, w)).h(Math.max(1, h)).child(dither(color, 1));
+  return div().absolute().left(x).top(y).w(Math.max(1, w)).h(Math.max(1, h)).child(fill(color, 1));
 }
 
 /** Lines from a parent to its children, elbowed at the gap's middle. */
@@ -318,6 +322,7 @@ function phaseInk(t: Theme, n: PhaseNode): Color {
 
 /** A node's mark: Claude's for the session, layers for a run, a pip for an agent. */
 function nodeMark(t: Theme, n: GraphNode, color: Color, d: Dims): Element {
+  // Claude's mark is the session's identity: its 1-bit art in both looks.
   if (n.kind === "main") return svg(`${ART}/logo-claude.svg`).size(d.icon).flex_none().text_color(n.status === "working" ? t.working : t.foreground);
 
   if (n.kind === "run") return svg("mods/workspace-chrome/layers.svg").size(Math.round(12 * d.z)).flex_none().text_color(color);
@@ -330,8 +335,9 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, o
   const color = toneOf(t, n.status);
   const sel = selected === n.key;
 
-  const box = div().id(`node-${n.key}`).absolute().left(n.x).top(n.y).w(d.NW).h(n.h).bg(t.background)
-    .border(1).border_color(sel ? t.accent : n.status === "working" ? color : edge(t))
+  const lit = n.status === "working" ? color : null;
+
+  const box = boxed(t, div().id(`node-${n.key}`).absolute().left(n.x).top(n.y).w(d.NW).h(n.h).bg(pick(t.background, t.raised)), sel ? t.accent : lit)
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => onPick(n, cx))
     .on_mouse_down("right", (e, cx) => {
@@ -342,12 +348,12 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, o
 
   if (n.kind === "phase") {
     return box.child(h_flex().relative().size_full().px(Math.round(8 * d.z)).gap(6).items_center().text_size(d.small)
-      .when(n.now, (el) => el.child(dither(`${t.accent}88`, 1)))
-      .child(div().relative().flex_1().min_w(0).truncate().text_color(phaseInk(t, n)).child(Str.toUpperCase(n.label)))
+      .when(n.now, (el) => el.child(fill(`${t.accent}88`, 1)))
+      .child(div().relative().flex_1().min_w(0).truncate().text_color(phaseInk(t, n)).child(pick(Str.toUpperCase(n.label), n.label)))
       .child(div().relative().flex_none().text_color(n.now ? t.accent : t.dim).child(n.now ? "now" : n.sub)));
   }
 
-  const stripe = div().absolute().left(0).top(0).bottom(0).w(4).child(dither(color, 1));
+  const stripe = div().absolute().left(0).top(0).bottom(0).w(4).child(fill(color, 1));
 
   const mark = nodeMark(t, n, color, d);
 
@@ -357,7 +363,7 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, o
   const time = n.kind === "main" ? "" : n.time;
 
   return box
-    .when(sel, (el) => el.child(dither(`${t.accent}33`, 1)))
+    .when(sel, (el) => el.child(fill(`${t.accent}33`, 1)))
     .child(n.status === "working" ? stripe.loop("opacity", { from: 0.3, to: 1, period: 1300 }) : stripe)
     .child(h_flex().relative().size_full().pl(Math.round(10 * d.z)).pr(6).gap(Math.round(7 * d.z)).items_center()
       .child(div().w(d.icon).flex_none().flex().items_center().justify_center().child(mark))
@@ -387,7 +393,13 @@ export function canvas(t: Theme, root: GraphNode, selected: string | null, onPic
  * depth), dimming a touch out of step, and rarely a faint shooting star.
  */
 export function sky(t: Theme, panX: number, panY: number): Element {
-  const far = (dx: number, dy: number) => svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(dy).left(dx).text_color(t.muted);
+  const sky = div().id("graph-sky").absolute().inset_0().overflow_hidden();
+  const stars = icon("stars", null);
+
+  // The plain look has no night: the graph on the pane's ground.
+  if (stars === null || !dithered()) return sky;
+
+  const far = (dx: number, dy: number) => svg(stars).w(480).h(900).absolute().top(dy).left(dx).text_color(t.muted);
 
   const layer = (k: number, period: number, drift: number, opacity: number, twinkle: number) => {
     const ox = ((panX * k) % 480 + 480) % 480 - 480, oy = ((panY * k) % 900 + 900) % 900 - 900;
@@ -400,10 +412,10 @@ export function sky(t: Theme, panX: number, panY: number): Element {
       .child(div().size_full().opacity(opacity).loop("opacity", { from: opacity * 0.7, to: opacity, period: twinkle }).children(tiles));
   };
 
-  return div().id("graph-sky").absolute().inset_0().overflow_hidden()
+  return sky
     .child(layer(0.1, 240000, 480, 0.2, 7000))
     .child(layer(0.25, 160000, 480, 0.3, 5300))
-    .child(div().absolute().w(28).h(1).child(dither(t.muted, 1)).opacity(0.4)
+    .child(div().absolute().w(28).h(1).child(fill(t.muted, 1)).opacity(0.4)
       .loop("left", { from: -2000, to: 2400, period: 40000, easing: "linear" })
       .loop("top", { from: 30, to: 260, period: 40000, easing: "linear" }));
 }

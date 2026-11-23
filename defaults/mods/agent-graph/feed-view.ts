@@ -6,7 +6,8 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list } from "gpui-base";
 import type { Theme } from "herdr";
 import { Array as Arr, Option, String as Str } from "effect";
-import { dither, pip } from "./kit.ts";
+import { pip } from "./kit.ts";
+import { dithered, fill, pick, rule } from "@fireflies/look";
 import type { Feed, Snapshot } from "./claude.ts";
 import { ranFor, span } from "./claude.ts";
 import type { GraphNode } from "./graph.ts";
@@ -24,7 +25,7 @@ export function drawToolbar(v: Agents, t: Theme, list: readonly ClaudePane[], pa
   const counts = v.data === null ? 0 : Arr.filter(Arr.fromIterable(v.data.agents.values()), (a) => a.status === "working").length;
 
   return h_flex().id("ag-toolbar").relative().h(34).flex_none().px(12).gap(6).items_center().text_size(11)
-    .child(div().flex_none().pr(4).text_color(t.muted).child("AGENTS"))
+    .child(div().flex_none().pr(4).text_color(pick(t.muted, t.dim)).child(pick("AGENTS", "Agents")))
     .child(h_flex().id("ag-sessions").flex_1().min_w(0).gap(2).items_center().overflow_x_scroll()
       .children(Arr.map(list, (p) => {
         const on = p.terminal === pane?.terminal;
@@ -36,12 +37,12 @@ export function drawToolbar(v: Agents, t: Theme, list: readonly ClaudePane[], pa
             showSession(v, p.terminal);
             cx.notify();
           })
-          .when(on, (el) => el.child(dither(edgeTone(t), 1)))
+          .when(on, (el) => (dithered() ? el.child(fill(edgeTone(t), 1)) : el.bg(t.selected).rounded(6)))
           .child(div().relative().child(pip(t, p.status, 5)))
           .child(div().relative().max_w(140).truncate().child(p.name));
       })))
     .when(counts > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`${counts} working`)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edgeTone(t), 1)));
+    .child(rule(t, "bottom"));
 }
 
 /**
@@ -54,8 +55,8 @@ export function feedList(v: Agents, t: Theme, f: Feed | null): Element {
 
   const task: readonly FeedRow[] = Str.isNonEmpty(f.task) ? [{ kind: "task", text: f.task }] : [];
   const rows: readonly FeedRow[] = [...task, ...f.items.slice(-150)];
-  // Roughly how many characters fit on a line (Departure Mono: ~0.6em wide).
-  const perLine = Math.max(20, Math.floor((v.view.width - 24) / 6.6));
+  // Roughly how many characters fit on a line (Departure Mono: ~0.6em wide; the plain look's UI font a little narrower).
+  const perLine = Math.max(20, Math.floor((v.view.width - 24) / pick(6.6, 6)));
   const lines = (text: string, max: number) => Math.min(max, Math.max(1, Math.ceil(text.length / perLine)));
   const LINE = 15;
 
@@ -71,7 +72,7 @@ export function feedList(v: Agents, t: Theme, f: Feed | null): Element {
     const box = div().id(`f-${i}`).h(height(x)).overflow_hidden();
 
     if (x.kind === "task") {
-      return box.px(12).pt(4).child(div().text_size(10).text_color(t.muted).child("TASK"))
+      return box.px(12).pt(4).child(div().text_size(10).text_color(pick(t.muted, t.dim)).child(pick("TASK", "Task")))
         .child(div().text_size(11).text_color(t.muted).child(x.text));
     }
 
@@ -136,7 +137,7 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
         v.selected = null;
         cx.notify();
       }))
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1))), statsBody(v, t, data));
+      .child(rule(t, "top")), statsBody(v, t, data));
   }
 
   const color = toneOf(t, n.status);
@@ -150,7 +151,7 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
   ], Str.isNonEmpty);
 
   const head = h_flex().id("ag-detail-head").relative().h(30).flex_none().px(12).gap(8).items_center().text_size(11)
-    .child(div().flex_none().w(8).h(8).relative().child(dither(color, 1)))
+    .child(div().flex_none().w(8).h(8).relative().child(fill(color, 1)))
     .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(n.label))
     .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(Arr.join(said, " · ")))
     .when(n.kind === "agent" || n.kind === "main", (el) => el.child(chip(t, "ag-follow", v.follow ? "● follow" : "○ follow",
@@ -167,7 +168,7 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
       v.detail = null;
       cx.notify();
     }))
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)));
+    .child(rule(t, "top"));
 
   if (n.kind === "run" || n.kind === "phase") {
     const r = n.run;
@@ -182,7 +183,7 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
             pickNode(v, { key: a.id, kind: "agent" });
             cx.notify();
           })
-          .child(div().w(6).h(6).flex_none().relative().child(dither(toneOf(t, a.status), 1)))
+          .child(div().w(6).h(6).flex_none().relative().child(fill(toneOf(t, a.status), 1)))
           .child(div().w(54).flex_none().truncate().text_color(t.dim).child(a.phase ?? ""))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(a.label))
           .child(div().flex_none().text_color(t.dim).child(tokens(v, a.file) ?? ""))

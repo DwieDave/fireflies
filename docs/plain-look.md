@@ -529,7 +529,19 @@ Nothing of its own to draw: the pane is @fireflies/viewer's (defaults/lib), whos
 | `toolbar.ts:drawLens` | rule ×2, fill ×2, box ×1 | `rule()`, `fill()`, `boxed()` / `frameBox()` / `button()` |
 | `toolbar.ts:drawToolbar` | title ×1, rule ×1, fill ×1, glyph ×2 | `titleBar()` / `heading()`, `rule()`, `fill()`, `glyph(text, plain)` |
 
-#### agent-graph (2302 lines of its own, 9 functions)
+#### agent-graph (2302 lines of its own, 9 functions): done
+
+Done on 2026-11-23: the checkers through `fill()`, the bars' edges through
+`rule()`, the stats group's line through `hairline()`, the chosen stats strip
+through `lit()`, a node's frame through `boxed()` (rounded, on `t.raised`, in
+the plain look), pips through `dot()`. Section names as written in the plain
+look (`pick`), the feed's line width by the look's font. The night sky is
+nocturne's only (`icon("stars", null)`): the plain look draws the graph on
+the pane's ground. Claude's mark on the session node stays its 1-bit art in
+both looks (the agent's identity, as notifications' logos). Nocturne's
+element tree is unchanged in twelve states (recorded at integrate,
+scripts/agent-graph-look.test.ts), but for the node menu's handlers and its
+`m` row in ? keys.
 
 | file: function | draws | becomes |
 | --- | --- | --- |

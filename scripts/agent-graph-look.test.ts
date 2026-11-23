@@ -127,3 +127,28 @@ test("nocturne: every state draws as at integrate (the element trees recorded th
   const hash = (tree: string[]) => createHash("sha256").update(tree.join("\n")).digest("hex").slice(0, 16);
   for (const name of Object.keys(STATES)) expect([name, hash(now[name] ?? [])]).toEqual([name, before[name]]);
 });
+
+test("main (herdr-app's default): no checker anywhere, no night sky, rounded cards for nodes, dots for pips, names as written, the menu a popover", () => {
+  use("main");
+  const all = drawAll();
+  for (const [name, tree] of Object.entries(all)) {
+    expect([name, tree.filter((c) => c.includes("paint_path") || c.includes("checker"))]).toEqual([name, []]);
+    expect([name, tree.filter((c) => c.includes("stars.svg") || c.includes("pip.svg"))]).toEqual([name, []]);
+  }
+  expect(all.graph).toContain("rounded([5])");
+  expect(all.graph).toContain('child(["Agents"])');
+  expect(all.graph).not.toContain('child(["AGENTS"])');
+  expect(all.graph).toContain('child(["All"])');
+  expect(all.phase).toContain('child(["Build"])');
+  expect(all.stats).toContain('child(["review · 5m 00s"])');
+  expect(all.agent).toContain('child(["Task"])');
+  // The session's mark stays Claude's 1-bit art.
+  expect(all.graph.some((c) => c.includes("logo-claude.svg"))).toBe(true);
+  // A node's menu: upstream's popover, the chosen row rounded.
+  const v = view({ selected: "a1" });
+  v.render();
+  v.openMenu(v.layout.find((n: any) => n.key === "a1"), null);
+  const menu = calls(v.render());
+  expect(menu).toContain("rounded([8])");
+  expect(menu).toContain("rounded([6])");
+});

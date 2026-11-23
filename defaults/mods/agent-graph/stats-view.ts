@@ -6,7 +6,7 @@ import type { Color, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { Array as Arr, Option, String as Str } from "effect";
-import { dither } from "./kit.ts";
+import { fill, hairline, lit, pick } from "@fireflies/look";
 import type { Agent, Snapshot, Usage } from "./claude.ts";
 import { ranFor, span, count, emptyUsage, addUsage } from "./claude.ts";
 import { toneOf, WORDS } from "./graph.ts";
@@ -60,8 +60,8 @@ export function statsStrip(v: Agents, t: Theme): Element {
       v.detail = null;
       cx.notify();
     })
-    .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-    .child(div().relative().flex_none().text_color(t.muted).child("ALL"))
+    .when(on, (el) => lit(t, el, true))
+    .child(div().relative().flex_none().text_color(pick(t.muted, t.dim)).child(pick("ALL", "All")))
     .child(part(t.foreground, `${s.n} agent${s.n === 1 ? "" : "s"}`).relative())
     .when(s.working > 0, (el) => el.child(part(t.working, `${s.working} working`).relative()))
     .when(s.done > 0, (el) => el.child(part(t.done, `${s.done} done`).relative()))
@@ -100,7 +100,7 @@ export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
         pickNode(v, { key: a.id, kind: "agent" });
         cx.notify();
       })
-      .child(div().w(6).h(6).flex_none().relative().child(dither(toneOf(t, a.status), 1)))
+      .child(div().w(6).h(6).flex_none().relative().child(fill(toneOf(t, a.status), 1)))
       .child(div().flex_1().min_w(0).child(cols(`ag-stc-${a.id}`, t.muted, [
         div().truncate().text_color(t.foreground).child(a.label),
         div().text_color(toneOf(t, a.status)).child(WORDS[a.status]),
@@ -118,8 +118,8 @@ export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
   ];
 
   const head = (g: StatsGroup) => h_flex().id(`ag-stg-${g.id}`).pt(6).pb(2).gap(8).items_center()
-    .child(div().flex_none().text_size(10).text_color(t.muted).child(Str.toUpperCase(g.name)))
-    .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)));
+    .child(div().flex_none().text_size(10).text_color(pick(t.muted, t.dim)).child(pick(Str.toUpperCase(g.name), g.name)))
+    .child(hairline(t));
 
   const main = v.usage?.get(d.main);
 
@@ -131,7 +131,7 @@ export function statsBody(v: Agents, t: Theme, d: Snapshot): Element {
         div().truncate().text_color(t.foreground).child("the session itself"), "", s.wall === 0 ? "–" : span(s.wall),
         ...priced(main)]))))
     .children(Arr.flatMap(groups, (g) => [head(g), ...Arr.map(g.list, row)]))
-    .child(div().h(2).mt(6).relative().child(dither(edge(t), 1)))
+    .child(div().h(2).mt(6).relative().child(fill(edge(t), 1)))
     .child(h_flex().gap(6).pl(12).child(div().flex_1().child(cols("ag-st-sum", t.foreground, [
       `${s.n} agents · ${s.working} working · ${s.done} done · ${s.stopped} stopped`, "", span(s.time), count(s.all.tokens), money(s.all)]))))
     .child(div().pt(4).text_size(10).text_color(t.dim).child(`agents alone: ${count(s.sub.tokens)} tok · ${money(s.sub)} · costs at API list prices${s.all.unpriced ? "; a model without a price is left out" : ""}`));

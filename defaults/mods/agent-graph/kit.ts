@@ -1,34 +1,16 @@
-// The pieces of Nocturne's look this pane needs (a mod can't import another
-// mod's files): the art folder, the dither fill and status pips. Same as
-// ../nocturne/kit.ts.
+// The pieces of the look this pane needs beyond @fireflies/look: status pips
+// that breathe while working and blink while blocked.
 
-import { div, svg, PathBuilder, Background } from "gpui-kit";
-import type { Color, Element } from "gpui-kit";
-import { settings, window as appWindow } from "herdr";
+import { div } from "gpui-kit";
+import type { Element } from "gpui-kit";
 import type { Status, Theme } from "herdr";
-import { flat } from "@fireflies/layout-look";
+import { dot } from "@fireflies/look";
 
-export const ART = "mods/nocturne/art";
-
-const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
-
-/** A layer filling its parent with a 50% checker dither, in `cell`-px squares (Retina on macOS). */
-export function dither(color: Color, cell = 1): Element {
-  const plain = flat(color, cell);
-
-  if (plain !== null) return plain;
-
-  const zoom = settings().zoom || 1;
-  const dpr = appWindow().platform === "macos" ? 2 : 1;
-
-  return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
-}
-
-/** A small dithered diamond in the status color; working breathes, blocked blinks. */
+/** A status pip (nocturne's diamond, else a round dot) in the status color; working breathes, blocked blinks. */
 export function pip(t: Theme, status: Status | null, size = 6): Element {
   if (status === null || status === "idle") return div().size(size).flex_none();
 
-  const el = svg(`${ART}/pip.svg`).size(size).flex_none().text_color(t[status]);
+  const el = dot(t[status], size);
 
   if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
 
