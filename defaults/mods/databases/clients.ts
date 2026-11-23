@@ -5,7 +5,8 @@
 // hrana.ts speaks to it over HTTP. Also what to install when a client is
 // missing (said, never done).
 
-import { String as Str } from "effect";
+import { Effect, Option, Schema, String as Str } from "effect";
+import { Exec } from "@fireflies/kit";
 import type { Conn, Kind, SslMode } from "./kinds.ts";
 import { DEFAULT_PORT, onFile } from "./kinds.ts";
 import { NULL_MARK } from "./script.ts";
@@ -29,18 +30,19 @@ export const INSTALL = {
 } as const satisfies { readonly [K in Kind]: string };
 
 /** How a machine gets its programs: nix-darwin (darwin-rebuild), brew, a nix profile, or none known. */
-export type Setup = "nix-darwin" | "brew" | "nix" | "other";
+export const SetupSchema = Schema.Literals(["nix-darwin", "brew", "nix", "other"]);
+
+export type Setup = typeof SetupSchema.Type;
 
 /** The one script that tells the setup apart (the app's PATH). */
 export const SETUP_SCRIPT = "command -v darwin-rebuild >/dev/null 2>&1 && { echo nix-darwin; exit 0; }; command -v brew >/dev/null 2>&1 && { echo brew; exit 0; }; command -v nix >/dev/null 2>&1 && { echo nix; exit 0; }; echo other";
 
-/** The machine's setup (one exec of SETUP_SCRIPT; "other" when it can't tell). */
-export async function setupOf(exec: (cmd: string, args: string[]) => Promise<{ readonly code: number; readonly stdout: string }>): Promise<Setup> {
-  const r = await exec("sh", ["-c", SETUP_SCRIPT, "ff-setup"]).catch(() => null);
-  const s = r?.stdout.trim();
-
-  return s === "nix-darwin" || s === "brew" || s === "nix" ? s : "other";
-}
+/** The machine's setup (one run of SETUP_SCRIPT). A script that can't run can't tell: "other",
+ *  whose words (brew's line, said as a line to copy) fit any machine. */
+export const setupOf: Effect.Effect<Setup, never, Exec> = Exec.use((x) => x.run("sh", ["-c", SETUP_SCRIPT, "ff-setup"])).pipe(
+  Effect.map((r) => Option.getOrElse(Schema.decodeUnknownOption(SetupSchema)(Str.trim(r.stdout)), (): Setup => "other")),
+  Effect.orElseSucceed((): Setup => "other"),
+);
 
 /** The nix package that brings a kind's client. */
 const NIX = { postgres: "postgresql", mysql: "mariadb", sqlite: "sqlite", libsql: "sqlite" } as const satisfies { readonly [K in Kind]: string };

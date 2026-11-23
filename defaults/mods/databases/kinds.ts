@@ -3,16 +3,14 @@
 // or in memory while the window is open: secrets.ts), and how one is named and
 // placed in words. Pure, so scripts/databases-*.test.ts check it.
 
-import { Array as Arr, String as Str } from "effect";
-import type { Guarded } from "./guard.ts";
-import { isBoolean, isNumber, isString, literal, object } from "./guard.ts";
+import { Array as Arr, Effect, Option, Random, Schema, String as Str } from "effect";
 import type { KubeForward, KubeSource } from "./kube.ts";
-import { isKubeForward, isKubeSource } from "./kube.ts";
+import { KubeForwardSchema, KubeSourceSchema } from "./kube.ts";
 
 /** The kinds of database the window speaks. */
-export const isKind = literal("postgres", "mysql", "sqlite", "libsql");
+export const KindSchema = Schema.Literals(["postgres", "mysql", "sqlite", "libsql"]);
 
-export type Kind = Guarded<typeof isKind>;
+export type Kind = typeof KindSchema.Type;
 
 export const KINDS: readonly Kind[] = ["postgres", "mysql", "sqlite", "libsql"];
 
@@ -22,9 +20,9 @@ export const KINDS: readonly Kind[] = ["postgres", "mysql", "sqlite", "libsql"];
  *  pgpass    the client's own file (~/.pgpass, ~/.my.cnf), read by the client
  *  kubernetes  a cluster's secret (`source`, kube.ts), read with kubectl at each connect into memory
  *  none      it has none (a SQLite file, a local server that trusts its socket) */
-export const isSecret = literal("keychain", "ask", "pgpass", "kubernetes", "none");
+export const SecretSchema = Schema.Literals(["keychain", "ask", "pgpass", "kubernetes", "none"]);
 
-export type Secret = Guarded<typeof isSecret>;
+export type Secret = typeof SecretSchema.Type;
 
 /** How a server connection asks for TLS, in libpq's names (sslmode): disable (never), allow and
  *  prefer (when the server offers it), require (always, the certificate unchecked), verify-ca (a
@@ -33,9 +31,12 @@ export type Secret = Guarded<typeof isSecret>;
  *  each client gets). */
 export const SSL_MODES = ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] as const;
 
-export const isSslMode = literal(...SSL_MODES);
+export const SslModeSchema = Schema.Literals(SSL_MODES);
 
-export type SslMode = Guarded<typeof isSslMode>;
+export type SslMode = typeof SslModeSchema.Type;
+
+/** Whether `value` (any text: a connect request's) is an sslmode. */
+export const isSslMode = Schema.is(SslModeSchema);
 
 /** Whether the kind speaks to a server that may take TLS (the kinds with an sslmode). */
 export const speaksTls = (kind: Kind): boolean => kind === "postgres" || kind === "mysql";
@@ -51,12 +52,27 @@ export type Origin = "saved" | "found" | "sent";
 
 /** A connection as connections.json keeps it (and as found / sent ones are
  *  held in memory): no secret in any field. */
-export const isConnJson = object({ id: isString, name: isString, kind: isKind }, {
-  host: isString, port: isNumber, user: isString, database: isString, path: isString, url: isString, readonly: isBoolean, secret: isSecret,
-  source: isKubeSource, forward: isKubeForward, sslmode: isSslMode,
+export const ConnJsonSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  kind: KindSchema,
+  host: Schema.optionalKey(Schema.String),
+  port: Schema.optionalKey(Schema.Finite),
+  user: Schema.optionalKey(Schema.String),
+  database: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+  url: Schema.optionalKey(Schema.String),
+  readonly: Schema.optionalKey(Schema.Boolean),
+  secret: Schema.optionalKey(SecretSchema),
+  source: Schema.optionalKey(KubeSourceSchema),
+  forward: Schema.optionalKey(KubeForwardSchema),
+  sslmode: Schema.optionalKey(SslModeSchema),
 });
 
-export type ConnJson = Guarded<typeof isConnJson>;
+export type ConnJson = typeof ConnJsonSchema.Type;
+
+/** Whether a value is a kept connection. */
+export const isConnJson = Schema.is(ConnJsonSchema);
 
 /** A connection the window works with. */
 export interface Conn {
@@ -133,8 +149,9 @@ export function where(c: Conn, home = ""): string {
 }
 
 /** A new connection's id: its kind and a few random letters (also the keychain item's account). */
-export function newId(kind: Kind, random: () => number = Math.random): string {
-  const letters = Arr.join(Array.from({ length: 8 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)] ?? "x"), "");
+export const newId = (kind: Kind): Effect.Effect<string> => Effect.map(
+  Effect.all(Arr.replicate(Random.nextIntBetween(0, ID_LETTERS.length, { halfOpen: true }), 8)),
+  (picks) => `${KIND_MARK[kind]}-${Arr.join(Arr.map(picks, (n) => Option.getOrElse(Str.charAt(n)(ID_LETTERS), () => "x")), "")}`,
+);
 
-  return `${KIND_MARK[kind]}-${letters}`;
-}
+const ID_LETTERS = "abcdefghijklmnopqrstuvwxyz0123456789";

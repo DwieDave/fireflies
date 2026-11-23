@@ -3,11 +3,12 @@
 // exactly, NULL as null) or SQL inserts for the same kind of database (one
 // INSERT per row, names and texts quoted for it).
 
-import { Array as Arr, Record as Rec, String as Str } from "effect";
+import { Array as Arr, DateTime, Effect, Record as Rec, Schema, String as Str } from "effect";
+import { Exec, Files, execOk } from "@fireflies/kit";
+import type { ExecError, ExitError, FileError, StaleFile } from "@fireflies/kit";
 import type { Kind } from "./kinds.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import { quoteName, quoteText } from "./catalog.ts";
-import type { RunIo } from "./runner.ts";
 import { nonce } from "./runner.ts";
 
 /** The export formats. */
@@ -39,17 +40,19 @@ function numberColumns(set: ResultSet): boolean[] {
   });
 }
 
+const jsonText = Schema.encodeSync(Schema.fromJsonString(Schema.Json, { space: 2 }));
+
 /** A result as a JSON array of objects. */
 export function toJson(set: ResultSet): string {
   const nums = numberColumns(set);
 
-  const rows = Arr.map(set.rows, (r) => Rec.fromEntries(Arr.map(set.columns, (c, i) => {
+  const rows = Arr.map(set.rows, (r) => Rec.fromEntries(Arr.map(set.columns, (c, i): [string, Schema.Json] => {
     const v = r[i] ?? null;
 
     return [c, v === null ? null : nums[i] === true ? Number(v) : v];
   })));
 
-  return `${JSON.stringify(rows, null, 2)}\n`;
+  return `${jsonText(rows)}\n`;
 }
 
 /** A result as INSERT statements into `table` (a name as the kind writes it, already quoted). */
@@ -74,35 +77,29 @@ export function exportText(set: ResultSet, format: Format, kind: Kind, table: st
 }
 
 /** A file name for an export: the table's (or "result") and the date, safe in a path. */
-export function exportName(base: string, format: Format, now = new Date()): string {
-  const day = Str.slice(0, 10)(now.toISOString());
+export function exportName(base: string, format: Format, now: number): string {
+  const day = DateTime.formatIsoDateUtc(DateTime.makeUnsafe(now));
+  const safe = Str.replace(/[^A-Za-z0-9._-]+/g, "_")(base);
 
-  return `${Str.replace(/[^A-Za-z0-9._-]+/g, "_")(base) || "result"}-${day}.${EXTENSION[format]}`;
+  return `${Str.isEmpty(safe) ? "result" : safe}-${day}.${EXTENSION[format]}`;
 }
 
 /** writeTextFile takes at most 1 MiB: a bigger export is written in parts this many characters (3 bytes each at most). */
 export const PART = 320 * 1024;
 
-/** Writes `text` to `dest` (any size): parts in the private folder, joined there by cat, then gone.
- *  Resolves with what went wrong, or null. */
-export async function writeOut(io: RunIo, dir: string, dest: string, text: string): Promise<string | null> {
-  const n = nonce();
+/** Writes `text` to `dest` (any size): parts in the private folder, joined there by cat, then
+ *  gone. A part that couldn't be written takes the parts before it with it. */
+export const writeOut = (dir: string, dest: string, text: string): Effect.Effect<void, FileError | StaleFile | ExecError | ExitError, Exec | Files> => Effect.gen(function* () {
+  const n = yield* nonce;
+  const files = yield* Files;
   const parts: string[] = [];
+  const count = Math.max(1, Math.ceil(Str.length(text) / PART));
 
-  try {
-    for (let i = 0; i * PART < text.length || i === 0; i++) {
-      const part = `${dir}/x-${n}-${Str.padStart(5, "0")(String(i))}`;
+  yield* Effect.forEach(Arr.range(0, count - 1), (i) => {
+    const part = `${dir}/x-${n}-${Str.padStart(5, "0")(String(i))}`;
 
-      await io.writeTextFile(part, Str.slice(i * PART, (i + 1) * PART)(text), null);
-      parts.push(part);
-    }
-  } catch (error) {
-    await io.exec("rm", ["-f", ...parts]).catch(() => null);
+    return Effect.map(files.write(part, Str.slice(i * PART, (i + 1) * PART)(text), null), () => parts.push(part));
+  }).pipe(Effect.onError(() => Effect.ignore(Exec.use((x) => x.run("rm", ["-f", ...parts])))));
 
-    return error instanceof Error ? error.message : String(error);
-  }
-
-  const r = await io.exec("sh", ["-c", 'dest=$1; shift; cat "$@" > "$dest"; r=$?; rm -f "$@"; exit $r', "ff-export", dest, ...parts]).catch(() => null);
-
-  return r?.code === 0 ? null : (r?.stderr.trim() || "couldn't write the file");
-}
+  yield* execOk("sh", ["-c", 'dest=$1; shift; cat "$@" > "$dest"; r=$?; rm -f "$@"; exit $r', "ff-export", dest, ...parts]);
+});

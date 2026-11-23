@@ -9,16 +9,11 @@
 // client's pid is kept, so cancel() can interrupt it (psql then cancels the
 // query on the server, mysql kills it, sqlite3 stops).
 
-import type { ExecResult } from "herdr";
-import { String as Str } from "effect";
+import { Clock, Effect, Option, String as Str } from "effect";
+import { DecodeError, Exec, Files, execOk } from "@fireflies/kit";
+import type { ExecError, ExitError } from "@fireflies/kit";
 import type { Kind } from "./kinds.ts";
 import { CONNECT_SECONDS } from "./words.ts";
-
-/** What the runner uses of the app (herdr's exec and writeTextFile; a test's stand-ins). */
-export interface RunIo {
-  readonly exec: (cmd: string, args?: string[], options?: { cwd?: string; on?: string | null; timeout?: number }) => Promise<ExecResult>;
-  readonly writeTextFile: (path: string, text: string, expected: string | null) => Promise<null>;
-}
 
 /** The keychain's service for the window's passwords and tokens (the account is the connection's id). */
 export const KEYCHAIN_SERVICE = "fireflies.databases";
@@ -113,58 +108,71 @@ export function utf8Length(s: string): number {
 let nonces = 0;
 
 /** A run's nonce: unique within the window, safe in a file name. */
-export const nonce = (): string => `${Date.now().toString(36)}${(nonces++).toString(36)}`;
+export const nonce: Effect.Effect<string> = Effect.map(Clock.currentTimeMillis, (now) => `${now.toString(36)}${(nonces++).toString(36)}`);
 
 /** The argv of a run (what `ps` could show): nothing secret in it. */
 export function runnerArgs(spec: RunSpec, n: string): string[] {
   return ["-c", RUNNER, "ff-db", spec.dir, n, spec.kind, spec.program, spec.path ?? "", spec.account ?? "", spec.readonly === true ? "1" : "", String(spec.limit ?? OUTPUT_LIMIT), ...spec.args];
 }
 
-/** Runs the client on the script; `started(n)` hears the nonce (for cancel). Never rejects: a
- *  failure to start is a result with its words on stderr. */
-export async function run(io: RunIo, spec: RunSpec, started?: (n: string) => void): Promise<RunOutput> {
-  const n = nonce();
-  const at = Date.now();
+/** The one-shot password of a spec, when it has one. */
+const secretOf = (spec: RunSpec): Option.Option<string> => Option.filter(Option.fromNullishOr(spec.secret), Str.isNonEmpty);
 
-  try {
-    await io.writeTextFile(`${spec.dir}/q-${n}.sql`, spec.script, null);
+/** Runs the client on the script; `started(n)` hears the nonce (for cancel). It doesn't fail: a run
+ *  that couldn't start (the statements' file not written, sh not run) is an output with its words
+ *  on stderr and exit -1, as the parsers read a client's own failure. */
+export const run = (spec: RunSpec, started?: (n: string) => void): Effect.Effect<RunOutput, never, Exec | Files> => Effect.gen(function* () {
+  const n = yield* nonce;
+  const at = yield* Clock.currentTimeMillis;
+  const secret = secretOf(spec);
+  const ms = Effect.map(Clock.currentTimeMillis, (now) => now - at);
 
-    if (spec.secret !== null && spec.secret !== undefined && Str.isNonEmpty(spec.secret)) await io.writeTextFile(`${spec.dir}/s-${n}`, spec.secret, null);
+  const go = Effect.gen(function* () {
+    const files = yield* Files;
+
+    yield* files.write(`${spec.dir}/q-${n}.sql`, spec.script, null);
+
+    if (Option.isSome(secret)) yield* files.write(`${spec.dir}/s-${n}`, secret.value, null);
 
     started?.(n);
 
-    const r = await io.exec("sh", runnerArgs(spec, n), { timeout: spec.timeout ?? RUN_TIMEOUT });
+    const r = yield* Exec.use((x) => x.run("sh", runnerArgs(spec, n), { timeout: spec.timeout ?? RUN_TIMEOUT }));
     const limit = spec.limit ?? OUTPUT_LIMIT;
     // head -c counts bytes: a cut output is the limit's worth (or the client died of the closed pipe).
     const cut = r.code === 141 || utf8Length(r.stdout) >= limit;
 
-    return { stdout: r.stdout, stderr: r.stderr, code: cut && r.code === 141 ? 0 : r.code, cut, ms: Date.now() - at };
-  } catch (error) {
-    // The one-shot secret file must not outlive a run that never started.
-    if (spec.secret !== null && spec.secret !== undefined && Str.isNonEmpty(spec.secret)) await io.exec("rm", ["-f", `${spec.dir}/s-${n}`]).catch(() => null);
+    return { stdout: r.stdout, stderr: r.stderr, code: cut && r.code === 141 ? 0 : r.code, cut, ms: yield* ms };
+  });
 
-    return { stdout: "", stderr: error instanceof Error ? error.message : String(error), code: -1, cut: false, ms: Date.now() - at };
-  }
-}
+  return yield* go.pipe(
+    // The one-shot secret file must not outlive a run that never started (the runner removes it once read).
+    Effect.onError(() => (Option.isSome(secret) ? Effect.ignore(Exec.use((x) => x.run("rm", ["-f", `${spec.dir}/s-${n}`]))) : Effect.void)),
+    Effect.catchTags({
+      ExecError: (e) => Effect.map(ms, (t): RunOutput => ({ stdout: "", stderr: e.message, code: -1, cut: false, ms: t })),
+      FileError: (e) => Effect.map(ms, (t): RunOutput => ({ stdout: "", stderr: `the statements couldn't be written to the private folder: ${e.message}`, code: -1, cut: false, ms: t })),
+      StaleFile: (e) => Effect.map(ms, (t): RunOutput => ({ stdout: "", stderr: `the private folder already holds this run's file: ${e.message}`, code: -1, cut: false, ms: t })),
+    }),
+  );
+});
 
-/** Interrupts a run (SIGINT to the client), then kills it if it's still there after 2 s. */
-export async function cancel(io: RunIo, dir: string, n: string): Promise<void> {
+/** Interrupts a run (SIGINT to the client), then kills it if it's still there after 2 s. A cancel
+ *  that can't run is left: the run still ends at its own deadline (exec's timeout). */
+export const cancel = (dir: string, n: string): Effect.Effect<void, never, Exec> => {
   const script = 'p=$(cat "$1" 2>/dev/null) || exit 0; kill -INT "$p" 2>/dev/null; sleep 2; kill -KILL "$p" 2>/dev/null; exit 0';
 
-  await io.exec("sh", ["-c", script, "ff-cancel", `${dir}/pid-${n}`], { timeout: 10000 }).catch(() => null);
-}
+  return Effect.ignore(Exec.use((x) => x.run("sh", ["-c", script, "ff-cancel", `${dir}/pid-${n}`], { timeout: 10000 })));
+};
 
-/** The window's private folder: a new 0700 folder in the temp folder (mktemp -d), or null. */
-export async function privateDir(io: RunIo): Promise<string | null> {
-  const r = await io.exec("sh", ["-c", 'umask 077; mktemp -d "${TMPDIR:-/tmp}/fireflies-db.XXXXXX"', "ff-dir"]).catch(() => null);
-  const dir = r?.code === 0 ? Str.trim(r.stdout) : "";
+/** The window's private folder: a new 0700 folder in the temp folder (mktemp -d); why not, when it can't be made. */
+export const privateDir: Effect.Effect<string, ExecError | ExitError | DecodeError, Exec> = Effect.gen(function* () {
+  const out = Str.trim(yield* execOk("sh", ["-c", 'umask 077; mktemp -d "${TMPDIR:-/tmp}/fireflies-db.XXXXXX"', "ff-dir"]));
 
-  return Str.startsWith("/")(dir) ? dir : null;
-}
+  if (!Str.startsWith("/")(out)) return yield* DecodeError.make({ what: "mktemp -d", message: `mktemp gave no folder (${Str.isEmpty(out) ? "nothing" : out})` });
 
-/** Removes the private folder and anything a run left in it. */
-export async function removeDir(io: RunIo, dir: string): Promise<void> {
-  if (!/\/fireflies-db\.[A-Za-z0-9]+$/.test(dir)) return;
+  return out;
+});
 
-  await io.exec("rm", ["-rf", dir]).catch(() => null);
-}
+/** Removes the private folder and anything a run left in it (on close: one left behind is the
+ *  temp folder's, which the system clears; nothing secret outlives its run in it). */
+export const removeDir = (dir: string): Effect.Effect<void, never, Exec> =>
+  (/\/fireflies-db\.[A-Za-z0-9]+$/.test(dir) ? Effect.ignore(Exec.use((x) => x.run("rm", ["-rf", dir]))) : Effect.void);

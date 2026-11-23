@@ -2,116 +2,134 @@
 // (data/databases/): the saved connections (connections.json: no secret in
 // it, ever) and each connection's query history (history/<id>.json: the
 // statements run, newest first, a password literal blanked by redact()).
+//
+// Both are read and written through the kit's `Files` with the text a write
+// expects to replace: another window that changed the file meanwhile makes the
+// write `StaleFile`, and the change is made again on the file as it is now (a
+// pin, a history entry: none is lost to the other window's).
 
-import { Array as Arr, String as Str } from "effect";
-import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, nullable, object, parseJson, sharedKey } from "./guard.ts";
+import { Array as Arr, Effect, Option, Predicate, Schema, String as Str } from "effect";
+import { DecodeError, Files, sharedKey } from "@fireflies/kit";
+import type { FileError, StaleFile } from "@fireflies/kit";
 import type { Conn } from "./kinds.ts";
-import { connJson, connOf, isConnJson } from "./kinds.ts";
+import { ConnJsonSchema, connJson, connOf } from "./kinds.ts";
 import { redact } from "./secrets.ts";
-
-/** Reading and writing files (herdr's; a test's stand-ins). */
-export interface FileIo {
-  readonly readTextFile: (path: string) => Promise<string | null>;
-  readonly writeTextFile: (path: string, text: string, expected: string | null) => Promise<null>;
-}
 
 /** The data folder's files. */
 export const connectionsFile = (appHome: string): string => `${appHome}/data/databases/connections.json`;
 
 export const historyFile = (appHome: string, id: string): string => `${appHome}/data/databases/history/${Str.replace(/[^A-Za-z0-9_-]/g, "_")(id)}.json`;
 
-const isConnectionsDoc = object({ connections: arrayOf(isConnJson) });
+const ConnectionsDoc = Schema.Struct({ connections: Schema.Array(ConnJsonSchema) });
 
-/** The saved connections (an absent or broken file: none). */
-export async function readConnections(io: FileIo, appHome: string): Promise<Conn[]> {
-  const text = await io.readTextFile(connectionsFile(appHome)).catch(() => null);
-  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isConnectionsDoc) : undefined;
+/** A schema's failure, its first line (the rest is the value's every difference). */
+const firstLine = (error: Schema.SchemaError): string => Option.getOrElse(Arr.head(Str.split(error.message, "\n")), () => error.message);
 
-  return doc !== undefined ? Arr.map(doc.connections, connOf) : [];
-}
+/** connections.json's text decoded; another shape is a `DecodeError` that says the file is left as it is. */
+const decodeConnections = (path: string) => (text: string): Effect.Effect<Conn[], DecodeError> => Schema.decodeUnknownEffect(Schema.fromJsonString(ConnectionsDoc))(text).pipe(
+  Effect.map((doc) => Arr.map(doc.connections, connOf)),
+  Effect.mapError((error) => DecodeError.make({ what: path, message: `${path} isn't a list of connections (left as it is): ${firstLine(error)}` })),
+);
+
+/** The saved connections as the file keeps them (only saved ones; never a secret: connJson has no field for one). */
+const encodeConnections = (list: readonly Conn[]): Effect.Effect<string, DecodeError> => Schema.encodeEffect(Schema.fromJsonString(ConnectionsDoc, { space: 2 }))({
+  connections: Arr.flatMap(list, (c) => (c.origin === "saved" ? [connJson(c)] : [])),
+}).pipe(
+  Effect.map((text) => `${text}\n`),
+  Effect.mapError((error) => DecodeError.make({ what: "connections.json", message: `a connection couldn't be written: ${firstLine(error)}` })),
+);
+
+/** The saved connections (none when there's no file); a file in another shape is a `DecodeError`. */
+export const readConnections = (appHome: string): Effect.Effect<Conn[], FileError | DecodeError, Files> => {
+  const path = connectionsFile(appHome);
+
+  return Effect.flatMap(Files.use((f) => f.read(path)), Option.match({ onNone: () => Effect.succeed([]), onSome: decodeConnections(path) }));
+};
 
 /** The pinned (saved) connections changed, in some window: when, so every other window reads the
  *  file again (the file is the truth; this is the notice). */
-export const PINNED_KEY = sharedKey("databases.pinned", nullable(object({ at: isNumber }, { by: isString })));
+export const PINNED_KEY = sharedKey("databases.pinned", Schema.NullOr(Schema.Struct({ at: Schema.Finite, by: Schema.optionalKey(Schema.String) })));
+
+/** How often a write refused as stale is made again on the file as it is now. */
+const AGAIN = 4;
+
+const stale = (e: unknown): boolean => Predicate.isTagged(e, "StaleFile");
 
 /** Changes the pinned connections as the file has them now (another window may have changed it
- *  since this one read it): `change` gets the file's list, its result is written (only if the file
- *  is still what was read: else read and changed again). A file that isn't a list is left alone. */
-export async function changeConnections(io: FileIo, appHome: string, change: (list: Conn[]) => Conn[]): Promise<Conn[]> {
+ *  since this one read it): `change` gets the file's list, its result is written only if the file
+ *  is still what was read, else read and changed again. A file that isn't a list is left alone. */
+export const changeConnections = (appHome: string, change: (list: Conn[]) => Conn[]): Effect.Effect<Conn[], FileError | StaleFile | DecodeError, Files> => Effect.gen(function* () {
+  const files = yield* Files;
   const path = connectionsFile(appHome);
+  const was = yield* files.read(path);
+  const list = yield* Option.match(was, { onNone: () => Effect.succeed([]), onSome: decodeConnections(path) });
+  const next = change(list);
 
-  for (let tries = 0; tries < 5; tries++) {
-    const was = await io.readTextFile(path).catch(() => null);
-    const doc = was !== null && Str.isNonEmpty(was) ? parseJson(was, isConnectionsDoc) : undefined;
+  yield* files.write(path, yield* encodeConnections(next), Option.getOrNull(was));
 
-    if ((was !== null && Str.isNonEmpty(was)) && doc === undefined) throw new Error(`${path} isn't a list of connections: left as it is`);
-
-    const next = change(doc !== undefined ? Arr.map(doc.connections, connOf) : []);
-    const text = `${JSON.stringify({ connections: Arr.flatMap(next, (c) => (c.origin === "saved" ? [connJson(c)] : [])) }, null, 2)}\n`;
-
-    try {
-      await io.writeTextFile(path, text, was);
-
-      return next;
-    } catch {
-      // Changed meanwhile (another window): read it again.
-    }
-  }
-
-  throw new Error(`${path} kept changing: try again`);
-}
-
-/** Writes the saved connections (only saved ones; never a secret: connJson has no field for one). */
-export async function writeConnections(io: FileIo, appHome: string, list: readonly Conn[]): Promise<void> {
-  const path = connectionsFile(appHome);
-  const was = await io.readTextFile(path).catch(() => null);
-  const doc = { connections: Arr.flatMap(list, (c) => (c.origin === "saved" ? [connJson(c)] : [])) };
-
-  await io.writeTextFile(path, `${JSON.stringify(doc, null, 2)}\n`, was);
-}
+  return next;
+}).pipe(Effect.retry({ while: stale, times: AGAIN }));
 
 /** A statement run, as the history keeps it. */
-export const isHistoryEntry = object({ sql: isString, at: isNumber }, { ms: isNumber, ok: isBoolean, rows: isNumber });
+export const HistoryEntrySchema = Schema.Struct({
+  sql: Schema.String,
+  at: Schema.Finite,
+  ms: Schema.optionalKey(Schema.Finite),
+  ok: Schema.optionalKey(Schema.Boolean),
+  rows: Schema.optionalKey(Schema.Finite),
+});
 
-export type HistoryEntry = Guarded<typeof isHistoryEntry>;
+export type HistoryEntry = typeof HistoryEntrySchema.Type;
 
-const isHistoryDoc = object({ entries: arrayOf(isHistoryEntry) });
+const HistoryDoc = Schema.fromJsonString(Schema.Struct({ entries: Schema.Array(HistoryEntrySchema) }));
 
 /** How many statements the history keeps per connection. */
 export const HISTORY_MAX = 300;
 
-/** A connection's history, newest first. */
-export async function readHistory(io: FileIo, appHome: string, id: string): Promise<HistoryEntry[]> {
-  const text = await io.readTextFile(historyFile(appHome, id)).catch(() => null);
-  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isHistoryDoc) : undefined;
+/** A history file's entries: a file in another shape reads as none (it is written anew with the
+ *  next statement: a history is a convenience, not a record to keep whole). */
+const entriesOf = (text: Option.Option<string>): HistoryEntry[] => Option.match(Option.flatMap(text, Schema.decodeUnknownOption(HistoryDoc)), {
+  onNone: () => [],
+  onSome: (doc) => [...doc.entries],
+});
 
-  return doc !== undefined ? [...doc.entries] : [];
-}
+const historyText = (entries: readonly HistoryEntry[]): Effect.Effect<string, DecodeError> => Schema.encodeEffect(HistoryDoc)({ entries }).pipe(
+  Effect.map((text) => `${text}\n`),
+  Effect.mapError((error) => DecodeError.make({ what: "history", message: `the history couldn't be written: ${firstLine(error)}` })),
+);
+
+/** A connection's history, newest first. */
+export const readHistory = (appHome: string, id: string): Effect.Effect<HistoryEntry[], FileError, Files> =>
+  Effect.map(Files.use((f) => f.read(historyFile(appHome, id))), entriesOf);
 
 /** The history with `entry` first (redacted; the same statement run again moves up, not twice). */
 export function withEntry(list: readonly HistoryEntry[], entry: HistoryEntry): HistoryEntry[] {
   const kept: HistoryEntry = { ...entry, sql: redact(Str.trim(entry.sql)) };
 
-  return [kept, ...Arr.filter(list, (e) => e.sql !== kept.sql)].slice(0, HISTORY_MAX);
+  return Arr.take([kept, ...Arr.filter(list, (e) => e.sql !== kept.sql)], HISTORY_MAX);
 }
 
-/** Adds a statement to a connection's history on disk; resolves with the history now. */
-export async function addHistory(io: FileIo, appHome: string, id: string, entry: HistoryEntry): Promise<HistoryEntry[]> {
-  const path = historyFile(appHome, id);
-  const was = await io.readTextFile(path).catch(() => null);
-  const doc = was !== null && Str.isNonEmpty(was) ? parseJson(was, isHistoryDoc) : undefined;
-  const list = withEntry(doc !== undefined ? doc.entries : [], entry);
+/** Changes a history file as it is now (made again when another window wrote it meanwhile). */
+const changeHistory = (path: string, change: (list: readonly HistoryEntry[]) => HistoryEntry[]): Effect.Effect<HistoryEntry[], FileError | StaleFile | DecodeError, Files> => Effect.gen(function* () {
+  const files = yield* Files;
+  const was = yield* files.read(path);
+  const list = change(entriesOf(was));
 
-  await io.writeTextFile(path, `${JSON.stringify({ entries: list })}\n`, was).catch(() => null);
+  yield* files.write(path, yield* historyText(list), Option.getOrNull(was));
 
   return list;
-}
+}).pipe(Effect.retry({ while: stale, times: AGAIN }));
 
-/** Forgets a connection's history (it was removed). */
-export async function clearHistory(io: FileIo, appHome: string, id: string): Promise<void> {
+/** Adds a statement to a connection's history on disk: the history now. */
+export const addHistory = (appHome: string, id: string, entry: HistoryEntry): Effect.Effect<HistoryEntry[], FileError | StaleFile | DecodeError, Files> =>
+  changeHistory(historyFile(appHome, id), (list) => withEntry(list, entry));
+
+/** Forgets a connection's history (it was removed). No file: nothing to forget. */
+export const clearHistory = (appHome: string, id: string): Effect.Effect<void, FileError | StaleFile | DecodeError, Files> => {
   const path = historyFile(appHome, id);
-  const was = await io.readTextFile(path).catch(() => null);
 
-  if (was !== null) await io.writeTextFile(path, `${JSON.stringify({ entries: [] })}\n`, was).catch(() => null);
-}
+  return Effect.flatMap(Files.use((f) => f.read(path)), Option.match({
+    onNone: () => Effect.void,
+    onSome: () => Effect.asVoid(changeHistory(path, () => [])),
+  }));
+};

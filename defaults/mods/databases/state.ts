@@ -7,11 +7,11 @@
 import type { Pt } from "@fireflies/menu-place";
 import type { Place } from "./keys.ts";
 import type { EditorState, InputState } from "gpui-base";
-import type { Guarded } from "./guard.ts";
-import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
+import { Schema } from "effect";
+import { sharedKey } from "@fireflies/kit";
 import type { Conn, Kind } from "./kinds.ts";
-import { isKind } from "./kinds.ts";
-import { isKubeForward, isKubeSource } from "./kube.ts";
+import { KindSchema } from "./kinds.ts";
+import { KubeForwardSchema, KubeSourceSchema } from "./kube.ts";
 import type { Browse, DbInfo, Here, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
@@ -26,22 +26,40 @@ export const MOD = "databases";
  *  never a secret; `from` says who sent it; `secret` where a cluster keeps the password, `forward`
  *  the port-forward it came from (kube.ts); `sslmode` how it asks for TLS (kinds.ts SSL_MODES:
  *  any text here, so receive() refuses an unknown one in words). */
-export const isConnectArgs = object({ kind: isKind }, {
-  name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
-  secret: isKubeSource, forward: isKubeForward, sslmode: isString,
+export const ConnectArgsSchema = Schema.Struct({
+  kind: KindSchema,
+  name: Schema.optionalKey(Schema.String),
+  host: Schema.optionalKey(Schema.String),
+  port: Schema.optionalKey(Schema.Finite),
+  database: Schema.optionalKey(Schema.String),
+  user: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+  url: Schema.optionalKey(Schema.String),
+  readonly: Schema.optionalKey(Schema.Boolean),
+  from: Schema.optionalKey(Schema.String),
+  secret: Schema.optionalKey(KubeSourceSchema),
+  forward: Schema.optionalKey(KubeForwardSchema),
+  sslmode: Schema.optionalKey(Schema.String),
 });
 
-export type ConnectArgs = Guarded<typeof isConnectArgs>;
+export type ConnectArgs = typeof ConnectArgsSchema.Type;
 
 /** What the view is opened with. A window has `overlay`; a pane has `slot`. */
-export const isDbProps = object({}, {
-  overlay: isString, slot: isString, folder: nullable(isString), on: nullable(isString), connect: isConnectArgs, at: isNumber,
+export const DbPropsSchema = Schema.Struct({
+  overlay: Schema.optionalKey(Schema.String),
+  slot: Schema.optionalKey(Schema.String),
+  folder: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  on: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  connect: Schema.optionalKey(ConnectArgsSchema),
+  at: Schema.optionalKey(Schema.Finite),
 });
 
-export type DbProps = Guarded<typeof isDbProps>;
+export type DbProps = typeof DbPropsSchema.Type;
 
 /** The panels: 1 Connections, 2 Tables, 3 Structure, 0 the main view, 4 the log. */
-export type PanelId = "conns" | "tables" | "structure" | "main" | "log";
+export const PanelIdSchema = Schema.Literals(["conns", "tables", "structure", "main", "log"]);
+
+export type PanelId = typeof PanelIdSchema.Type;
 
 export const PANELS: readonly PanelId[] = ["conns", "tables", "structure", "main", "log"];
 
@@ -228,8 +246,6 @@ export interface Note {
   readonly at: number;
 }
 
-export const noteOf = (text: string, tone: Note["tone"]): Note => ({ text, tone, at: Date.now() });
-
 /** The connection's catalog as read. */
 export interface Catalog {
   tables: TableRef[];
@@ -276,19 +292,24 @@ export interface Struct {
 export type ClientFound = { readonly path: string; readonly from: "folder" | "app"; readonly flavor?: MysqlFlavor } | { readonly missing: string };
 
 /** The window's note that it's open (nocturne's toggle reads it). */
-export const WINDOW_KEY = sharedKey("databases.window", nullable(object({ id: isString }, { beat: isNumber })));
-
-/** The one-shot handover when the view moves between a window and a pane: where it was. */
-export const HANDOVER_KEY = sharedKey("databases.handover", nullable(object({ at: isNumber }, {
-  folder: nullable(isString), conn: isString, panel: literal("conns", "tables", "structure", "main", "log"), table: isString, query: isNumber,
-})));
-
-export type Handover = NonNullable<Guarded<typeof HANDOVER_KEY.guard>>;
+export const WINDOW_KEY = sharedKey("databases.window", Schema.NullOr(Schema.Struct({ id: Schema.String, beat: Schema.optionalKey(Schema.Finite) })));
 
 /** What a pane keeps in localStorage (per slot): where it was. */
-export const isKeptCopy = object({}, { conn: isString, panel: literal("conns", "tables", "structure", "main", "log"), table: isString, query: isNumber });
+export const KeptCopySchema = Schema.Struct({
+  conn: Schema.optionalKey(Schema.String),
+  panel: Schema.optionalKey(PanelIdSchema),
+  table: Schema.optionalKey(Schema.String),
+  query: Schema.optionalKey(Schema.Finite),
+});
 
-export type KeptCopy = Guarded<typeof isKeptCopy>;
+export type KeptCopy = typeof KeptCopySchema.Type;
+
+/** The one-shot handover when the view moves between a window and a pane: where it was. */
+const HandoverSchema = Schema.Struct({ ...KeptCopySchema.fields, at: Schema.Finite, folder: Schema.optionalKey(Schema.NullOr(Schema.String)) });
+
+export type Handover = typeof HandoverSchema.Type;
+
+export const HANDOVER_KEY = sharedKey("databases.handover", Schema.NullOr(HandoverSchema));
 
 /** How long a handover note is good for. */
 export const HANDOVER_FRESH = 5000;
