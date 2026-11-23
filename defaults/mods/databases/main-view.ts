@@ -290,7 +290,7 @@ function pager(t: Theme, v: DbView): Element {
 
   const page = (by: number, cx: Context) => {
     v.rows.browse = { ...b, offset: Math.max(0, b.offset + by * b.limit) };
-    void loadRows(v, cx);
+    v.run(loadRows(v), { key: "rows" });
   };
 
   return h_flex().id("rows-pager").h(22).flex_none().px(10).gap(10).items_center().text_color(t.dim)
@@ -340,7 +340,7 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 
   if (q.running !== null) {
     return head.child(pip(t.working, 6, true)).child(div().text_color(t.working).child("running…"))
-      .child(div().flex_1()).child(chip(t, "result-cancel", "esc  cancel", false, (cx) => void cancelQuery(v, q, cx), t.blocked));
+      .child(div().flex_1()).child(chip(t, "result-cancel", "esc  cancel", false, () => cancelQuery(v, q), t.blocked));
   }
 
   if (o === null) return head.child(div().text_color(t.dim).child("ctrl-enter runs the statement under the caret (or the selection) · ctrl-shift-enter every one"));
@@ -433,7 +433,7 @@ export function mainPanel(t: Theme, v: DbView): Element {
   const tabs: (readonly [string, string])[] = [["0", "Rows"], ...Arr.map(v.queries, (x, i) => [String(i + 1), x.name] as const), ["+", "+"]];
 
   const pick = (key: string, cx: Context) => {
-    if (key === "+") v.addQuery("", cx);
+    if (key === "+") v.addQuery("");
     else {
       v.mainTab = Number(key);
       v.panel = "main";

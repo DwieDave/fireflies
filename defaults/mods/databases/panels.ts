@@ -37,7 +37,7 @@ import { PROGRAMS } from "./clients.ts";
 import { RUNNING } from "./session.ts";
 import { clientFrom } from "./session.ts";
 import { togglePin } from "./pinned.ts";
-import { forwardRunning } from "./forward.ts";
+import { forwardShown } from "./forward.ts";
 import { missingView, readingView } from "./read-view.ts";
 import type { default as DbView } from "./main.ts";
 import { edge } from "@fireflies/tones";
@@ -126,7 +126,7 @@ const text = (_t: Theme, s: string, color: Color) => div().truncate().text_color
 function connPip(t: Theme, v: DbView, c: Conn): Element {
   const s = connState(v, c);
 
-  return h_flex().id(`conn-state-${c.id}`).flex_none().tooltip(stateTip(s, whereOf(v, c), c.readonly)).child(s.kind === "off" ? pip(edge(t)) : statePip(t, s, 6));
+  return h_flex().id(`conn-state-${c.id}`).flex_none().tooltip(stateTip(s, whereOf(v, c), c.readonly, v.now)).child(s.kind === "off" ? pip(edge(t)) : statePip(t, s, 6));
 }
 
 /** A cluster-secret connection's mark: the secret it reads its password from (red when the read failed). */
@@ -158,7 +158,7 @@ function pinMark(t: Theme, v: DbView, c: Conn): Element[] {
     .tooltip(`${pinned ? "Pinned: every Databases window lists it · P or a click unpins it" : "P or a click pins it: every Databases window lists it"}${pinState(v, c)}`)
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
-      togglePin(v, c, cx);
+      togglePin(v, c);
       cx.notify();
     })
     .child(svg(`${ART}/pin.svg`).size(7).text_color(pinned ? t.accent : t.muted).opacity(pinned ? 1 : 0.7))];
@@ -181,7 +181,7 @@ function forwardMark(t: Theme, c: Conn): Element[] {
 
   if (f === undefined) return [];
 
-  const live = forwardRunning(f)?.live === true;
+  const live = forwardShown(f)?.live === true;
 
   return [h_flex().id(`conn-fwd-${c.id}`).flex_none().tooltip(`${f.target} :${f.remote} in ${f.context}/${f.namespace} → localhost:${f.local}${live ? " · the forward runs (m stops it)" : " · started again when you connect (asked first)"}`)
     .child(text(t, live ? `↔ :${f.local}` : "↮ forward", live ? t.ansi6 : t.muted))];
@@ -200,7 +200,7 @@ function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Elem
 
   return listRow(t, v, `conn-${i}`, v.connAt === i, active, parts, {
     pick: () => { v.connAt = i; v.panel = "conns"; v.focusSelf(); },
-    open: (cx) => v.connectTo(c, cx),
+    open: () => v.connectTo(c),
     menu: (cx) => v.act("conns", "menu", cx),
     tip: connTip(c),
     // A saved one drags to another place among the saved (kept in connections.json).
@@ -280,7 +280,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const read = readIn(v, "tables");
 
-  if (read !== null && v.catalog.tables.length === 0) return readingView(t, "tables-read", read);
+  if (read !== null && v.catalog.tables.length === 0) return readingView(t, "tables-read", read, v.now);
 
   const missing = v.clients.get(v.active.kind);
 
@@ -320,7 +320,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
       kind: "name", label: qualified(kind, x), takes: ["editor:", "rows-tab"],
       drop: (to, cx) => {
         if (to?.startsWith("editor:") === true) insertName(v, qualified(kind, x), cx);
-        else if (to === "rows-tab") openTable(v, x, cx);
+        else if (to === "rows-tab") openTable(v, x);
       },
     }),
   }));
@@ -392,7 +392,7 @@ function emptyDbView(t: Theme, v: DbView, e: EmptyWords): Element {
     .child(div().text_center().text_color(t.muted).child(e.title))
     .child(div().text_center().max_w(460).text_color(t.dim).child(e.note))
     .when(e.others.length > 0, (el) => el.child(h_flex().flex_wrap().justify_center().gap(4).max_w(460)
-      .children(Arr.map(e.others, (name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.muted, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
+      .children(Arr.map(e.others, (name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.muted, 5)).child(div().child(name)), false, () => useDatabase(v, name), t.ansi5)))
       .child(chip(t, "tables-empty-list", "the list · b", false, (cx) => showDatabases(v, cx)))));
 }
 
@@ -421,7 +421,7 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const read = readIn(v, "tables");
 
-  if (read !== null && (d?.list.length === undefined || d?.list.length === 0)) return readingView(t, "dbs-read", read);
+  if (read !== null && (d?.list.length === undefined || d?.list.length === 0)) return readingView(t, "dbs-read", read, v.now);
 
   if ((d?.error !== null && d?.error !== undefined && Str.isNonEmpty(d?.error)) && d.list.length === 0) return empty(t, "The server's databases couldn't be read", d.error, null);
 
@@ -503,7 +503,7 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
 
   const read = readIn(v, "structure");
 
-  if (read !== null && rows.length === 0) return readingView(t, "struct-read", read);
+  if (read !== null && rows.length === 0) return readingView(t, "struct-read", read, v.now);
 
   if (rows.length === 0) return empty(t, v.struct.busy ? "reading…" : v.structTab === "keys" ? "No foreign keys" : v.structTab === "indexes" ? "No indexes" : "No columns", null, null);
 

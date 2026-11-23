@@ -30,8 +30,8 @@ export function askTitle(a: ForwardAsk): string {
 
 /** The ask's buttons: key, words, what it does (the panel's chips and the keys are one list). */
 export function askActions(v: DbView, a: ForwardAsk): { readonly key: string; readonly label: string; readonly go: (cx: Context) => void }[] {
-  const start = { key: "enter", label: a.why === "taken" ? `start the forward on localhost:${a.local} and connect` : a.why === "gone" ? "try to start it again" : "start the forward and connect", go: (cx: Context) => void startForward(v, a, cx, (c) => void connectNow(v, c, cx)) };
-  const anyway = { key: "c", label: "connect anyway", go: (cx: Context) => { v.forwardAsk = null; void connectNow(v, a.conn, cx); } };
+  const start = { key: "enter", label: a.why === "taken" ? `start the forward on localhost:${a.local} and connect` : a.why === "gone" ? "try to start it again" : "start the forward and connect", go: () => v.run(startForward(v, a, (c) => v.run(connectNow(v, c)))) };
+  const anyway = { key: "c", label: "connect anyway", go: (cx: Context) => { v.forwardAsk = null; v.run(connectNow(v, a.conn)); } };
   const k8s = { key: "k", label: "open Kubernetes to pick it again", go: () => openKubernetes(v, a.conn) };
   const cancel = { key: "esc", label: "cancel", go: () => { v.forwardAsk = null; } };
 

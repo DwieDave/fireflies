@@ -7,10 +7,15 @@
 
 import type { Context } from "gpui-kit";
 import { spaces, panes, focused, shared, setShared, run, openOverlay, closeOverlay } from "herdr";
-import { Array as Arr, Option, String as Str } from "effect";
-import { parseJson, readShared, writeShared } from "./guard.ts";
+import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { Commands, decodeJsonOption, readShared, writeShared } from "@fireflies/kit";
 import type { ConnectArgs, DbProps, Handover, KeptCopy } from "./state.ts";
-import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCopy } from "./state.ts";
+import { ConnectArgsSchema, HANDOVER_FRESH, HANDOVER_KEY, KeptCopySchema, MOD, WINDOW_KEY } from "./state.ts";
+import { nowMs } from "./app.ts";
+import type { DbRun } from "./app.ts";
+
+const connectArgsOf = decodeJsonOption(ConnectArgsSchema);
+const keptCopyOf = decodeJsonOption(KeptCopySchema);
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
 import { shownTables } from "./panels.ts";
@@ -66,7 +71,7 @@ export function acts(v: DbView): boolean {
 
   const w = readShared(shared, WINDOW_KEY, null);
 
-  if (w !== null && Date.now() - (w.beat ?? 0) < 10000) return false;
+  if (w !== null && nowMs() - (w.beat ?? 0) < 10000) return false;
 
   const own = ownPane(v);
 
@@ -117,11 +122,10 @@ export function keepCopy(v: DbView): void {
 
 /** Where to start: the handover note (fresh, this folder), else a pane's own place, else where the
  *  view was last left in this space; then a sent connection. */
-export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+export const start = (v: DbView, pr: DbProps): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
+  const now = yield* Clock.currentTimeMillis;
   const note = readShared(shared, HANDOVER_KEY, null);
-  const fresh = note !== null && Date.now() - note.at < HANDOVER_FRESH && (note.folder ?? null) === v.folder ? note : null;
+  const fresh = note !== null && now - note.at < HANDOVER_FRESH && (note.folder ?? null) === v.folder ? note : null;
   let kept: KeptCopy | null = null;
 
   if (fresh !== null) {
@@ -136,29 +140,27 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
       text = null;
     }
 
-    kept = text !== null && Str.isNonEmpty(text) ? parseJson(text, isKeptCopy) ?? null : null;
+    kept = text !== null && Str.isNonEmpty(text) ? Option.getOrNull(keptCopyOf(text)) : null;
   }
 
   kept ??= spacePlace(v.space);
 
   if (pr.connect !== undefined) {
-    receive(v, pr.connect, cx);
+    receive(v, pr.connect);
 
     return;
   }
 
-  restore(v, kept, cx);
-}
+  restore(v, kept);
+});
 
 /** Back where a copy was: its connection (connected again: reads only; a sent one sent again), its
  *  panel and table. A connection that doesn't come up leaves the list shown with why. One found in
  *  the folder (discover.ts) isn't listed yet: tried again once it may be (restoreFound). */
-function restore(v: DbView, kept: KeptCopy | SpacePlace | null, cx: Context): void {
-  cx = v.held(cx);
-
+function restore(v: DbView, kept: KeptCopy | SpacePlace | null): void {
   const sent = kept !== null && "sent" in kept ? kept.sent : undefined;
   const named = kept?.conn !== undefined && Str.isNonEmpty(kept.conn) ? kept.conn : null;
-  const c = (named !== null ? Option.getOrUndefined(Arr.findFirst(connList(v), (x) => x.id === named)) : undefined) ?? (sent !== undefined ? receive(v, sent, cx, false) ?? undefined : undefined);
+  const c = (named !== null ? Option.getOrUndefined(Arr.findFirst(connList(v), (x) => x.id === named)) : undefined) ?? (sent !== undefined ? receive(v, sent, false) ?? undefined : undefined);
 
   if (named !== null && c === undefined) v.lateKept = kept;
 
@@ -166,35 +168,33 @@ function restore(v: DbView, kept: KeptCopy | SpacePlace | null, cx: Context): vo
 
   const table = kept.table;
 
-  void connect(v, c, cx).then(() => {
+  v.run(Effect.andThen(connect(v, c), Effect.sync(() => {
     const failed = v.active?.id !== c.id ? "" : v.catalog.error;
 
     if (failed !== null) {
       v.panel = "conns";
 
       if (Str.isNonEmpty(failed)) v.say(`couldn't connect to ${c.name} again: ${failed}`, "failed");
-      cx.notify();
 
       return;
     }
 
-    if (table !== undefined && Str.isNonEmpty(table)) openNamed(v, table, cx);
+    if (table !== undefined && Str.isNonEmpty(table)) openNamed(v, table);
 
     v.panel = kept.panel ?? "tables";
     v.mainTab = kept.query ?? 0;
     keepCopy(v);
-    cx.notify();
-  });
+  })));
   v.connAt = Math.max(0, connList(v).indexOf(c));
 }
 
 /** The kept place whose connection the folder's discovery may have listed since. */
-export function restoreFound(v: DbView, cx: Context): void {
+export function restoreFound(v: DbView): void {
   const kept = v.lateKept;
 
   v.lateKept = null;
 
-  if (kept && v.active === null) restore(v, kept, cx);
+  if (kept !== null && v.active === null) restore(v, kept);
 }
 
 /** A command from keys.json, `herdr-app do`, nocturne or another mod. */
@@ -233,16 +233,16 @@ export function command(v: DbView, c: string, cx: Context): void {
   }
 
   if (Str.startsWith("connect:")(name)) {
-    const args = parseJson(Str.slice("connect:".length)(name), isConnectArgs);
+    const args = connectArgsOf(Str.slice("connect:".length)(name));
 
-    if (args !== undefined) receive(v, args, cx);
+    if (Option.isSome(args)) receive(v, args.value);
     else v.say("databases.connect: its argument isn't a connection", "failed");
-  } else if (Str.startsWith("sql:")(name)) v.addQuery(Str.slice("sql:".length)(name), cx);
+  } else if (Str.startsWith("sql:")(name)) v.addQuery(Str.slice("sql:".length)(name));
   else if (name === "run" || name === "run-all") runShown(v, name === "run-all", cx);
-  else if (Str.startsWith("table:")(name)) openNamed(v, Str.slice("table:".length)(name), cx);
+  else if (Str.startsWith("table:")(name)) openNamed(v, Str.slice("table:".length)(name));
   else if (Str.startsWith("set:")(name)) setCell(v, Str.slice("set:".length)(name));
-  else if (name === "to-pane" && (v.overlay !== null && Str.isNonEmpty(v.overlay))) handoverOut(v, cx);
-  else if (name === "to-window" && (v.overlay === null || Str.isEmpty(v.overlay))) handoverOut(v, cx);
+  else if (name === "to-pane" && (v.overlay !== null && Str.isNonEmpty(v.overlay))) handoverOut(v);
+  else if (name === "to-window" && (v.overlay === null || Str.isEmpty(v.overlay))) handoverOut(v);
   // A command is no keystroke: in a query tab it reaches the results' actions, not the editor.
   else act(v, v.place() === "editor" ? "results" : v.place(), name, cx);
 }
@@ -276,7 +276,7 @@ function runShown(v: DbView, all: boolean, cx: Context): void {
 }
 
 /** Opens a table by name (databases.table:<name> or <schema>.<name>) on the connection. */
-function openNamed(v: DbView, name: string, cx: Context): void {
+function openNamed(v: DbView, name: string): void {
   const [a, b] = Str.includes(".")(name) ? name.split(".", 2) : [null, name];
   const t = Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === b && (a === null || x.schema === a)));
 
@@ -298,13 +298,14 @@ function openNamed(v: DbView, name: string, cx: Context): void {
   }
 
   v.tableAt = Math.max(0, shownTables(v).indexOf(t));
-  openTable(v, t, cx);
+  openTable(v, t);
 }
 
 /** Moves to a pane (from the window) or a window (from a pane): the place handed over, the new copy
  *  opened, this one closed a moment later (closed at once, the new copy's first tasks go with it). */
-export function handoverOut(v: DbView, cx: Context): void {
-  const h: Handover = { at: Date.now(), folder: v.folder, ...placeNow(v) };
+export function handoverOut(v: DbView): void {
+  const now = nowMs();
+  const h: Handover = { at: now, folder: v.folder, ...placeNow(v) };
 
   writeShared(setShared, HANDOVER_KEY, h);
 
@@ -315,18 +316,18 @@ export function handoverOut(v: DbView, cx: Context): void {
     if (pane !== null && Str.isNonEmpty(pane)) args.pane = pane;
 
     run("pane.split", args);
-    cx.timer.after(300, () => v.closeWindow());
+    v.run(Effect.andThen(Effect.sleep(300), Effect.sync(() => v.closeWindow())));
 
     return;
   }
 
   const open = readShared(shared, WINDOW_KEY, null);
 
-  if (open !== null && Date.now() - (open.beat ?? 0) < 10000) closeOverlay(open.id);
+  if (open !== null && now - (open.beat ?? 0) < 10000) closeOverlay(open.id);
 
   openOverlay(windowSpec({ folder: v.folder, on: v.on }));
 
   const own = ownPane(v);
 
-  if (own !== null && Str.isNonEmpty(own)) cx.timer.after(300, () => run("pane.close", { pane: own }));
+  if (own !== null && Str.isNonEmpty(own)) v.run(Effect.andThen(Effect.sleep(300), Commands.use((x) => x.run("pane.close", { pane: own }))));
 }

@@ -267,7 +267,7 @@ test("a query tab's rename left by its chips or a click beside it: the keyboard 
   for (const close of ["db-rename-no", "db-rename-ok", "db-rename"]) {
     const v = await connected();
     const { startRename } = await import("../defaults/mods/databases/menus.ts");
-    const q = v.addQuery("select 1;", cx);
+    const q = v.addQuery("select 1;");
 
     v.panel = "tables";
     v.mainTab = 0;

@@ -20,6 +20,7 @@ import { FORWARD_LABEL, forwardProblem, forwardStartArgs, labelOf } from "./kube
 import { changePinned } from "./pinned.ts";
 import type { ForwardAsk } from "./state.ts";
 import type { default as DbView } from "./main.ts";
+import { runtime } from "./app.ts";
 import type { DbRun } from "./app.ts";
 
 /** Whether something listens on 127.0.0.1:<port>: nc, else bash's /dev/tcp (loopback answers at once). */
@@ -51,6 +52,9 @@ export const forwardRunning = (f: KubeForward): Effect.Effect<{ readonly address
       ? Option.some({ address: t.address, live: live(t.state) })
       : Option.none();
   }))));
+
+/** The forward of `f` as a render shows it (herdr-core's list as the app has it now). */
+export const forwardShown = (f: KubeForward): { readonly address: string; readonly live: boolean } | null => runtime.now(forwardRunning(f));
 
 /** Before connecting: true to go on (no forward kept, its port open, or a forward that can't be
  *  kept: said); false when the ask is shown (its port is down). */

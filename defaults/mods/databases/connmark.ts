@@ -44,7 +44,7 @@ export function stateMark(t: Theme, v: DbView, narrow: boolean): Element {
   const color = stateColor(t, s);
 
   const mark = h_flex().id("db-state").relative().flex_none().h(20).px(4).gap(6).items_center().cursor_pointer()
-    .tooltip(stateTip(s, w, ro))
+    .tooltip(stateTip(s, w, ro, v.now))
     .hover((x) => x.bg(`${edge(t)}66`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
@@ -91,7 +91,7 @@ export function stateMenu(v: DbView, cx: Context): void {
 
   const s = connState(v, c);
   const address = addressOf(c);
-  const reconnect = entry("conns", null, "Reconnect", () => void connect(v, c, cx), { sub: c.secret === "kubernetes" ? "its secret read again, its forward looked at, its tables read" : "its tables read again from the start" });
+  const reconnect = entry("conns", null, "Reconnect", () => v.run(connect(v, c)), { sub: c.secret === "kubernetes" ? "its secret read again, its forward looked at, its tables read" : "its tables read again from the start" });
   const rows: MenuRow[] = [];
 
   if (s.kind === "failed") rows.push(reconnect, entry("conns", "conn-edit", "Edit…", () => openForm(v, c, cx), { sub: s.why }));
@@ -100,7 +100,7 @@ export function stateMenu(v: DbView, cx: Context): void {
   if (hasDatabases(c)) rows.push(entry("window", "databases", "The server's databases…", () => showDatabases(v, cx), { sub: `now ${databaseWords(whereOf(v, c) ?? { database: null, fallback: false, user: null })}` }));
 
   rows.push(
-    entry("conns", "conn-test", "Test", () => void test(v, c, cx)),
+    entry("conns", "conn-test", "Test", () => v.run(test(v, c))),
     entry("conns", "copy", "Copy its address", () => copy(v, address, cx), { sub: address }),
     entry("conns", "disconnect", "Disconnect", () => disconnect(v), { sub: "its tables close; the query tabs stay" }),
   );
@@ -117,7 +117,7 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
   const here = whereOf(v, c)?.database ?? null;
 
   const rows: MenuRow[] = [
-    entry("tables", "open", name === here ? "Read it again" : `Connect to ${name ?? "every database"}`, () => useDatabase(v, name, cx), { sub: c.origin === "saved" ? "kept in its pin" : "kept while this window is open" }),
+    entry("tables", "open", name === here ? "Read it again" : `Connect to ${name ?? "every database"}`, () => useDatabase(v, name), { sub: c.origin === "saved" ? "kept in its pin" : "kept while this window is open" }),
   ];
 
   if (name !== null && Str.isNonEmpty(name)) {
@@ -127,7 +127,7 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
     );
   }
 
-  if (dbsNow(v)?.sized !== true) rows.push(entry("tables", "count", "Their sizes", () => void loadDatabases(v, cx, true), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
+  if (dbsNow(v)?.sized !== true) rows.push(entry("tables", "count", "Their sizes", () => v.run(loadDatabases(v, true)), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
 
   openMenu(v, name ?? "every database", rows, "row");
 }

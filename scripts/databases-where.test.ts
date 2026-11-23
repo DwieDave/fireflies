@@ -479,7 +479,7 @@ test("narrow: the mark stays, its words go (in its hover)", async () => {
 test("b and C type in the window's fields", async () => {
   reset();
   const v = await sent();
-  const q = v.addQuery("", cx);
+  const q = v.addQuery("");
   const { startRename } = await import("../defaults/mods/databases/menus.ts");
   startRename(v, q);
   expect(["b", "C"].map((k) => modalKey(v, key(k), cx))).toEqual(["typing", "typing"]);

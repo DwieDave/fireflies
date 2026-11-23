@@ -10,7 +10,8 @@
 
 import type { Context, KeyEvent } from "gpui-kit";
 import { InputState } from "gpui-base";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
+import { redraw } from "@fireflies/kit";
 import type { Editability, GridFacts } from "./edits.ts";
 import { cellRefusal, changeAt, changesWord, counted, editability, noEdits, shownCell, stage, unstage } from "./edits.ts";
 import { refusal, typeOf } from "./quote.ts";
@@ -23,6 +24,7 @@ import { moveGrid, rowsIn } from "./grid.ts";
 import { loadRows, needsPassword, runOn } from "./session.ts";
 import { openMenu } from "./menus.ts";
 import type { default as DbView } from "./main.ts";
+import type { DbRun } from "./app.ts";
 
 /** The facts the Rows grid's editability is worked out from. */
 export function gridFacts(v: DbView): GridFacts {
@@ -295,21 +297,19 @@ export function openReview(v: DbView, then: (() => void) | null = null): void {
 }
 
 /** y in the review: the statements run; saved, the rows are read again and the marks go. */
-export function runSave(v: DbView, cx: Context): void {
+export function runSave(v: DbView): void {
   const r = v.review;
   const c = v.active;
 
   if (r === null || r.busy || c === null) return;
 
-  const go = () => void save(v, r.statements, cx);
+  const go = () => v.run(save(v, r.statements));
 
-  if (needsPassword(v, c)) v.askPassword(c, false, cx, go);
+  if (needsPassword(v, c)) v.askPassword(c, false, go);
   else go();
 }
 
-async function save(v: DbView, statements: readonly SaveStatement[], cx: Context): Promise<void> {
-  cx = v.held(cx);
-
+const save = (v: DbView, statements: readonly SaveStatement[]): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
   const r = v.review;
   const c = v.active;
 
@@ -317,9 +317,9 @@ async function save(v: DbView, statements: readonly SaveStatement[], cx: Context
 
   r.busy = true;
   r.error = null;
-  cx.notify();
+  yield* redraw;
 
-  const o = await runOn(v, c, statements);
+  const o = yield* runOn(v, c, statements);
   const failed = saveError(statements, o);
 
   r.busy = false;
@@ -329,7 +329,6 @@ async function save(v: DbView, statements: readonly SaveStatement[], cx: Context
   if (failed !== null && Str.isNonEmpty(failed)) {
     r.error = { index: o.error?.index ?? null, message: failed };
     v.say(failed, "failed");
-    cx.notify();
 
     return;
   }
@@ -337,10 +336,9 @@ async function save(v: DbView, statements: readonly SaveStatement[], cx: Context
   v.review = null;
   v.edits = null;
   v.say(`saved ${changesWord(r.cells)} to ${r.table}`, "done");
-  void loadRows(v, cx, true);
+  v.run(loadRows(v, true), { key: "rows" });
   r.after?.();
-  cx.notify();
-}
+});
 
 /** Before leaving the table (another table, another connection, reading again, closing): with
  *  changes staged, ask (save first, discard, or stay); else go on. */

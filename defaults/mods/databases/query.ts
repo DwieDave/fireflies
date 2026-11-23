@@ -96,7 +96,7 @@ export function editorKey(v: DbView, tab: QueryTab, e: KeyEvent, cx: Context): b
       v.focusSelf();
     }
   } else if (m.control && e.key === "h") v.openHistory(cx);
-  else if (m.control && e.key === "n") v.addQuery("", cx);
+  else if (m.control && e.key === "n") v.addQuery("");
   else return false;
 
   cx.notify();

@@ -131,7 +131,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
     .when(r.busy, (el) => el.child(pip(t.working, 6, true)).child(div().text_color(t.working).child("saving…")))
     .when(!r.busy && err !== null, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi1).child("nothing was saved: the changes stay staged")))
     .child(div().flex_1())
-    .child(chip(t, "review-yes", err !== null ? "y  try again" : `y  commit to ${where}`, false, (cx) => runSave(v, cx), t.ansi3))
+    .child(chip(t, "review-yes", err !== null ? "y  try again" : `y  commit to ${where}`, false, () => runSave(v), t.ansi3))
     .child(chip(t, "review-no", "esc  back", false, () => { if (!r.busy) v.review = null; }));
 
   const box = v_flex().id("db-review-box").w(Math.min(760, v.size.width - 40)).max_h(Math.min(560, v.size.height - 80)).bg(t.background).border(1).border_color(t.ansi3).p(12).gap(6).text_size(11)
@@ -164,7 +164,7 @@ export function reviewKey(v: DbView, e: KeyEvent, cx: Context): void {
 
   if (r === null) return;
 
-  if (e.key === "y" || e.key === "enter") runSave(v, cx);
+  if (e.key === "y" || e.key === "enter") runSave(v);
   else if ((e.key === "escape" || e.key === "n" || e.key === "q") && !r.busy) {
     v.review = null;
     v.focusShown();

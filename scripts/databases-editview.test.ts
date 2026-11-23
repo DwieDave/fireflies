@@ -273,7 +273,7 @@ test.skipIf(!SQLITE)("what isn't edited says why: a read-only connection, a quer
   ro.key(key("w"), cx);
   expect(ro.note.text).toBe("nothing to save: c changes a cell");
   const v = await opened();
-  const q = v.addQuery("select 1", cx);
+  const q = v.addQuery("select 1");
   q.inResults = true;
   q.outcome = { results: [{ index: 0, set: { columns: ["1"], rows: [["1"]] }, affected: null, tag: null }], error: null, cut: false };
   v.key(key("c"), cx);

@@ -423,7 +423,7 @@ export default class Databases extends View {
     this.run(connect(this, c));
   }
 
-  addQuery(text: string, cx: Context): QueryTab {
+  addQuery(text: string): QueryTab {
     const q = newQuery(this, text);
     // The caret after the text: what's typed or dropped next follows it.
     const lines = Str.split(text, "\n");
@@ -434,7 +434,6 @@ export default class Databases extends View {
     this.panel = "main";
     this.queriesDirty = true;
     q.editor.focus();
-    cx.notify();
 
     return q;
   }
@@ -500,7 +499,7 @@ export default class Databases extends View {
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
   move(cx: Context): void {
-    beforeLeaving(this, this.overlay !== null && Str.isNonEmpty(this.overlay) ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
+    beforeLeaving(this, this.overlay !== null && Str.isNonEmpty(this.overlay) ? "move into a pane" : "move out to a window", () => handoverOut(this));
   }
 
   key(e: KeyEvent, cx: Context): void {
@@ -555,7 +554,7 @@ export default class Databases extends View {
       }))
       // A file dropped from outside: a SQLite file opens as a connection (drops.ts).
       .on_drop((e, cx) => {
-        dropFiles(this, e.paths, cx);
+        dropFiles(this, e.paths);
         cx.notify();
       })
       .on_size_change((drawn, cx) => {

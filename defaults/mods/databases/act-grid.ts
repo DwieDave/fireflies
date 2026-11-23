@@ -320,14 +320,14 @@ function rowsAct(v: DbView, action: string, cx: Context): boolean {
     case "page-next":
       if (v.rows.set !== null && v.rows.set.rows.length >= b.limit) {
         v.rows.browse = { ...b, offset: b.offset + b.limit };
-        void loadRows(v, cx);
+        v.run(loadRows(v), { key: "rows" });
       }
 
       break;
     case "page-prev":
       if (b.offset > 0) {
         v.rows.browse = { ...b, offset: Math.max(0, b.offset - b.limit) };
-        void loadRows(v, cx);
+        v.run(loadRows(v), { key: "rows" });
       }
 
       break;
@@ -380,7 +380,7 @@ export function setSort(v: DbView, sort: { readonly column: string; readonly des
   if (b === null) return;
 
   v.rows.browse = { ...b, sort, offset: 0 };
-  void loadRows(v, cx, true);
+  v.run(loadRows(v, true), { key: "rows" });
 }
 
 /** The filter line opens with the filter as it is (or `text`, the caret after it). */
@@ -407,7 +407,7 @@ export function filterTo(v: DbView, where: string, cx: Context): void {
   if (b === null) return;
 
   v.rows.browse = { ...b, filter: where, offset: 0 };
-  void loadRows(v, cx);
+  v.run(loadRows(v), { key: "rows" });
 }
 
 /** The filter line's text applied (enter), from the first page. */
@@ -422,7 +422,7 @@ export function applyFilter(v: DbView, cx: Context): void {
   if (b === null) return;
 
   v.rows.browse = { ...b, filter: Str.trim(text), offset: 0 };
-  void loadRows(v, cx);
+  v.run(loadRows(v), { key: "rows" });
 }
 
 function resultsAct(v: DbView, action: string, cx: Context): boolean {

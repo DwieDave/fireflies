@@ -253,7 +253,7 @@ async function withQuery(conn: any, sql: string) {
   v.dir = "/tmp/fireflies-db.abc";
   v.saved = [conn];
   v.active = conn;
-  const q = v.addQuery(sql, cx);
+  const q = v.addQuery(sql);
   return { v, q };
 }
 
@@ -415,7 +415,7 @@ test("a query's editor and result split: a divider between them, + in the result
   v.size = { width: 1100, height: 720 };
   v.bodyH = 664;
   v.queryBox = 500;
-  const q = v.addQuery("select 1", cx);
+  const q = v.addQuery("select 1");
   q.inResults = true;
   const ids = (d: [string, any[]][]) => d.filter(([m]) => m === "id").map(([, a]) => a[0]);
   expect(ids(render(v))).toContain(`q${q.id}-split`);

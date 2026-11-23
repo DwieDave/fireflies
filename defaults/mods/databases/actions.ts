@@ -96,7 +96,7 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
     const i = PANELS.indexOf(v.panel) + (action === "panel-next" ? 1 : PANELS.length - 1);
 
     setPanel(v, PANELS[i % PANELS.length] ?? "conns");
-  } else if (action === "query-new") v.addQuery("", cx);
+  } else if (action === "query-new") v.addQuery("");
   else if (action === "history") historyMenu(v, cx);
   else if (action === "refresh") refresh(v, cx);
   else if (action === "databases") showDatabases(v, cx);
@@ -107,7 +107,7 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   else if (action === "grow" || action === "shrink") resize(v, action === "grow" ? 1 : -1);
   // databases.save with the review open runs it (a command doesn't reach the review's y).
   else if (action === "save") {
-    if (v.review !== null) runSave(v, cx);
+    if (v.review !== null) runSave(v);
     else openReview(v);
   }
   else if (action === "discard") discardAll(v);
@@ -146,15 +146,15 @@ export function refresh(v: DbView, cx: Context): void {
     return;
   }
 
-  void discover(v, cx);
+  v.run(discover(v));
 
   if (v.active === null) return;
 
-  v.refreshCatalog(cx);
+  v.refreshCatalog();
 
-  if (v.struct.table !== null) void loadStructure(v, v.struct.table, cx);
+  if (v.struct.table !== null) v.run(loadStructure(v, v.struct.table), { key: "structure" });
 
-  if (v.rows.browse !== null) void loadRows(v, cx, true);
+  if (v.rows.browse !== null) v.run(loadRows(v, true), { key: "rows" });
 }
 
 /** A list's cursor moved by `by`, kept inside `n` rows. */
@@ -167,13 +167,13 @@ function connAct(v: DbView, action: string, cx: Context): boolean {
   switch (action) {
     case "down": v.connAt = step(v.connAt, 1, n); break;
     case "up": v.connAt = step(v.connAt, -1, n); break;
-    case "connect": if (c !== null) void connect(v, c, cx); break;
+    case "connect": if (c !== null) v.run(connect(v, c)); break;
     case "conn-new": openForm(v, null, cx); break;
     case "conn-edit": if (c !== null) openForm(v, c, cx); break;
-    case "conn-remove": if (c !== null) confirmRemove(v, c, cx); break;
-    case "conn-save": if (c !== null) void saveFound(v, c, cx); break;
-    case "conn-pin": if (c !== null) togglePin(v, c, cx); break;
-    case "conn-test": if (c !== null) void test(v, c, cx); break;
+    case "conn-remove": if (c !== null) confirmRemove(v, c); break;
+    case "conn-save": if (c !== null) v.run(saveFound(v, c)); break;
+    case "conn-pin": if (c !== null) togglePin(v, c); break;
+    case "conn-test": if (c !== null) v.run(test(v, c)); break;
     case "conn-duplicate": if (c !== null) duplicateConn(v, c, cx); break;
     case "disconnect": if (v.active === null) v.say("nothing is connected", "failed"); else disconnect(v); break;
     case "copy": if (c !== null) copy(v, addressOf(c), cx); break;
@@ -266,7 +266,7 @@ export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
   // On the file as it is now: before the one that stands at `to` here (else last).
   const before = list[to + 1]?.id ?? null;
 
-  void changePinned(v, (now) => {
+  v.run(changePinned(v, (now) => {
     const rest = Arr.filter(now, (s) => s.id !== c.id);
     const at = before !== null && Str.isNonEmpty(before) ? Option.getOrElse(Arr.findFirstIndex(rest, (s) => s.id === before), () => -1) : -1;
     const kept = Option.getOrUndefined(Arr.findFirst(now, (s) => s.id === c.id)) ?? c;
@@ -274,12 +274,12 @@ export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
     rest.splice(at < 0 ? rest.length : at, 0, kept);
 
     return rest;
-  }, cx);
+  }));
 }
 
 /** The query tab names go into: the shown one, else a new one. */
 function targetQuery(v: DbView, cx: Context) {
-  return v.shownQuery() ?? v.queries[0] ?? v.addQuery("", cx);
+  return v.shownQuery() ?? v.queries[0] ?? v.addQuery("");
 }
 
 /** Puts a name into the query at its caret and shows the query. */
@@ -331,12 +331,12 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
     case "down": v.tableAt = step(v.tableAt, 1, list.length); break;
     case "up": v.tableAt = step(v.tableAt, -1, list.length); break;
     // An empty database: enter connects to the server's one other database, or opens the list.
-    case "open": if (t !== undefined) openTable(v, t, cx); else return enterEmpty(v, cx); break;
-    case "table-query": if (t !== undefined) v.addQuery(`select * from ${tableSql(v, t.schema, t.name)} limit 100;`, cx); break;
+    case "open": if (t !== undefined) openTable(v, t); else return enterEmpty(v, cx); break;
+    case "table-query": if (t !== undefined) v.addQuery(`select * from ${tableSql(v, t.schema, t.name)} limit 100;`); break;
     case "insert": if (t !== undefined) insertName(v, tableSql(v, t.schema, t.name), cx); break;
     case "copy": if (t !== undefined) copy(v, t.name, cx); break;
     case "export": if (t !== undefined) openExport(v, { table: t }, cx); break;
-    case "count": if (t !== undefined) void countRows(v, t, cx); break;
+    case "count": if (t !== undefined) v.run(countRows(v, t)); break;
     case "menu": if (t !== undefined) tableMenu(v, t, cx); break;
     case "table-find": openFind(v); break;
     default: return false;
@@ -346,17 +346,17 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
 }
 
 /** Shows a table: its rows in the main view, its structure in [3]. */
-export function openTable(v: DbView, t: Parameters<typeof browse>[1], cx: Context): void {
+export function openTable(v: DbView, t: Parameters<typeof browse>[1]): void {
   const e = v.edits;
 
   if (e !== null && counted(e).cells !== 0 && (e.table.name !== t.name || e.table.schema !== t.schema)) {
-    beforeLeaving(v, `open ${t.name}`, () => openTable(v, t, cx));
+    beforeLeaving(v, `open ${t.name}`, () => openTable(v, t));
 
     return;
   }
 
-  browse(v, t, cx);
-  void loadStructure(v, t, cx);
+  browse(v, t);
+  v.run(loadStructure(v, t), { key: "structure" });
   v.mainTab = 0;
   v.structAt = 0;
   keepCopy(v);
@@ -389,10 +389,10 @@ function dbAct(v: DbView, action: string, cx: Context): boolean {
   switch (action) {
     case "down": v.tableAt = step(v.tableAt, 1, list.length); break;
     case "up": v.tableAt = step(v.tableAt, -1, list.length); break;
-    case "open": if (has) useDatabase(v, name ?? null, cx); break;
+    case "open": if (has) useDatabase(v, name ?? null); break;
     case "insert": if ((name !== null && name !== undefined && Str.isNonEmpty(name)) && v.active !== null) insertName(v, quoteName(v.active.kind, name), cx); break;
     case "copy": if (name !== null && name !== undefined && Str.isNonEmpty(name)) copy(v, name, cx); break;
-    case "count": void loadDatabases(v, cx, true); break;
+    case "count": v.run(loadDatabases(v, true)); break;
     case "menu": if (has) dbMenu(v, name ?? null, cx); break;
     default: return false;
   }
@@ -423,7 +423,7 @@ function structAct(v: DbView, action: string, cx: Context): boolean {
 function structOpen(v: DbView, r: ReturnType<typeof structRows>[number], cx: Context): void {
   const other = r.table !== null && Str.isNonEmpty(r.table) ? Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (t) => t.name === r.table)) : undefined;
 
-  if (other !== undefined) openTable(v, other, cx);
+  if (other !== undefined) openTable(v, other);
   else if ((r.name !== null && Str.isNonEmpty(r.name)) && v.active !== null) insertName(v, quoteName(v.active.kind, r.name), cx);
 }
 
@@ -433,7 +433,7 @@ function logAct(v: DbView, action: string, cx: Context): boolean {
   switch (action) {
     case "down": v.logAt = step(v.logAt, 1, v.log.length); break;
     case "up": v.logAt = step(v.logAt, -1, v.log.length); break;
-    case "open": if (line !== undefined) v.addQuery(`${line.sql};`, cx); break;
+    case "open": if (line !== undefined) v.addQuery(`${line.sql};`); break;
     case "copy": if (line !== undefined) copy(v, line.sql, cx); break;
     case "menu": if (line !== undefined) logMenu(v, v.logAt, cx); break;
     default: return false;

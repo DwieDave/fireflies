@@ -10,11 +10,11 @@
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, InputState } from "gpui-base";
-import { pickFile, window as appWindow } from "herdr";
+import { window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Effect, Option, String as Str } from "effect";
 import type { Conn, ConnDraft, Kind, SslMode } from "./kinds.ts";
 import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId, speaksTls } from "./kinds.ts";
@@ -23,11 +23,12 @@ import { installLine } from "./clients.ts";
 import { parseDbUrl } from "./discover.ts";
 import { saveSecret } from "./secrets.ts";
 import { changePinned } from "./pinned.ts";
-import { IO } from "./session.ts";
 import { test } from "./conns.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "@fireflies/keyhelp";
 import type { default as DbView } from "./main.ts";
+import { nowMs, pickFile } from "./app.ts";
+import type { DbRun } from "./app.ts";
 import { edge } from "@fireflies/tones";
 
 /** The form's text fields. */
@@ -178,7 +179,7 @@ export class ConnForm {
 
     switch (a.act) {
       case "move": this.at = a.to; this.focusStop(); break;
-      case "submit": void this.save(cx); break;
+      case "submit": this.v.run(this.save()); break;
       case "cancel": this.close(); break;
       case "press": this.press(s?.id ?? "", cx); break;
       case "step":
@@ -209,8 +210,8 @@ export class ConnForm {
   }
 
   press(id: string, cx: Context): void {
-    if (id === "test") void this.test(cx);
-    else if (id === "save") void this.save(cx);
+    if (id === "test") this.v.run(this.test());
+    else if (id === "save") this.v.run(this.save());
     else if (id === "cancel") this.close();
   }
 
@@ -264,10 +265,9 @@ export class ConnForm {
     return null;
   }
 
-  async test(cx: Context): Promise<void> {
-    cx = this.v.held(cx);
-
-    const c = { ...this.conn(`test-${Date.now()}`), secret: "ask" as const };
+  /** Tests the fields as they are (the connection isn't kept). */
+  test(): Effect.Effect<void, never, DbRun> {
+    const c = { ...this.conn(`test-${nowMs()}`), secret: "ask" as const };
 
     this.v.secrets.set(c.id, this.value("password") || (this.editing !== null ? this.v.secrets.get(this.editing.id) ?? "" : ""));
 
@@ -277,52 +277,52 @@ export class ConnForm {
     const tried: Conn = Str.isEmpty(this.value("password")) && this.editing?.secret === "keychain" ? { ...c, id: this.editing.id, secret: "keychain" }
       : kept.secret === "kubernetes" ? kept : c;
 
-    await test(this.v, tried, cx);
-    this.v.secrets.delete(c.id);
+    return Effect.ensuring(test(this.v, tried), Effect.sync(() => this.v.secrets.delete(c.id)));
   }
 
-  async save(cx: Context): Promise<void> {
-    cx = this.v.held(cx);
+  /** Saves the fields as a pinned connection (its password into the keychain first, if one). */
+  save(): Effect.Effect<void, never, DbRun> {
+    const self = this;
 
-    const problem = this.problem();
+    return Effect.gen(function* () {
+      const problem = self.problem();
 
-    if (problem !== null && Str.isNonEmpty(problem)) {
-      this.error = problem;
-
-      return;
-    }
-
-    const id = this.editing?.origin === "saved" ? this.editing.id : newId(this.kind);
-    const c = this.conn(id);
-    const pw = this.value("password");
-    const dir = this.v.dir;
-
-    if (Str.isNonEmpty(pw) && c.secret === "keychain" && (dir !== null && Str.isNonEmpty(dir))) {
-      const failed = await saveSecret(IO, dir, id, `Fireflies database ${c.name}`, pw);
-
-      if (failed !== null && Str.isNonEmpty(failed)) {
-        this.error = `the keychain refused it: ${failed}`;
-        cx.notify();
+      if (problem !== null && Str.isNonEmpty(problem)) {
+        self.error = problem;
 
         return;
       }
-    }
 
-    if (Str.isNonEmpty(pw) && c.secret === "ask") this.v.secrets.set(id, pw);
+      const id = self.editing?.origin === "saved" ? self.editing.id : yield* newId(self.kind);
+      const c = self.conn(id);
+      const pw = self.value("password");
+      const dir = self.v.dir;
 
-    const v = this.v;
-    const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
+      if (Str.isNonEmpty(pw) && c.secret === "keychain" && (dir !== null && Str.isNonEmpty(dir))) {
+        const saved = yield* Effect.result(saveSecret(dir, id, `Fireflies database ${c.name}`, pw));
 
-    const list = await changePinned(v, (now) => (Arr.some(now, (s) => s.id === id) ? Arr.map(now, (s) => (s.id === id ? c : s)) : [...now, c]), cx);
+        if (saved._tag === "Failure") {
+          self.error = `the keychain refused it: ${saved.failure.message}`;
 
-    if (list === null) return;
+          return;
+        }
+      }
 
-    if (v.active?.id === id) v.active = c;
+      if (Str.isNonEmpty(pw) && c.secret === "ask") self.v.secrets.set(id, pw);
 
-    v.connAt = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
-    v.say(`${i >= 0 ? "saved" : "added"} ${c.name}`, "done");
-    this.close();
-    cx.notify();
+      const v = self.v;
+      const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
+
+      const list = yield* changePinned(v, (now) => (Arr.some(now, (s) => s.id === id) ? Arr.map(now, (s) => (s.id === id ? c : s)) : [...now, c]));
+
+      if (list === null) return;
+
+      if (v.active?.id === id) v.active = c;
+
+      v.connAt = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
+      v.say(`${i >= 0 ? "saved" : "added"} ${c.name}`, "done");
+      self.close();
+    });
   }
 
   /** The form, over the window. */
@@ -355,7 +355,7 @@ export class ConnForm {
       .child(ring(h_flex().gap(4).p(2), focused, t.accent).children(Arr.map(KINDS, (k) => chip(t, `form-kind-${k}`, KIND_NAME[k], this.kind === k, () => {
         this.kind = k;
         this.at = 0;
-        void clientOf(this.v, k);
+        this.v.run(clientOf(this.v, k));
       }))))
       .when(missing !== null, (el) => el.child(div().id("form-client-missing").text_color(t.ansi3).child(`${missing ?? ""} · ${installLine(this.kind, this.v.setup)}`)));
   }
@@ -368,7 +368,7 @@ export class ConnForm {
 
       const box = h_flex().h(26).px(8).items_center().border(1).border_color(on(f) ? t.accent : t.muted).when(on(f), (el) => el.bg(`${edge(t)}66`))
         .child(input !== undefined ? Input.new(input).flex_1().text_size(12).text_color(t.foreground) : div())
-        .when(f === "path", (el) => el.child(chip(t, "form-pick", "pick…", false, (cx) => void this.pick(cx))));
+        .when(f === "path", (el) => el.child(chip(t, "form-pick", "pick…", false, () => this.v.run(this.pick()))));
 
       const note = f === "password" ? (this.ask ? "asked each time" : "kept in the keychain") : f === "host" ? "or a URL" : "";
 
@@ -418,14 +418,11 @@ export class ConnForm {
       .child(button("cancel", "Cancel", "esc"));
   }
 
-  async pick(cx: Context): Promise<void> {
-    cx = this.v.held(cx);
-
-    const path = await pickFile({ prompt: "Open the database" });
-
-    if (path !== null && Str.isNonEmpty(path)) this.inputs.get("path")?.set_value(path);
-
-    cx.notify();
+  /** The system's file picker for the path field. */
+  pick(): Effect.Effect<void> {
+    return Effect.map(pickFile("Open the database"), (path) => {
+      if (Option.isSome(path) && Str.isNonEmpty(path.value)) this.inputs.get("path")?.set_value(path.value);
+    });
   }
 }
 
