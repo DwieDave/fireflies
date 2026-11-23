@@ -22,6 +22,31 @@ export function panFor(v: Agents, height: number): Point {
   return { x: 0, y: Math.round(y) };
 }
 
+/** "centre", once the graph was moved: puts it back. */
+function recentre(v: Agents, t: Theme): Element {
+  return div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
+    .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
+    .on_mouse_down("left", stop)
+    .on_click((_e, cx) => {
+      v.pan = null;
+      cx.notify();
+    })
+    .child("centre");
+}
+
+/** The zoom while it isn't 100%: back to 100%. */
+function zoomChip(v: Agents, t: Theme): Element {
+  return div().id("ag-zoom").absolute().left(10).bottom(8).px(6).h(20).flex().items_center()
+    .text_size(11).text_color(t.dim).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
+    .on_mouse_down("left", stop)
+    .on_click((_e, cx) => {
+      v.zoom = 1;
+      saveState(v);
+      cx.notify();
+    })
+    .child(`${Math.round(v.zoom * 100)}%`);
+}
+
 /** The graph's window: drag (or scroll) to move it, double-click empty sky to centre it again. */
 export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
   const d = dims(v.zoom);
@@ -100,22 +125,7 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
     })
     .child(sky(t, at.x, at.y))
     .child(el)
-    .when(v.pan !== null, (el) => el.child(div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
-      .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
-      .on_mouse_down("left", stop)
-      .on_click((_e, cx) => {
-        v.pan = null;
-        cx.notify();
-      })
-      .child("centre")))
-    .when(v.zoom !== 1, (el) => el.child(div().id("ag-zoom").absolute().left(10).bottom(8).px(6).h(20).flex().items_center()
-      .text_size(11).text_color(t.dim).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
-      .on_mouse_down("left", stop)
-      .on_click((_e, cx) => {
-        v.zoom = 1;
-        saveState(v);
-        cx.notify();
-      })
-      .child(`${Math.round(v.zoom * 100)}%`)))
+    .when(v.pan !== null, (el) => el.child(recentre(v, t)))
+    .when(v.zoom !== 1, (el) => el.child(zoomChip(v, t)))
     .when(v.menu !== null, (el) => (v.menu === null ? el : el.child(menuView(t, v.menu, v.view, () => v.closeMenu()))));
 }
