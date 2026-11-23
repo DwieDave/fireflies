@@ -9,7 +9,8 @@
 import type { Context } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { inView } from "@fireflies/menu-place";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Match, Option, String as Str } from "effect";
+import { nowMs } from "./app.ts";
 import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
@@ -111,7 +112,11 @@ export function confirmRemove(v: DbView, c: Conn): void {
     return;
   }
 
-  const what = c.secret === "kubernetes" ? "its password stays in the cluster's secret; its history goes" : c.secret === "keychain" ? "its password leaves the keychain and its history goes too" : "its history goes too";
+  const what = Match.value(c.secret).pipe(
+    Match.when("kubernetes", () => "its password stays in the cluster's secret; its history goes"),
+    Match.when("keychain", () => "its password leaves the keychain and its history goes too"),
+    Match.orElse(() => "its history goes too"),
+  );
 
   v.ask = { verdict: { risk: "write", verb: "unpin", target: null }, text: `Unpin ${c.name}? Every Databases window drops it; ${what}.`, step: 1, input: null, go: () => v.run(remove(v, c)) };
 }
@@ -242,6 +247,9 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
   openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows, "cell");
 }
 
+/** A column's sort after one more press: off, ascending, descending, off. */
+const NEXT_SORT = { off: "asc", asc: "desc", desc: "off" } as const;
+
 /** A column's header menu: its sort (the database's on a table, the result's own), filter, width,
  *  hide, the hidden ones back, its name. */
 export function columnMenu(v: DbView, col: number, cx: Context): void {
@@ -254,7 +262,7 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
   const kind = v.active?.kind ?? "sqlite";
   const now = g.sort?.column === name ? g.sort.desc ? "desc" : "asc" : "off";
   // s goes ↑, ↓, off: its key shows on the one it would do next.
-  const next = now === "off" ? "asc" : now === "asc" ? "desc" : "off";
+  const next = NEXT_SORT[now];
 
   const sort = (to: "asc" | "desc" | "off") => {
     const s = to === "off" ? null : { column: name, desc: to === "desc" };
@@ -407,7 +415,7 @@ export function logMenu(v: DbView, i: number, cx: Context): void {
 }
 
 /** How long ago, in a few letters. */
-export function ago(at: number, now = Date.now()): string {
+export function ago(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
 
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 86400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`;
@@ -427,9 +435,11 @@ export function historyMenu(v: DbView): void {
     return;
   }
 
+  const now = nowMs();
+
   openMenu(v, `history · ${v.active.name}`, Arr.map(v.history.slice(0, 60), (h) => ({
     label: Str.slice(0, 160)(Str.replace(/\s+/g, " ")(h.sql)),
-    sub: `${ago(h.at)} ago${h.ok === false ? " · failed" : ""}${h.rows !== undefined ? ` · ${h.rows} rows` : ""}${h.ms !== undefined ? ` · ${h.ms} ms` : ""}`,
+    sub: `${ago(h.at, now)} ago${h.ok === false ? " · failed" : ""}${h.rows !== undefined ? ` · ${h.rows} rows` : ""}${h.ms !== undefined ? ` · ${h.ms} ms` : ""}`,
     go: () => void v.addQuery(`${h.sql}${Str.endsWith(";")(Str.trimEnd(h.sql)) ? "" : ";"}`),
   })));
 }

@@ -17,7 +17,7 @@ import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Column } from "@fireflies/viewer/table";
 import { table, oneLine } from "@fireflies/viewer/table";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Match, Option, Schema, String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
 import type { GridColumn } from "./columns.ts";
@@ -215,7 +215,7 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
       .border_r(1).border_color(tone(t, 0.48))
       .when(c.num, (el) => el.justify_end())
       .when(ranged, (el) => el.child(dither(`${t.accent}33`, 1)))
-      .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
+      .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${wasWords(change?.was ?? null, oneLine)}`))
       .when(tip !== null, (el) => el.tooltip(tip ?? ""))
       .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.muted).bg(`${t.accent}1a`))
       .on_mouse_down("left", (e, cx) => {
@@ -317,17 +317,23 @@ export const cellAt = (set: ResultSet | null, at: GridAt): Cell | undefined => s
 export const rowText = (set: ResultSet, r: number): string => Arr.join(Arr.map((set.rows[r] ?? []), (v) => (v === null ? "NULL" : v)), "\t");
 
 /** A cell's whole value for reading: JSON pretty-printed when it is JSON. */
+const jsonValue = Schema.decodeOption(Schema.fromJsonString(Schema.Json));
+const prettyJson = Schema.encodeOption(Schema.fromJsonString(Schema.Json, { space: 2 }));
+
+/** A changed cell's value before, in words: NULL, an empty text said, else `shown`'s text of it. */
+export const wasWords = (was: Cell, shown: (text: string) => string): string => Match.value(was).pipe(
+  Match.when(null, () => "NULL"),
+  Match.when("", () => "'' (empty)"),
+  Match.orElse(shown),
+);
+
 export function prettyValue(v: Cell): string {
   if (v === null) return "NULL";
 
   const s = Str.trim(v);
 
   if ((Str.startsWith("{")(s) && Str.endsWith("}")(s)) || (Str.startsWith("[")(s) && Str.endsWith("]")(s))) {
-    try {
-      return JSON.stringify(JSON.parse(s), null, 2);
-    } catch {
-      return v;
-    }
+    return Option.getOrElse(Option.flatMap(jsonValue(s), prettyJson), () => v);
   }
 
   return v;

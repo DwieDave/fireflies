@@ -7,15 +7,19 @@
 
 import type { Context } from "gpui-kit";
 import { spaces, panes, focused, shared, setShared, run, openOverlay, closeOverlay } from "herdr";
-import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { Array as Arr, Clock, Effect, Option, Random, Schema, String as Str } from "effect";
 import { Commands, decodeJsonOption, readShared, writeShared } from "@fireflies/kit";
 import type { ConnectArgs, DbProps, Handover, KeptCopy } from "./state.ts";
 import { ConnectArgsSchema, HANDOVER_FRESH, HANDOVER_KEY, KeptCopySchema, MOD, WINDOW_KEY } from "./state.ts";
-import { nowMs } from "./app.ts";
+import { nowMs, runtime } from "./app.ts";
 import type { DbRun } from "./app.ts";
 
 const connectArgsOf = decodeJsonOption(ConnectArgsSchema);
 const keptCopyOf = decodeJsonOption(KeptCopySchema);
+const copyText = Schema.encodeOption(Schema.fromJsonString(KeptCopySchema));
+
+/** The copy's kept place (none when there is no storage). */
+const readCopy = Option.liftThrowable(() => localStorage.getItem("copy"));
 
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
@@ -51,7 +55,7 @@ export function windowSpec(props: DbProps): Parameters<typeof openOverlay>[0] {
 }
 
 /** A pane's slot: unique, names the copy. */
-export const newSlot = (): string => Date.now().toString(36) + Str.slice(2, 6)(Math.random().toString(36));
+export const newSlot = (): string => nowMs().toString(36) + Str.padStart(4, "0")(runtime.now(Random.nextIntBetween(0, 36 ** 4)).toString(36));
 
 /** This copy's pane (a mod isn't told its pane: it finds itself by its slot). */
 export function ownPane(v: DbView): string | null {
@@ -115,7 +119,7 @@ export function keepCopy(v: DbView): void {
   if (v.slot === null || Str.isEmpty(v.slot)) return;
 
   try {
-    localStorage.setItem("copy", JSON.stringify(placeNow(v)));
+    Option.map(copyText(placeNow(v)), (text) => localStorage.setItem("copy", text));
   } catch {
     /* a full or missing storage: the place isn't kept */
   }
@@ -133,13 +137,8 @@ export const start = (v: DbView, pr: DbProps): Effect.Effect<void, never, DbRun>
     writeShared(setShared, HANDOVER_KEY, null);
     kept = fresh;
   } else if (v.slot !== null && Str.isNonEmpty(v.slot)) {
-    let text: string | null = null;
-
-    try {
-      text = localStorage.getItem("copy");
-    } catch {
-      text = null;
-    }
+    // A missing storage: no place kept.
+    const text = Option.getOrNull(Option.flatMap(readCopy(), Option.fromNullOr));
 
     kept = text !== null && Str.isNonEmpty(text) ? Option.getOrNull(keptCopyOf(text)) : null;
   }

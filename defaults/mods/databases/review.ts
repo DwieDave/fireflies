@@ -85,7 +85,7 @@ export function statementLines(sql: string): string[][] {
     if (breaks && line.length !== 0) {
       while (line.length !== 0 && /^\s+$/.test(line.at(-1) ?? "")) line.pop();
 
-      lines.push([word === "WHERE" ? " " : word === "SET" ? "   " : "   ", tok]);
+      lines.push([word === "WHERE" ? " " : "   ", tok]);
     } else line.push(tok);
   }
 

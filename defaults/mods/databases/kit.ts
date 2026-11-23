@@ -161,7 +161,7 @@ export function kindBadge(t: Theme, kind: Kind): Element {
 }
 
 /** A tone's colour. */
-export const toneColor = (t: Theme, tone: "working" | "done" | "failed"): Color => (tone === "failed" ? t.blocked : tone === "done" ? t.done : t.working);
+export const toneColor = (t: Theme, tone: "working" | "done" | "failed"): Color => ({ failed: t.blocked, done: t.done, working: t.working })[tone];
 
 /** The nocturne pip (a dithered diamond) in a colour; `breathe` while something runs. */
 export function pip(color: Color, size = 6, breathe = false): Element {

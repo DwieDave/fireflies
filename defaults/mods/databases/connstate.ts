@@ -9,7 +9,7 @@
 
 import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
-import { Clock, Effect, String as Str } from "effect";
+import { Clock, Effect, Match, String as Str } from "effect";
 import { causeMessage, localTime, redraw } from "@fireflies/kit";
 import { nowMs } from "./app.ts";
 import type { DbRun } from "./app.ts";
@@ -45,7 +45,11 @@ export function connState(v: DbView, c: Conn | null): ConnState {
 
   if (f?.starting !== null && f?.starting !== undefined && f?.starting !== 0) return { kind: "connecting", what: "starting its forward" };
 
-  if (f !== null) return { kind: "failed", why: f.why === "gone" ? `its forward's pod isn't there${f.note !== null && Str.isNonEmpty(f.note) ? `: ${f.note}` : ""}` : f.why === "taken" ? `another program answers on localhost:${f.local}` : `no forward on localhost:${f.local}` };
+  if (f !== null) return { kind: "failed", why: Match.value(f.why).pipe(
+    Match.when("gone", () => `its forward's pod isn't there${f.note !== null && Str.isNonEmpty(f.note) ? `: ${f.note}` : ""}`),
+    Match.when("taken", () => `another program answers on localhost:${f.local}`),
+    Match.orElse(() => `no forward on localhost:${f.local}`),
+  ) };
 
   if (v.password?.conn === c.id) return { kind: "connecting", what: "waiting for its password" };
 

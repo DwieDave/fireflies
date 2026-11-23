@@ -14,7 +14,7 @@ import { window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
-import { Array as Arr, Effect, Option, String as Str } from "effect";
+import { Array as Arr, Effect, Match, Option, Result, String as Str } from "effect";
 import type { Conn, ConnDraft, Kind, SslMode } from "./kinds.ts";
 import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId, speaksTls } from "./kinds.ts";
@@ -299,7 +299,7 @@ export class ConnForm {
       if (Str.isNonEmpty(pw) && c.secret === "keychain" && (dir !== null && Str.isNonEmpty(dir))) {
         const saved = yield* Effect.result(saveSecret(dir, id, `Fireflies database ${c.name}`, pw));
 
-        if (saved._tag === "Failure") {
+        if (Result.isFailure(saved)) {
           this.error = `the keychain refused it: ${saved.failure.message}`;
 
           return;
@@ -368,7 +368,11 @@ export class ConnForm {
         .child(input !== undefined ? Input.new(input).flex_1().text_size(12).text_color(t.foreground) : div())
         .when(f === "path", (el) => el.child(chip(t, "form-pick", "pick…", false, () => this.v.run(this.pick()))));
 
-      const note = f === "password" ? (this.ask ? "asked each time" : "kept in the keychain") : f === "host" ? "or a URL" : "";
+      const note = Match.value(f).pipe(
+        Match.when("password", () => (this.ask ? "asked each time" : "kept in the keychain")),
+        Match.when("host", () => "or a URL"),
+        Match.orElse(() => ""),
+      );
 
       return v_flex().id(`form-${f}`).gap(4).w(f === "name" || f === "path" || f === "url" ? Math.min(560, this.v.size.width - 60) : Math.min(272, (this.v.size.width - 74) / 2))
         .on_mouse_down("left", (_e, cx) => {
@@ -395,9 +399,12 @@ export class ConnForm {
 
     const ids = Arr.map(Arr.filter(this.stops(), (s) => s.kind === "toggle"), (s) => s.id);
 
-    return h_flex().flex_wrap().gap(14).children(Arr.map(ids, (id) => (id === "remote" ? toggle(id, "remote (Turso, sqld)", this.remote)
-      : id === "ssl" ? toggle(id, "ssl", this.ssl(), sslWords(this.sslmode))
-      : id === "ask" ? toggle(id, "ask for the password each time", this.ask) : toggle(id, "read only", this.readonly))));
+    return h_flex().flex_wrap().gap(14).children(Arr.map(ids, (id) => Match.value(id).pipe(
+      Match.when("remote", () => toggle(id, "remote (Turso, sqld)", this.remote)),
+      Match.when("ssl", () => toggle(id, "ssl", this.ssl(), sslWords(this.sslmode))),
+      Match.when("ask", () => toggle(id, "ask for the password each time", this.ask)),
+      Match.orElse(() => toggle(id, "read only", this.readonly)),
+    )));
   }
 
   buttons(t: Theme, on: (id: string) => boolean): Element {

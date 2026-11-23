@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import type { Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Match, Option, String as Str } from "effect";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
 import type { TabMore } from "./kit.ts";
@@ -460,7 +460,11 @@ export function mainPanel(t: Theme, v: DbView): Element {
       if (key !== "+") atPointer(v, () => tabMenu(v, Number(key), cx), e);
     },
     dress: (key, el) => (key === "+" ? el : dropTarget(t, el, v, `tab:${key}`)),
-    tip: (key) => (key === "+" ? "new query tab · ctrl-n" : key === "0" ? "the table's rows · drop a table here to open it · T: its menu" : "double click: rename · drag: another place · T: its menu"),
+    tip: (key) => Match.value(key).pipe(
+      Match.when("+", () => "new query tab · ctrl-n"),
+      Match.when("0", () => "the table's rows · drop a table here to open it · T: its menu"),
+      Match.orElse(() => "double click: rename · drag: another place · T: its menu"),
+    ),
   };
 
   return panel(t, "p-main", titleTabs(t, "main", PANEL_KEY.main, tabs, String(v.mainTab), active, pick, more), active, body, {

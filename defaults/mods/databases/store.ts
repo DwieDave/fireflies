@@ -26,17 +26,21 @@ const ConnectionsDoc = Schema.Struct({ connections: Schema.Array(ConnJsonSchema)
 const firstLine = (error: Schema.SchemaError): string => Option.getOrElse(Arr.head(Str.split(error.message, "\n")), () => error.message);
 
 /** connections.json's text decoded; another shape is a `DecodeError` that says the file is left as it is. */
-const decodeConnections = (path: string) => (text: string): Effect.Effect<Conn[], DecodeError> => Schema.decodeUnknownEffect(Schema.fromJsonString(ConnectionsDoc))(text).pipe(
-  Effect.map((doc) => Arr.map(doc.connections, connOf)),
-  Effect.mapError((error) => DecodeError.make({ what: path, message: `${path} isn't a list of connections (left as it is): ${firstLine(error)}` })),
+const decodeConnections = (path: string) => (text: string): Effect.Effect<Conn[], DecodeError> => Schema.decodeEffect(Schema.fromJsonString(ConnectionsDoc))(text).pipe(
+  Effect.mapBoth({
+    onSuccess: (doc) => Arr.map(doc.connections, connOf),
+    onFailure: (error) => DecodeError.make({ what: path, message: `${path} isn't a list of connections (left as it is): ${firstLine(error)}` }),
+  }),
 );
 
 /** The saved connections as the file keeps them (only saved ones; never a secret: connJson has no field for one). */
 const encodeConnections = (list: readonly Conn[]): Effect.Effect<string, DecodeError> => Schema.encodeEffect(Schema.fromJsonString(ConnectionsDoc, { space: 2 }))({
   connections: Arr.flatMap(list, (c) => (c.origin === "saved" ? [connJson(c)] : [])),
 }).pipe(
-  Effect.map((text) => `${text}\n`),
-  Effect.mapError((error) => DecodeError.make({ what: "connections.json", message: `a connection couldn't be written: ${firstLine(error)}` })),
+  Effect.mapBoth({
+    onSuccess: (text) => `${text}\n`,
+    onFailure: (error) => DecodeError.make({ what: "connections.json", message: `a connection couldn't be written: ${firstLine(error)}` }),
+  }),
 );
 
 /** The saved connections (none when there's no file); a file in another shape is a `DecodeError`. */
@@ -95,8 +99,10 @@ const entriesOf = (text: Option.Option<string>): HistoryEntry[] => Option.match(
 });
 
 const historyText = (entries: readonly HistoryEntry[]): Effect.Effect<string, DecodeError> => Schema.encodeEffect(HistoryDoc)({ entries }).pipe(
-  Effect.map((text) => `${text}\n`),
-  Effect.mapError((error) => DecodeError.make({ what: "history", message: `the history couldn't be written: ${firstLine(error)}` })),
+  Effect.mapBoth({
+    onSuccess: (text) => `${text}\n`,
+    onFailure: (error) => DecodeError.make({ what: "history", message: `the history couldn't be written: ${firstLine(error)}` }),
+  }),
 );
 
 /** A connection's history, newest first. */

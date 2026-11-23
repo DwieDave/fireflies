@@ -43,7 +43,7 @@ export const speaksTls = (kind: Kind): boolean => kind === "postgres" || kind ==
 
 /** Why `value` (a connect request's, any text) can't be an sslmode, or null. */
 export function sslProblem(value: string): string | null {
-  return isSslMode(value) ? null : `sslmode ${JSON.stringify(value)} isn't one of ${Arr.join(SSL_MODES, ", ")}`;
+  return isSslMode(value) ? null : `sslmode "${value}" isn't one of ${Arr.join(SSL_MODES, ", ")}`;
 }
 
 /** Where a connection came from: saved by the person, found in the shown

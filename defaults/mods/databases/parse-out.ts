@@ -12,6 +12,9 @@ import { lineCol } from "./split.ts";
 /** A cell: its text as the client printed it, or null. */
 export type Cell = string | null;
 
+/** Cells as one key: each its length and text (NULL a dash), so no two lists share one. */
+export const cellsKey = (cells: readonly Cell[]): string => Arr.join(Arr.map(cells, (c) => (c === null ? "-" : `${Str.length(c)}:${c}`)), ",");
+
 /** A result's rows: the column names (and types where the client says), the rows. */
 export interface ResultSet {
   readonly columns: readonly string[];

@@ -11,6 +11,7 @@ import { setShared, shared } from "herdr";
 import { Array as Arr, Option, Order, Record as Rec, Schema, String as Str } from "effect";
 import { mapOf, readShared, sharedKey, writeShared } from "@fireflies/kit";
 import type { Cell, ResultSet } from "./parse-out.ts";
+import { cellsKey } from "./parse-out.ts";
 import type { Column } from "@fireflies/viewer/table";
 
 /** How a grid's columns are arranged: widths by name (layout px), hidden names, names in order. */
@@ -96,7 +97,7 @@ const cache = new WeakMap<ResultSet, { readonly key: string; readonly shown: Sho
 /** The result seen through a layout (and a local sort). `num(i)`: whether raw column i holds
  *  numbers (sorted as numbers). Worked out once per result and arrangement. */
 export function shownOf(raw: ResultSet, layout: ColumnLayout, sort: LocalSort | null, num: (i: number) => boolean = () => false): Shown {
-  const key = JSON.stringify([layout.order, layout.hidden, sort]);
+  const key = cellsKey([cellsKey(layout.order), cellsKey(layout.hidden), sort === null ? null : `${sort.desc ? "desc" : "asc"} ${sort.column}`]);
   const known = cache.get(raw);
 
   if (known?.key === key) return known.shown;

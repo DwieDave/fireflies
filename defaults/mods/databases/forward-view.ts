@@ -9,7 +9,8 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Match, Option } from "effect";
+import { nowMs } from "./app.ts";
 import { chip, pip } from "./kit.ts";
 import { forwardArgv } from "./kube.ts";
 import { connectNow } from "./conns.ts";
@@ -30,7 +31,12 @@ export function askTitle(a: ForwardAsk): string {
 
 /** The ask's buttons: key, words, what it does (the panel's chips and the keys are one list). */
 export function askActions(v: DbView, a: ForwardAsk): { readonly key: string; readonly label: string; readonly go: (cx: Context) => void }[] {
-  const start = { key: "enter", label: a.why === "taken" ? `start the forward on localhost:${a.local} and connect` : a.why === "gone" ? "try to start it again" : "start the forward and connect", go: () => v.run(startForward(v, a, (c) => v.run(connectNow(v, c)))) };
+  const start = { key: "enter", label: Match.value(a.why).pipe(
+    Match.when("taken", () => `start the forward on localhost:${a.local} and connect`),
+    Match.when("gone", () => "try to start it again"),
+    Match.orElse(() => "start the forward and connect"),
+  ), go: () => v.run(startForward(v, a, (c) => v.run(connectNow(v, c)))) };
+
   const anyway = { key: "c", label: "connect anyway", go: () => { v.forwardAsk = null; v.run(connectNow(v, a.conn)); } };
   const k8s = { key: "k", label: "open Kubernetes to pick it again", go: () => openKubernetes(v, a.conn) };
   const cancel = { key: "esc", label: "cancel", go: () => { v.forwardAsk = null; } };
@@ -79,7 +85,7 @@ export function forwardAskPanel(t: Theme, v: DbView, a: ForwardAsk, centered: (i
   if (f === undefined) return div();
 
   const shown = { ...f, local: a.local };
-  const secs = a.starting === null ? 0 : Math.floor((Date.now() - a.starting) / 1000);
+  const secs = a.starting === null ? 0 : Math.floor((nowMs() - a.starting) / 1000);
 
   const box = v_flex().id("db-fwd-box").w(Math.min(620, v.size.width - 40)).bg(t.background).border(1).border_color(a.why === "down" ? t.accent : t.ansi3).p(14).gap(10)
     .child(div().text_color(t.foreground).child(askTitle(a)))

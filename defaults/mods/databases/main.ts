@@ -42,7 +42,7 @@ import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { props, theme, shared, setShared, closeOverlay } from "herdr";
-import { Array as Arr, Clock, Deferred, Effect, Option, Schema, String as Str } from "effect";
+import { Array as Arr, Clock, Deferred, Effect, Option, Result, Schema, String as Str } from "effect";
 import { Commands, readShared, redraw, writeShared } from "@fireflies/kit";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Conn, Kind } from "./kinds.ts";
@@ -264,7 +264,7 @@ export default class Databases extends View {
     return Effect.gen({ self: this }, function* () {
       const dir = yield* Effect.result(privateDir);
 
-      if (dir._tag === "Success") this.dir = dir.success;
+      if (Result.isSuccess(dir)) this.dir = dir.success;
       else this.dirProblem = dir.failure.message;
 
       this.run(Effect.map(setupOf, (s) => {
@@ -273,7 +273,7 @@ export default class Databases extends View {
 
       const saved = yield* Effect.result(readConnections(dataHome()));
 
-      if (saved._tag === "Success") this.saved = saved.success;
+      if (Result.isSuccess(saved)) this.saved = saved.success;
       else this.say(`the pinned connections couldn't be read: ${saved.failure.message}`, "failed");
 
       this.pinnedAt = yield* Clock.currentTimeMillis;

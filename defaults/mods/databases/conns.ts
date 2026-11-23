@@ -7,7 +7,7 @@
 // reads it at each connect, into memory; a failed read says why and asks.
 
 import { InputState } from "gpui-base";
-import { Array as Arr, Deferred, Effect, Option, String as Str } from "effect";
+import { Array as Arr, Deferred, Effect, Option, Result, String as Str } from "effect";
 import { Exec, Files, causeMessage, redraw } from "@fireflies/kit";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { isSslMode, newId, speaksTls, sslProblem, where } from "./kinds.ts";
@@ -398,7 +398,7 @@ export const saveFound = (v: DbView, c: Conn): Effect.Effect<void, never, DbRun>
   } else if ((secret !== null && Str.isNonEmpty(secret)) && (dir !== null && Str.isNonEmpty(dir))) {
     const saved = yield* Effect.result(saveSecret(dir, id, `Fireflies database ${c.name}`, secret));
 
-    if (saved._tag === "Failure") {
+    if (Result.isFailure(saved)) {
       v.say(`the keychain refused it: ${saved.failure.message}`, "failed");
 
       return;

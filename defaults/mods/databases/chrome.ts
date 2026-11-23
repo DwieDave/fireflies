@@ -12,7 +12,7 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Match, String as Str } from "effect";
 import { where } from "./kinds.ts";
 import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
@@ -71,7 +71,13 @@ function keyBar(t: Theme, v: DbView): Element {
   const note = v.note;
   const place = v.place();
   const list = v.help ? [["esc", "close keys"] as const] : barHints(place);
-  const word = place === "rows" ? "ROWS" : place === "results" ? "RESULT" : place === "editor" ? "QUERY" : Str.toUpperCase(PANEL_NAME[v.panel]);
+
+  const word = Match.value(place).pipe(
+    Match.when("rows", () => "ROWS"),
+    Match.when("results", () => "RESULT"),
+    Match.when("editor", () => "QUERY"),
+    Match.orElse(() => Str.toUpperCase(PANEL_NAME[v.panel])),
+  );
 
   return h_flex().id("db-keys").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))

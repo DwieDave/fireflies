@@ -12,7 +12,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { ScrollHandle } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
-import { Array as Arr, Option, String as Str } from "effect";
+import { Array as Arr, Match, Option, String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import { KIND_NAME, onFile, where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
@@ -24,7 +24,7 @@ import { statePip } from "./connmark.ts";
 import type { EmptyWords } from "./dbs.ts";
 import { dbRows, dbsNow, emptyWords, hasDatabases, showDatabases, useDatabase, whereNow } from "./dbs.ts";
 import { connList } from "./conns.ts";
-import { cellAt, prettyValue } from "./grid.ts";
+import { cellAt, prettyValue, wasWords } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
 import { changeAt } from "./edits.ts";
 import { liveEdits, settleEdit } from "./cell-edit.ts";
@@ -359,7 +359,12 @@ export interface TablesCaption {
 
 export function tablesCaption(v: DbView): TablesCaption {
   const c = v.active;
-  const n = v.tablesTab === "schemas" ? schemasOf(v).length : v.tablesTab === "databases" ? dbsNow(v)?.list.length ?? 0 : shownTables(v).length;
+
+  const n = Match.value(v.tablesTab).pipe(
+    Match.when("schemas", () => schemasOf(v).length),
+    Match.when("databases", () => dbsNow(v)?.list.length ?? 0),
+    Match.orElse(() => shownTables(v).length),
+  );
 
   if (c === null) return { count: String(n), where: "" };
 
@@ -480,7 +485,7 @@ export function structRows(v: DbView): StructRow[] {
   }
 
   if (v.structTab === "indexes") {
-    return Arr.map(s.indexes, (x) => ({ mark: x.kind === "primary" ? "pk" : x.kind === "unique" ? "u" : "", markColor: x.kind === "primary" ? "pk" : "", name: x.name, note: `(${x.columns})`, right: x.method, table: null, copy: x.name }));
+    return Arr.map(s.indexes, (x) => ({ mark: Match.value(x.kind).pipe(Match.when("primary", () => "pk"), Match.when("unique", () => "u"), Match.orElse(() => "")), markColor: x.kind === "primary" ? "pk" : "", name: x.name, note: `(${x.columns})`, right: x.method, table: null, copy: x.name }));
   }
 
   if (v.structTab === "keys") {
@@ -553,7 +558,7 @@ function valueBody(t: Theme, v: DbView): Element {
 
   return v_flex().size_full().px(10).pt(2).gap(4)
     .child(h_flex().gap(8).text_size(10).text_color(t.muted).child(div().child(`${column} · row ${g.at.row + 1}`)).child(div().flex_1()).child(div().text_color(t.accent).child("y")).child(div().child("copy")))
-    .when(change !== null, (el) => el.child(h_flex().gap(6).text_size(10).child(div().flex_none().text_color(t.ansi3).child("changed · was")).child(div().min_w(0).truncate().text_color(t.muted).child(change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : change?.was ?? ""))))
+    .when(change !== null, (el) => el.child(h_flex().gap(6).text_size(10).child(div().flex_none().text_color(t.ansi3).child("changed · was")).child(div().min_w(0).truncate().text_color(t.muted).child(wasWords(change?.was ?? null, (text) => text)))))
     .child(v_flex().id("value-text").relative().flex_1().min_h(0).p(8).overflow_y_scroll().bg(`${edge(t)}55`)
       .when(cell === null, (el) => el.text_color(t.dim))
       .children(Arr.map(lines, (l, i) => jsonLine(t, l, i))));

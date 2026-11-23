@@ -135,7 +135,7 @@ export const startForward = (v: DbView, ask: ForwardAsk, connectNow: (c: Conn) =
     return;
   }
 
-  const address = Option.getOrNull(Option.map(Schema.decodeUnknownOption(AddressSchema)(Str.trim(r.stdout)), (x) => x.address));
+  const address = Option.getOrNull(Option.map(Schema.decodeOption(AddressSchema)(Str.trim(r.stdout)), (x) => x.address));
   const output = address !== null && Str.isNonEmpty(address) ? outputOf(address) : Effect.succeed("");
   let seen = false;
 

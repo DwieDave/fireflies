@@ -20,6 +20,9 @@ export interface Statement {
 /** What the scanner is inside at a character. */
 type Inside = "code" | "single" | "double" | "back" | "line" | "block" | "dollar";
 
+/** The quote that closes a string or a quoted name. */
+const CLOSING = { single: "'", double: '"', back: "`" } as const;
+
 /** The scanner: the text, the kind, where it is, what it's inside, a dollar tag. */
 interface Scan {
   readonly s: string;
@@ -41,7 +44,7 @@ function step(sc: Scan): boolean {
     case "single":
     case "double":
     case "back": {
-      const close = sc.inside === "single" ? "'" : sc.inside === "double" ? '"' : "`";
+      const close = CLOSING[sc.inside];
 
       // MySQL strings take backslash escapes; every kind doubles the quote.
       if (c === "\\" && sc.kind === "mysql" && sc.inside !== "back") sc.i += 2;

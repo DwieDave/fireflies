@@ -9,6 +9,7 @@
 import { Array as Arr, Option, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
+import { cellsKey } from "./parse-out.ts";
 import type { Browse, ColumnInfo, TableRef } from "./catalog.ts";
 import { typeOf } from "./quote.ts";
 
@@ -51,7 +52,7 @@ export function rowKeyOf(set: ResultSet, r: number, keyCols: readonly string[]):
     values.push(row[i] ?? null);
   }
 
-  return { id: JSON.stringify(values), values };
+  return { id: cellsKey(values), values };
 }
 
 /** The change staged on a cell of the shown rows, or null. */
