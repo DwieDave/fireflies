@@ -194,7 +194,7 @@ export function revealRow(v: Files, row: Row): void {
 /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from.
  *  Not close(): Fireflies calls that as cleanup once the pane is gone. */
 export function closePane(v: Files): void {
-  const me = ownPane(v) ?? (v.alone ? null : v.panel());
+  const me = ownPane(v) ?? (v.alone ? null : v.panel() ?? null);
 
   if (me === null) return;
 

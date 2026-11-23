@@ -399,7 +399,7 @@ test("the picker opens into the focused editor, else the shown tab's; the files 
   const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
   expect(pick).toMatch(/openInEditor\(herdr, "match" in r \? \{ path, line/);
   const files = readFileSync(new URL("../defaults/mods/file-tree/opening.ts", import.meta.url), "utf8");
-  expect(files).toMatch(/openInEditor\(herdr, \{ path: abs, pane: beside\?\.pane \?\? null, prefer: mine \? editorProps\(mine\)\.slot \?\? null : null/);
+  expect(files).toMatch(/openInEditor\(herdr, \{ path: abs, pane: beside\?\.pane \?\? null, prefer: mine !== null \? editorProps\(mine\)\.slot \?\? null : null/);
   // The picker's case: a terminal focused, the shown tab's editor takes it.
   paneList = [{ pane: "t", tab: "t1", terminal: "x" }, ed("e1", "s1", "t1", "/a.rs")];
   focusedPane = "t";
