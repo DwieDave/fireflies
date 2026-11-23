@@ -65,15 +65,23 @@
 import type { AsyncContext, Context, Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { shared, setShared } from "herdr";
-import { isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
+import { Option, Schema } from "effect";
+import { readShared, readSharedOption, sharedKey, writeShared } from "@fireflies/kit";
 import Viewer from "@fireflies/viewer";
 
-/** A file for the preview pane whose slot it names. */
-export const SHOW_KEY = sharedKey("preview.show", nullable(object({ slot: isString, path: isString, n: isNumber }, { at: isNumber })));
+/** A file for the preview pane whose slot it names (the files pane's routing.ts writes the same shape). */
+export const ShowSchema = Schema.Struct({ slot: Schema.String, path: Schema.String, n: Schema.Finite, at: Schema.optionalKey(Schema.Finite) });
+
+export type Show = typeof ShowSchema.Type;
+
+export const SHOW_KEY = sharedKey("preview.show", Schema.NullOr(ShowSchema));
 
 /** The preview pane that last had the keyboard (its slot): the app's
  *  `preview.open` shows the next file there. */
-export const LAST_KEY = sharedKey("preview.last", nullable(isString));
+export const LAST_KEY = sharedKey("preview.last", Schema.NullOr(Schema.String));
+
+/** The `preview.show` record now, none when there is none (or it's in another shape). */
+const showNow = (): Option.Option<Show> => Option.flatMap(readSharedOption(shared, SHOW_KEY), Option.fromNullOr);
 
 export default class PreviewView extends Viewer {
   // The last `preview.show` seen: one from before this pane started is old.
@@ -81,26 +89,29 @@ export default class PreviewView extends Viewer {
 
   override init(p: Props | undefined, cx: AsyncContext): void {
     super.init(p, cx);
-    this.seenShow = readShared(shared, SHOW_KEY, null)?.n ?? 0;
+    this.seenShow = Option.match(showNow(), { onNone: () => 0, onSome: (ask) => ask.n });
   }
 
   override render(cx: Context): Element {
-    const ask = readShared(shared, SHOW_KEY, null);
-
-    if (ask && !this.embedded && this.slot && ask.slot === this.slot && ask.n !== this.seenShow) {
-      this.seenShow = ask.n;
-      cx.timer.after(0, (cx) => {
-        this.open(ask.path, cx);
-        cx.notify();
-      });
-    }
-
     const slot = this.slot;
 
-    if (slot && !this.embedded && this.handle?.is_focused() === true && readShared(shared, LAST_KEY, null) !== slot) {
-      cx.timer.after(0, () => {
-        if (readShared(shared, LAST_KEY, null) !== slot) writeShared(setShared, LAST_KEY, slot);
-      });
+    if (slot !== null && !this.embedded) {
+      // Render can't load: the file is opened from a timer right after it.
+      const ask = Option.getOrNull(Option.filter(showNow(), (x) => x.slot === slot && x.n !== this.seenShow));
+
+      if (ask !== null) {
+        this.seenShow = ask.n;
+        cx.timer.after(0, (cx) => {
+          this.open(ask.path, cx);
+          cx.notify();
+        });
+      }
+
+      if (this.handle?.is_focused() === true && readShared(shared, LAST_KEY, null) !== slot) {
+        cx.timer.after(0, () => {
+          if (readShared(shared, LAST_KEY, null) !== slot) writeShared(setShared, LAST_KEY, slot);
+        });
+      }
     }
 
     return super.render(cx);

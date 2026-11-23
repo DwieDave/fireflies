@@ -183,7 +183,10 @@ for (const [what, list] of [
 
 test("the toolbar's ground is one file in both mods (nocturne, notifications), and both kits pass it on", () => {
   expect(copiesOf("toolground.ts")).toEqual([]);
-  for (const k of [kit, nkit]) for (const name of ["dither", "TOOL_LOOK", "toolGround", "mix", "toolHover"]) expect(k[name]).toBeDefined();
+  for (const k of [kit, nkit]) for (const name of ["TOOL_LOOK", "toolGround", "mix", "toolHover"]) expect(k[name]).toBeDefined();
+  // notifications paints with @fireflies/look's fill (its kit passes it on), nocturne with toolground's dither.
+  expect(kit.dither).toBeDefined();
+  expect(nkit.fill).toBeDefined();
   expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
   expect(nkit.toolGround(theme).map(shape)).toEqual(ground());
   expect(nkit.toolHover(MOONFLY)).toBe(kit.toolHover(MOONFLY));

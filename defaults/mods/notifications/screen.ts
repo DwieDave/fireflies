@@ -3,22 +3,39 @@
 // cursor, Other), the review before submitting, each from the terminal's
 // text. Pure: tested with captured screens (scripts/fixtures/notifications).
 
+import { Array as Arr, Option, String as Str } from "effect";
+
+/** Whether a line has nothing but blanks. */
+export const blankLine = (l: string): boolean => Str.isEmpty(Str.trim(l));
 
 /** The terminal's text as lines, without trailing blanks. */
 export function lines(screen: string): string[] {
-  return screen.replace(/\r/g, "").split("\n").map((l) => l.replace(/\s+$/, ""));
+  return Arr.map(Str.split(Str.replace(/\r/g, "")(screen), "\n"), Str.replace(/\s+$/, ""));
 }
 
 export const RULE = /^[─━]{8,}$/; // the full-width rule above Claude's input and dialogs
 export const DASH = /^\s*[╌]{8,}$/; // the dashed rules around a command or a diff
 export const OPTION = /^(\s*)(❯\s+)?(\s*)(\d+)\.\s(.*)$/;
-export const norm = (s: string | null | undefined): string => (s ?? "").replace(/\s+/g, " ").trim();
+export const norm = (s: string | null | undefined): string => Str.trim(Str.replace(/\s+/g, " ")(s ?? ""));
 
 /** The index of the last line matching `re`, else -1. */
 export function lastIndex(ls: readonly string[], re: RegExp, before = ls.length): number {
   for (let i = Math.min(before, ls.length) - 1; i >= 0; i--) if (re.test(ls[i] ?? "")) return i;
 
   return -1;
+}
+
+/** The index of the first line from `from` on matching `re`, else -1. */
+const firstIndex = (ls: readonly string[], re: RegExp, from: number): number =>
+  Option.getOrElse(Arr.findFirstIndex(ls, (l, i) => i > from && re.test(l)), () => -1);
+
+/** Lines, the blank ones at the end dropped. */
+export function trimEnd(ls: readonly string[]): string[] {
+  const out = [...ls];
+
+  while (out.length > 0 && blankLine(out.at(-1) ?? "")) out.pop();
+
+  return out;
 }
 
 /** A numbered option of a dialog: its number and its words. */
@@ -73,23 +90,23 @@ export interface ReviewScreen {
  *  (permission, review) or rows (question). */
 export type ScreenDialog = PermissionScreen | QuestionScreen | ReviewScreen;
 
+const ESC = /Esc to cancel/;
+
 /** The dialog at the bottom of a Claude Code screen, or null. */
 export function parseScreen(screen: string | null): ScreenDialog | null {
-  const ls = lines(screen ?? "");
-
-  while (ls.length && !ls.at(-1)?.trim()) ls.pop();
+  const ls = trimEnd(lines(screen ?? ""));
 
   // Claude's review of a question block: "Ready to submit your answers?" over
   // its options at the bottom (drawn with or without a key line under them).
   const ready = lastIndex(ls, /^\s*Ready to submit your answers\?\s*$/);
 
-  if (ready >= 0 && ls.length - ready < 10 && ls.slice(ready + 1).every((l) => !l.trim() || OPTION.test(l) || /Esc to cancel/.test(l))) {
-    const end = ls.findIndex((l, i) => i > ready && /Esc to cancel/.test(l));
+  if (ready >= 0 && ls.length - ready < 10 && Arr.every(Arr.drop(ls, ready + 1), (l) => blankLine(l) || OPTION.test(l) || ESC.test(l))) {
+    const end = firstIndex(ls, ESC, ready);
 
     return parseReview(ls, end < 0 ? ls.length : end);
   }
 
-  const foot = lastIndex(ls, /Esc to cancel/);
+  const foot = lastIndex(ls, ESC);
 
   if (foot < 0 || ls.length - foot > 4) return null;
 
@@ -118,14 +135,14 @@ export function optionsAbove(ls: readonly string[], end: number): OptionsBlock {
   const out: ReadOption[] = [];
   let i = end - 1;
 
-  while (i >= 0 && !ls[i]?.trim()) i--;
+  while (i >= 0 && blankLine(ls[i] ?? "")) i--;
 
   const block: string[] = [];
 
   for (; i >= 0; i--) {
     const l = ls[i] ?? "";
 
-    if (!l.trim()) break;
+    if (blankLine(l)) break;
 
     block.unshift(l);
 
@@ -135,39 +152,45 @@ export function optionsAbove(ls: readonly string[], end: number): OptionsBlock {
   let start = -1;
 
   for (const l of block) {
-    const m = l.match(OPTION);
+    const m = Option.getOrNull(Str.match(OPTION)(l));
     const last = out.at(-1);
 
-    if (m) {
-      out.push({ n: Number(m[4]), label: (m[5] ?? "").trim(), cursor: Boolean(m[2]) });
+    if (m !== null) {
+      out.push({ n: Number(m[4]), label: Str.trim(m[5] ?? ""), cursor: m[2] !== undefined });
       start = out.length;
-    } else if (start > 0 && last) last.label += ` ${l.trim()}`;
+    } else if (start > 0 && last !== undefined) last.label += ` ${Str.trim(l)}`;
   }
 
   return { options: out, top: i };
 }
+
+/** The index of the option under the cursor, -1 for none. */
+const cursorOf = (options: readonly ReadOption[]): number => Option.getOrElse(Arr.findFirstIndex(options, (o) => o.cursor), () => -1);
+
+/** The options as a dialog lists them (number and words). */
+const plainOptions = (options: readonly ReadOption[]): ScreenOption[] => Arr.map(options, ({ n, label }) => ({ n, label }));
 
 export function parsePermission(ls: readonly string[], foot: number, canAmend: boolean): PermissionScreen | null {
   const { options, top } = optionsAbove(ls, foot);
 
   if (options[0]?.n !== 1) return null;
 
-  const cursor = options.findIndex((o) => o.cursor);
+  const cursor = cursorOf(options);
   const rule = lastIndex(ls, RULE, top + 1);
 
   if (rule < 0) return null;
 
   // Claude's own "Tip: …" line (auto mode) isn't part of the request.
-  const head = ls.slice(rule + 1, top).filter((l) => l.trim() && !DASH.test(l) && !TIP.test(l));
+  const head = Arr.filter(ls.slice(rule + 1, top), (l) => !blankLine(l) && !DASH.test(l) && !TIP.test(l));
   const question = norm(head.at(-1) ?? "");
   const { amend, amendText } = amendOf(options[cursor]?.label ?? "", cursor, canAmend);
 
   return {
     kind: "permission",
     title: norm(head[0] ?? ""),
-    body: head.slice(1, -1).map((l) => l.trim()),
+    body: Arr.map(head.slice(1, -1), Str.trim),
     question,
-    options: options.map(({ n, label }) => ({ n, label })),
+    options: plainOptions(options),
     cursor,
     amend,
     amendText,
@@ -192,9 +215,9 @@ export function amendOf(label: string, cursor: number, canAmend: boolean): Amend
 
   if (/^No, and tell Claude what to do differently$/.test(label)) return { amend: "no", amendText: "" };
 
-  if (!canAmend && cursor === 0 && label.startsWith('Yes, ')) return { amend: "yes", amendText: label.slice(5) };
+  if (!canAmend && cursor === 0 && Str.startsWith("Yes, ")(label)) return { amend: "yes", amendText: Str.slice(5)(label) };
 
-  if (!canAmend && cursor > 0 && label.startsWith('No, ') && !label.endsWith('(esc)')) return { amend: "no", amendText: label.slice(4) };
+  if (!canAmend && cursor > 0 && Str.startsWith("No, ")(label) && !Str.endsWith("(esc)")(label)) return { amend: "no", amendText: Str.slice(4)(label) };
 
   return { amend: null, amendText: "" };
 }
@@ -208,15 +231,29 @@ export interface OptionRow {
   readonly checked: boolean | null;
 }
 
+/** A header of a question block's headers row (☐ Color ☒ Pets ✔ Submit): its mark and words. */
+const HEADER = /([☐☒✔])\s+(.+?)(?=\s+[☐☒✔]\s|$)/g;
+
+/** An option's label and its box (null without one). */
+function boxOf(text: string): { readonly label: string; readonly checked: boolean | null } {
+  const label = Str.trim(text);
+
+  return Option.match(Str.match(/^\[([ ✔])\]\s?(.*)$/)(label), {
+    onNone: () => ({ label, checked: null }),
+    onSome: (box) => ({ label: Str.trim(box[2] ?? ""), checked: box[1] === "✔" }),
+  });
+}
+
 export function parseQuestion(ls: readonly string[], foot: number): QuestionScreen | null {
   // The block starts at the line of headers (☐ Color ☐ Pets ✔ Submit) after the last full rule.
   const h = lastIndex(ls, /^\s*(←\s+)?[☐☒]\s/, foot);
 
   if (h < 0 || foot - h > 60) return null;
 
-  const parts = [...(ls[h] ?? "").replace(/^\s*←\s+/, "").replace(/\s+→\s*$/, "").matchAll(/([☐☒✔])\s+(.+?)(?=\s+[☐☒✔]\s|$)/g)];
-  const submit = parts.some((p) => p[1] === "✔");
-  const headers = parts.flatMap((p) => (p[1] === "✔" ? [] : [{ header: (p[2] ?? "").trim(), done: p[1] === "☒" }]));
+  const headLine = Str.replace(/\s+→\s*$/, "")(Str.replace(/^\s*←\s+/, "")(ls[h] ?? ""));
+  const parts = Arr.fromIterable(Str.matchAll(HEADER)(headLine));
+  const submit = Arr.some(parts, (p) => p[1] === "✔");
+  const headers = Arr.flatMap(parts, (p) => (p[1] === "✔" ? [] : [{ header: Str.trim(p[2] ?? ""), done: p[1] === "☒" }]));
   // The question: the lines after the headers up to the first option.
   let i = h + 1;
   const q: string[] = [];
@@ -226,7 +263,7 @@ export function parseQuestion(ls: readonly string[], foot: number): QuestionScre
 
     if (OPTION.test(l)) break;
 
-    if (l.trim()) q.push(l.trim());
+    if (!blankLine(l)) q.push(Str.trim(l));
   }
 
   const rows: (OptionRow | { readonly kind: "next" })[] = [];
@@ -235,33 +272,26 @@ export function parseQuestion(ls: readonly string[], foot: number): QuestionScre
   for (; i < foot; i++) {
     const l = ls[i] ?? "";
 
-    if (!l.trim() || RULE.test(l)) continue;
+    if (blankLine(l) || RULE.test(l)) continue;
 
-    const m = l.match(OPTION);
+    const m = Option.getOrNull(Str.match(OPTION)(l));
 
-    if (m) {
-      let label = (m[5] ?? "").trim();
-      let checked: boolean | null = null;
-      const box = label.match(/^\[([ ✔])\]\s?(.*)$/);
-
-      if (box) {
-        checked = box[1] === "✔";
-        label = (box[2] ?? "").trim();
-      }
+    if (m !== null) {
+      const { label, checked } = boxOf(m[5] ?? "");
 
       rows.push({ kind: /^Chat about this$/.test(label) ? "chat" : "option", n: Number(m[4]), label, desc: "", checked });
 
-      if (m[2]) cursor = rows.length - 1;
+      if (m[2] !== undefined) cursor = rows.length - 1;
 
       continue;
     }
 
-    const next = l.match(/^(❯)?\s+(Next|Submit)$/);
+    const next = Option.getOrNull(Str.match(/^(❯)?\s+(Next|Submit)$/)(l));
 
-    if (next) {
+    if (next !== null) {
       rows.push({ kind: "next" });
 
-      if (next[1]) cursor = rows.length - 1;
+      if (next[1] !== undefined) cursor = rows.length - 1;
 
       continue;
     }
@@ -271,35 +301,35 @@ export function parseQuestion(ls: readonly string[], foot: number): QuestionScre
     if (last?.kind === "option") last.desc = norm(`${last.desc} ${l}`);
   }
 
-  if (!rows.length) return null;
+  if (rows.length === 0) return null;
 
-  return { kind: "question", headers: headers.length ? headers : null, submit, question: norm(q.join(" ")), rows, cursor };
+  return { kind: "question", headers: headers.length > 0 ? headers : null, submit, question: norm(Arr.join(q, " ")), rows, cursor };
 }
 
 export function parseReview(ls: readonly string[], foot: number): ReviewScreen | null {
   const { options } = optionsAbove(ls, foot);
   const start = lastIndex(ls, /^\s*Review your answers\s*$/, foot);
 
-  if (start < 0 || !options.length) return null;
+  if (start < 0 || options.length === 0) return null;
 
   const answers: { question: string; answer: string }[] = [];
 
   for (let i = start + 1; i < foot; i++) {
     const l = ls[i] ?? "";
-    const q = l.match(/^\s*●\s+(.*)$/);
+    const q = Option.getOrNull(Str.match(/^\s*●\s+(.*)$/)(l));
 
-    if (q) {
+    if (q !== null) {
       answers.push({ question: norm(q[1]), answer: "" });
 
       continue;
     }
 
-    const a = l.match(/^\s*→\s+(.*)$/);
+    const a = Option.getOrNull(Str.match(/^\s*→\s+(.*)$/)(l));
     const last = answers.at(-1);
 
-    if (a && last) last.answer = norm(a[1]);
-    else if (last && !last.answer && l.trim() && !/Ready to submit/.test(l) && !OPTION.test(l)) last.question = norm(`${last.question} ${l}`);
+    if (a !== null && last !== undefined) last.answer = norm(a[1]);
+    else if (last !== undefined && Str.isEmpty(last.answer) && !blankLine(l) && !/Ready to submit/.test(l) && !OPTION.test(l)) last.question = norm(`${last.question} ${l}`);
   }
 
-  return { kind: "review", answers, options: options.map(({ n, label }) => ({ n, label })), cursor: options.findIndex((o) => o.cursor) };
+  return { kind: "review", answers, options: plainOptions(options), cursor: cursorOf(options) };
 }

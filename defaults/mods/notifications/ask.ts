@@ -18,6 +18,7 @@
 // Pure: press() returns a new state and maybe an action for the dialog.
 
 
+import { Array as Arr, Option, Order, String as Str } from "effect";
 import type { Answer } from "./claude.ts";
 import type { Question } from "./request.ts";
 
@@ -59,10 +60,10 @@ interface Draft {
 export function start(questions: Questions): AskState {
   return {
     q: 0,
-    cursor: questions.map(() => 0),
-    picked: questions.map(() => []),
-    other: questions.map(() => ""),
-    otherOn: questions.map(() => false),
+    cursor: Arr.map(questions, () => 0),
+    picked: Arr.map(questions, (): number[] => []),
+    other: Arr.map(questions, () => ""),
+    otherOn: Arr.map(questions, () => false),
     editing: false,
     reviewCursor: 0,
   };
@@ -75,13 +76,13 @@ export const otherRow = (questions: Questions, i: number): number => questions[i
 
 /** The answer for question i: { picked: [option index], other: text | null }. */
 export function answerOf(questions: Questions, s: AskState, i: number): Answer {
-  const typed = s.other[i]?.trim() ?? "";
-  const other = s.otherOn[i] && typed ? typed : null;
+  const typed = Str.trim(s.other[i] ?? "");
+  const other = s.otherOn[i] === true && Str.isNonEmpty(typed) ? typed : null;
   const picked = s.picked[i] ?? [];
 
-  if (!questions[i]?.multiSelect) return other !== null ? { picked: [], other } : { picked: picked.slice(0, 1), other: null };
+  if (questions[i]?.multiSelect !== true) return other === null ? { picked: Arr.take(picked, 1), other: null } : { picked: [], other };
 
-  return { picked: [...picked].sort((a, b) => a - b), other };
+  return { picked: Arr.sort(picked, Order.Number), other };
 }
 
 export const answered = (questions: Questions, s: AskState, i: number): boolean => {
@@ -90,13 +91,13 @@ export const answered = (questions: Questions, s: AskState, i: number): boolean 
   return a.picked.length > 0 || a.other !== null;
 };
 
-export const answers = (questions: Questions, s: AskState): Answer[] => questions.map((_, i) => answerOf(questions, s, i));
+export const answers = (questions: Questions, s: AskState): Answer[] => Arr.map(questions, (_, i) => answerOf(questions, s, i));
 
 /** The review's rows: submit, then back to the first question. */
 export const REVIEW = ["submit", "back"] as const;
 
 function clone(s: AskState): Draft {
-  return { ...s, cursor: [...s.cursor], picked: s.picked.map((p) => [...p]), other: [...s.other], otherOn: [...s.otherOn] };
+  return { ...s, cursor: [...s.cursor], picked: Arr.map(s.picked, (p) => [...p]), other: [...s.other], otherOn: [...s.otherOn] };
 }
 
 function go(questions: Questions, s: Draft, q: number) {
@@ -119,15 +120,14 @@ function tab(questions: Questions, s: Draft, by: number) {
 
 /** Submitting: the first question without an answer, else the answers go. */
 function submit(questions: Questions, s: Draft): Pressed {
-  const missing = questions.findIndex((_, i) => !answered(questions, s, i));
+  return Option.match(Arr.findFirstIndex(questions, (_, i) => !answered(questions, s, i)), {
+    onNone: (): Pressed => ({ state: s, action: "submit" }),
+    onSome: (missing): Pressed => {
+      go(questions, s, missing);
 
-  if (missing >= 0) {
-    go(questions, s, missing);
-
-    return { state: s, action: null };
-  }
-
-  return { state: s, action: "submit" };
+      return { state: s, action: null };
+    },
+  });
 }
 
 /** press()'s options: shift held (shift-tab). */
@@ -188,7 +188,7 @@ export function press(questions: Questions, state: AskState, key: string, { shif
   const r = rows(questions, i);
   const c = s.cursor[i] ?? 0;
 
-  if (!q) return { state: s, action: null };
+  if (q === undefined) return { state: s, action: null };
 
   if (key === "up" || key === "k") s.cursor[i] = (c - 1 + r) % r;
   else if (key === "down" || key === "j") s.cursor[i] = (c + 1) % r;
@@ -198,8 +198,8 @@ export function press(questions: Questions, state: AskState, key: string, { shif
     return press(questions, s, "enter");
   } else if (key === "enter" || key === "space") {
     if (c === otherRow(questions, i)) {
-      if (q.multiSelect && key === "space" && s.other[i]?.trim()) {
-        s.otherOn[i] = !s.otherOn[i];
+      if (q.multiSelect && key === "space" && Str.isNonEmpty(Str.trim(s.other[i] ?? ""))) {
+        s.otherOn[i] = s.otherOn[i] !== true;
 
         return { state: s, action: null };
       }
@@ -212,7 +212,7 @@ export function press(questions: Questions, state: AskState, key: string, { shif
     if (q.multiSelect) {
       const p = s.picked[i] ?? [];
 
-      s.picked[i] = p.includes(c) ? p.filter((x) => x !== c) : [...p, c];
+      s.picked[i] = Arr.contains(p, c) ? Arr.filter(p, (x) => x !== c) : [...p, c];
     } else {
       s.picked[i] = [c];
       s.otherOn[i] = false;
@@ -229,7 +229,7 @@ export function setOther(questions: Questions, state: AskState, text: string): A
   const s = keepDraft(questions, state, text);
   const i = s.q;
 
-  if (i < questions.length && !questions[i]?.multiSelect && s.otherOn[i]) go(questions, s, i + 1);
+  if (i < questions.length && questions[i]?.multiSelect !== true && s.otherOn[i] === true) go(questions, s, i + 1);
 
   return s;
 }
@@ -245,13 +245,13 @@ function keepDraft(questions: Questions, state: AskState, text: string): Draft {
 
   if (i >= questions.length) return s;
 
-  const typed = text.replace(/[\r\n]+/g, " ").trim();
+  const typed = Str.trim(Str.replace(/[\r\n]+/g, " ")(text));
 
   s.other[i] = typed;
-  s.otherOn[i] = Boolean(typed);
+  s.otherOn[i] = Str.isNonEmpty(typed);
   s.editing = false;
 
-  if (!questions[i]?.multiSelect && s.otherOn[i]) s.picked[i] = [];
+  if (questions[i]?.multiSelect !== true && s.otherOn[i] === true) s.picked[i] = [];
 
   return s;
 }

@@ -17,35 +17,44 @@
 //             isn't one: the sidebar and Fireflies' own toast tell about it.
 //
 
-import type { Guarded } from "./guard.ts";
-import { isBoolean, isNumber, isString, literal, nullable, object } from "./guard.ts";
+import { Array as Arr, Option, Order, Schema, String as Str } from "effect";
 import * as claude from "./claude.ts";
 import * as request from "./request.ts";
 import type { Step, Goal } from "./claude.ts";
 import type { HookRecord, Request } from "./request.ts";
 
+/** Left out, null, or an `A`. */
+const maybe = <A, I>(s: Schema.Codec<A, I>) => Schema.optionalKey(Schema.NullOr(s));
+
+const maybeString = maybe(Schema.String);
+
 /** A status that waits on the person: an agent blocked on them, or one that failed. */
-const isWaiting = literal("blocked", "error");
+const StatusSchema = Schema.Literals(["blocked", "error"]);
+
+const isWaiting = Schema.is(StatusSchema);
 
 /** What an item asks of the person: the overview's groups. */
-export type ItemType = "permission" | "question" | "other";
+export const ItemTypeSchema = Schema.Literals(["permission", "question", "other"]);
 
-export const TYPES: readonly ItemType[] = ["permission", "question", "other"];
+export type ItemType = typeof ItemTypeSchema.Type;
+
+export const TYPES: readonly ItemType[] = ItemTypeSchema.literals;
 
 /** A terminal as terminals() (herdr-core's listing) has it: the fields read here. */
-export const isTerminal = object({ address: isString }, {
-  state: nullable(isString),
-  status: nullable(isString),
-  status_ms: nullable(isNumber),
+export const TerminalSchema = Schema.Struct({
+  address: Schema.String,
+  state: maybeString,
+  status: maybeString,
+  status_ms: maybe(Schema.Finite),
   // The agent's own report.
-  report: nullable(object({}, { state: nullable(isString), kind: nullable(isString), msg: nullable(isString), app: nullable(isString) })),
-  parent: nullable(isString),
-  labels: nullable(object({}, { "herdr.space": isString, "nocturne.name": isString })),
-  name: nullable(isString),
-  program: nullable(object({}, { key: nullable(isString), name: nullable(isString) })),
+  report: maybe(Schema.Struct({ state: maybeString, kind: maybeString, msg: maybeString, app: maybeString })),
+  parent: maybeString,
+  labels: maybe(Schema.Struct({ "herdr.space": Schema.optionalKey(Schema.String), "nocturne.name": Schema.optionalKey(Schema.String) })),
+  name: maybeString,
+  program: maybe(Schema.Struct({ key: maybeString, name: maybeString })),
 });
 
-export type Terminal = Guarded<typeof isTerminal>;
+export type Terminal = typeof TerminalSchema.Type;
 
 /** What picks an adapter: the agent's report, else its program. */
 export interface AgentKind {
@@ -85,28 +94,33 @@ export const ADAPTERS: readonly Adapter[] = [
   generic,
 ];
 
-export const adapterOf = (t: AgentKind): Adapter => ADAPTERS.find((a) => a.handles(t)) ?? generic;
+export const adapterOf = (t: AgentKind): Adapter => Option.getOrElse(Arr.findFirst(ADAPTERS, (a) => a.handles(t)), () => generic);
+
+/** Whether a line has nothing but blanks. */
+const blank = (l: string): boolean => Str.isEmpty(Str.trim(l));
 
 /** The last lines of a screen that say something (for the generic view). */
 export function tail(screen: string | null, n = 14): string {
-  const ls = (screen ?? "").replace(/\r/g, "").split("\n").map((l) => l.replace(/\s+$/, ""));
+  const ls = Arr.map(Str.split(Str.replace(/\r/g, "")(screen ?? ""), "\n"), Str.replace(/\s+$/, ""));
 
-  while (ls.length && !ls.at(-1)?.trim()) ls.pop();
+  while (ls.length > 0 && blank(ls.at(-1) ?? "")) ls.pop();
 
   const out: string[] = [];
 
   for (let i = ls.length - 1; i >= 0 && out.length < n; i--) {
     const l = ls[i] ?? "";
 
-    if (/^[─━╌]{8,}$/.test(l.trim())) continue;
+    if (/^[─━╌]{8,}$/.test(Str.trim(l))) continue;
 
-    if (!l.trim() && !out.length) continue;
+    if (blank(l) && out.length === 0) continue;
 
     out.unshift(l);
   }
 
   // Drop leading blanks and squeeze runs of blank lines.
-  return out.filter((l, i) => l.trim() || (i > 0 && out[i - 1]?.trim())).join("\n").replace(/^\n+/, "");
+  const kept = Arr.filter(out, (l, i) => !blank(l) || (i > 0 && !blank(out[i - 1] ?? "")));
+
+  return Str.replace(/^\n+/, "")(Arr.join(kept, "\n"));
 }
 
 /** A terminal's address split: the machine it is on (null: this one) and its id there. */
@@ -117,9 +131,10 @@ export interface Address {
 
 /** "machine/t3" -> { machine: "machine", id: "t3" }; "t3" -> { machine: null, id: "t3" }. */
 export function splitAddress(address: string): Address {
-  const i = address.lastIndexOf("/");
-
-  return i < 0 ? { machine: null, id: address } : { machine: address.slice(0, i), id: address.slice(i + 1) };
+  return Option.match(Str.lastIndexOf("/")(address), {
+    onNone: () => ({ machine: null, id: address }),
+    onSome: (i) => ({ machine: Str.slice(0, i)(address), id: Str.slice(i + 1)(address) }),
+  });
 }
 
 /** A terminal's status word: blocked, done, error, working, idle, or null. */
@@ -130,7 +145,7 @@ export function statusOf(t: Terminal): string | null {
 /** What the terminal needs: "permission" | "question" | "other" | null. */
 export function typeOf(status: string | null, kind: string | null, described: Request | null): ItemType | null {
   if (status === "blocked") {
-    if (described?.type) return described.type;
+    if (described !== null) return described.type;
 
     if (kind === "permission" || kind === "question") return kind;
 
@@ -143,34 +158,34 @@ export function typeOf(status: string | null, kind: string | null, described: Re
 }
 
 /** An item: one agent waiting on the person (as shared notifications.items keeps it). */
-export const isItem = object({
-  id: isString,
-  address: isString,
-  machine: nullable(isString),
-  adapter: literal("claude", "generic"),
-  type: literal("permission", "question", "other"),
-  status: literal("blocked", "error"),
-  kind: nullable(isString),
-  msg: isString,
-  name: isString,
-  program: isString,
-  app: nullable(isString),
-  logo: isString,
-  space: nullable(isString),
-  spaceName: isString,
-  tab: nullable(isString),
-  tabName: isString,
-  tabIndex: nullable(isNumber),
-  since: isNumber,
-  request: nullable(request.isRequest),
-  tail: nullable(isString),
-  answerable: isBoolean,
+export const ItemSchema = Schema.Struct({
+  id: Schema.String,
+  address: Schema.String,
+  machine: Schema.NullOr(Schema.String),
+  adapter: Schema.Literals(["claude", "generic"]),
+  type: ItemTypeSchema,
+  status: StatusSchema,
+  kind: Schema.NullOr(Schema.String),
+  msg: Schema.String,
+  name: Schema.String,
+  program: Schema.String,
+  app: Schema.NullOr(Schema.String),
+  logo: Schema.String,
+  space: Schema.NullOr(Schema.String),
+  spaceName: Schema.String,
+  tab: Schema.NullOr(Schema.String),
+  tabName: Schema.String,
+  tabIndex: Schema.NullOr(Schema.Finite),
+  since: Schema.Finite,
+  request: Schema.NullOr(request.RequestSchema),
+  tail: Schema.NullOr(Schema.String),
+  answerable: Schema.Boolean,
   // For readers outside this mod (Nocturne's toasts): the words as the overview says them.
-  title: isString,
-  line: isString,
+  title: Schema.String,
+  line: Schema.String,
 });
 
-export type Item = Guarded<typeof isItem>;
+export type Item = typeof ItemSchema.Type;
 
 /** What a terminal shows, as last read: its screen and its hook record. */
 export interface Info {
@@ -207,11 +222,15 @@ export interface Sources {
  * parent's place.
  */
 export function collect({ terminals = [], agents = [], info = new Map(), names = new Map(), dismissed = new Set(), since: began = new Map() }: Sources): Item[] {
-  const byAddr = new Map(agents.map((a) => [a.address, a]));
+  const byAddr = new Map(Arr.map(agents, (a) => [a.address, a] as const));
+
+  const parentOf = (address: string): string | null =>
+    Option.getOrNull(Option.flatMapNullishOr(Arr.findFirst(terminals, (x) => x.address === address), (x) => x.parent));
+
   const items: Item[] = [];
 
   for (const t of terminals) {
-    if (!t.address || t.state === "finished") continue;
+    if (Str.isEmpty(t.address) || t.state === "finished") continue;
 
     const status = statusOf(t);
 
@@ -219,49 +238,64 @@ export function collect({ terminals = [], agents = [], info = new Map(), names =
 
     const adapter = adapterOf(t);
     const got = info.get(t.address);
-    const request = got && got.screen !== null && status === "blocked" ? adapter.describe(got.screen, got.record) : null;
+    const screen = got?.screen ?? null;
+    const request = got !== undefined && screen !== null && status === "blocked" ? adapter.describe(screen, got.record) : null;
     const type = typeOf(status, t.report?.kind ?? null, request);
 
-    if (!type) continue;
+    if (type === null) continue;
 
-    const since = began.get(t.address) ?? (t.status_ms || 0);
+    const since = began.get(t.address) ?? orZero(t.status_ms);
     const id = `${t.address}@${since}`;
 
     if (type === "other" && dismissed.has(id)) continue;
 
     let place = byAddr.get(t.address);
 
-    for (let p = t.parent, hops = 0; !place && p && hops < 8; hops++) {
-      const parent = p;
-
-      place = byAddr.get(parent);
-      p = terminals.find((x) => x.address === parent)?.parent;
+    for (let p = t.parent ?? null, hops = 0; place === undefined && p !== null && Str.isNonEmpty(p) && hops < 8; hops++) {
+      place = byAddr.get(p);
+      p = parentOf(p);
     }
 
     // Fireflies' screens leave out terminals that aren't in a space (another app's): so does this.
-    if (!place && !t.labels?.["herdr.space"]) continue;
+    if (place === undefined && !nonEmpty(t.labels?.["herdr.space"])) continue;
 
     const app = t.report?.app ?? place?.app ?? null;
     const { machine } = splitAddress(t.address);
+    const name = firstNonEmpty([names.get(t.address), t.name, t.program?.name, place?.program.name, app]) ?? t.address;
 
     const it = {
       id, address: t.address, machine, adapter: adapter.id, type, status,
       kind: t.report?.kind ?? null, msg: t.report?.msg ?? "",
-      name: names.get(t.address) || t.name || t.program?.name || place?.program.name || app || t.address,
+      name,
       program: t.program?.name ?? place?.program.name ?? app ?? "",
       app, logo: logoKey(app ?? t.program?.key),
       space: place?.space ?? null, spaceName: place?.space_name ?? "", tab: place?.tab ?? null,
-      tabName: place && place.tab_name !== String(place.tab_index) ? place.tab_name : "", tabIndex: place?.tab_index ?? null,
-      since, request, tail: got && got.screen !== null ? tail(got.screen) : null,
-      answerable: Boolean(request && adapter.step),
+      tabName: place !== undefined && place.tab_name !== String(place.tab_index) ? place.tab_name : "", tabIndex: place?.tab_index ?? null,
+      since, request, tail: screen === null ? null : tail(screen),
+      answerable: request !== null && adapter.step !== null,
     };
 
     // For readers outside this mod (Nocturne's toasts): the words as the overview says them.
     items.push({ ...it, title: `${it.name} ${headline(it)}`, line: summary(it) });
   }
 
-  return items.sort((a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || b.since - a.since);
+  return Arr.sort(items, ITEM_ORDER);
 }
+
+/** Items by type (TYPES' order), newest first within a type. */
+const ITEM_ORDER = Order.combine(
+  Order.mapInput(Order.Number, (it: Item) => TYPES.indexOf(it.type)),
+  Order.mapInput(Order.flip(Order.Number), (it: Item) => it.since),
+);
+
+/** A number, 0 for none (or 0). */
+const orZero = (n: number | null | undefined): number => n ?? 0;
+
+/** A string that is there and says something. */
+const nonEmpty = (s: string | null | undefined): s is string => s !== null && s !== undefined && Str.isNonEmpty(s);
+
+/** The first of `xs` that is there and says something. */
+const firstNonEmpty = (xs: readonly (string | null | undefined)[]): string | undefined => Option.getOrUndefined(Arr.findFirst(xs, nonEmpty));
 
 /** The items by type. */
 export interface Groups {
@@ -299,8 +333,8 @@ const LOGOS: ReadonlyMap<string, string> = new Map([["claude", "claude"], ["clau
 export const logoKey = (app: string | null | undefined): string => LOGOS.get(app ?? "") ?? "agent";
 
 /** "just now", "40s", "4m", "2h", "3d". */
-export function age(since: number, now = Date.now()): string {
-  if (!since) return "";
+export function age(since: number, now: number): string {
+  if (since === 0) return "";
 
   const s = Math.max(0, Math.round((now - since) / 1000));
 
@@ -333,9 +367,9 @@ export function headline(it: Said): string {
 
     if (/^(WebFetch|Fetch)$/.test(tool)) return "wants to fetch a page";
 
-    if (tool.startsWith('mcp__')) return `wants to use ${tool.replace(/^mcp__/, "").replace(/__/g, " · ")}`;
+    if (Str.startsWith("mcp__")(tool)) return `wants to use ${Str.replace(/__/g, " · ")(Str.replace(/^mcp__/, "")(tool))}`;
 
-    return tool ? `wants to use ${tool}` : "asks for permission";
+    return Str.isEmpty(tool) ? "asks for permission" : `wants to use ${tool}`;
   }
 
   if (it.type === "question") {
@@ -351,21 +385,21 @@ export function headline(it: Said): string {
 
 /** "fireflies / 2 fix login", "vps · deploy / 1". */
 export function where(it: Pick<Item, "tabIndex" | "tabName" | "spaceName" | "machine">): string {
-  const tab = [it.tabIndex, it.tabName].filter((x) => x !== null && x !== "").join(" ");
-  const place = it.spaceName ? (tab ? `${it.spaceName} / ${tab}` : it.spaceName) : "";
+  const tab = Arr.join(Arr.filter([it.tabIndex === null ? "" : String(it.tabIndex), it.tabName], Str.isNonEmpty), " ");
+  const place = Str.isEmpty(it.spaceName) ? "" : Str.isEmpty(tab) ? it.spaceName : `${it.spaceName} / ${tab}`;
 
-  return [it.machine, place].filter(Boolean).join(" · ");
+  return Arr.join(Arr.filter([it.machine ?? "", place], Str.isNonEmpty), " · ");
 }
 
 /** One line under the agent's name in the list. */
 export function summary(it: Said): string {
   const r = it.request;
 
-  if (r?.type === "permission") return [r.tool, r.line].filter(Boolean).join(" · ");
+  if (r?.type === "permission") return Arr.join(Arr.filter([r.tool, r.line], Str.isNonEmpty), " · ");
 
-  if (r?.type === "question") return r.questions.map((q) => q.header || q.question).join(", ");
+  if (r?.type === "question") return Arr.join(Arr.map(r.questions, (q) => (Str.isEmpty(q.header) ? q.question : q.header)), ", ");
 
-  if (it.msg) return it.msg;
+  if (Str.isNonEmpty(it.msg)) return it.msg;
 
   if (it.status === "error") return "error";
 

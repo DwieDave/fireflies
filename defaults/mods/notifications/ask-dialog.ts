@@ -7,9 +7,10 @@ import { div } from "gpui-kit";
 import type { AsyncContext, Element, FocusHandle } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, run, nextCommand, window as appWindow } from "herdr";
+import { theme, props, closeOverlay, run, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { isString, object } from "./guard.ts";
+import { Array as Arr, Effect, Option, Schema, String as Str } from "effect";
+import { boxed, edge, frameBox, lit, rule } from "@fireflies/look";
 import { items } from "./engine.ts";
 import { where } from "./model.ts";
 import type { Item } from "./model.ts";
@@ -20,41 +21,49 @@ import type { QuestionGoal } from "./claude.ts";
 import { answer } from "./drive.ts";
 import { forget, followCommands } from "./open.ts";
 import type { KeyContext, KeyInput } from "./open.ts";
-import { dither, pip, logo, horizon, kbd, stop } from "./kit.ts";
+import { fill, pip, logo, horizon, kbd, stop } from "./kit.ts";
+import { attach } from "./fx.ts";
+import type { NotifyFx } from "./fx.ts";
 import { bindTab, tabActions } from "@fireflies/form-keys";
+import { QuestionSchema } from "./request.ts";
 import type { Question, QuestionRequest } from "./request.ts";
-import { edge } from "@fireflies/tones";
 
 /** The dialog's props: the terminal whose questions it answers, its overlay. */
-const isAskProps = object({}, { terminal: isString, overlay: isString });
+const AskPropsSchema = Schema.Struct({ terminal: Schema.optionalKey(Schema.String), overlay: Schema.optionalKey(Schema.String) });
 
-const askProps = (given?: Props) => {
-  const p = props() ?? given;
+const readAskProps = Schema.decodeUnknownOption(AskPropsSchema);
 
-  return isAskProps(p) ? p : {};
-};
+const askProps = (given?: Props): typeof AskPropsSchema.Type => Option.getOrElse(readAskProps(props() ?? given), () => ({}));
+
+/** Two blocks of questions are the same, field by field. */
+const sameQuestions = Schema.toEquivalence(Schema.Array(QuestionSchema));
 
 /** An item asking a block of questions this mod can answer, and the block. */
 type Asking = Item & { readonly request: QuestionRequest };
 
 const askingOf = (it: Item | undefined): Asking | null => (it?.type === "question" && it.answerable && it.request?.type === "question" ? { ...it, request: it.request } : null);
 
+/** How long after opening the dialog takes the keyboard (its window is up by then). */
+const FOCUS_LATER = "400 millis";
+
 export default class AskDialog {
   terminal: string | null = null;
   item: Asking | null = null;
-  asked = "";
   s: AskState | null = null;
   busy: string | null = null;
   note: { readonly text: string; readonly bad: boolean } | null = null;
   changed = false;
   input: InputState | null = null;
   handle: FocusHandle | null = null;
+  fx: NotifyFx | null = null;
 
   init(p: Props | undefined, cx: AsyncContext) {
+    const fx = attach(cx);
+
+    this.fx = fx;
     this.terminal = askProps(p).terminal ?? null;
     this.item = this.find();
-    this.asked = this.item ? JSON.stringify(this.item.request.questions) : "";
-    this.s = this.item ? start(this.item.request.questions) : null;
+    this.s = this.item === null ? null : start(this.item.request.questions);
 
     const input = InputState.new({ placeholder: "type your answer" });
 
@@ -65,26 +74,32 @@ export default class AskDialog {
     const handle = this.handle;
 
     input.on("submit", (_e, cx) => {
-      if (this.s) this.s = setOther(this.qs(), this.s, input.value());
+      if (this.s !== null) this.s = setOther(this.qs(), this.s, input.value());
 
       handle.focus();
       cx.notify();
     });
     handle.focus();
-    followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.s?.editing ? input.focus() : handle.focus()));
-    cx.timer.after(400, () => (this.s?.editing ? input.focus() : handle.focus()));
+
+    const focus = () => (this.s?.editing === true ? input.focus() : handle.focus());
+
+    fx.run(followCommands((e, cx) => this.key(e, cx), focus, () => cx.notify()));
+    fx.run(Effect.andThen(Effect.sleep(FOCUS_LATER), Effect.sync(focus)), { redraw: false });
   }
 
   find(): Asking | null {
-    return askingOf(items().find((x) => x.address === this.terminal && x.type === "question" && x.answerable));
+    return askingOf(Option.getOrUndefined(Arr.findFirst(items(), (x) => x.address === this.terminal && x.type === "question" && x.answerable)));
   }
 
   qs(): readonly Question[] {
     return this.item?.request.questions ?? [];
   }
 
-  closing() {
+  /** The overlay closed (main.ts close()): no longer ours to close, its effects end. */
+  closing(): Promise<void> | undefined {
     forget("ask", askProps().overlay);
+
+    return this.fx?.close();
   }
 
   close() {
@@ -100,7 +115,7 @@ export default class AskDialog {
       return;
     }
 
-    if (action === "edit" && this.s) {
+    if (action === "edit" && this.s !== null) {
       this.input?.set_value(this.s.other[this.s.q] ?? "");
       this.input?.focus();
     }
@@ -111,37 +126,34 @@ export default class AskDialog {
   submit(cx: KeyContext) {
     const item = this.item, s = this.s;
 
-    if (this.busy || this.changed || !item || !s) return;
+    if (this.busy !== null || this.changed || item === null || s === null) return;
 
     const goal: QuestionGoal = { type: "question", request: item.request, answers: answers(this.qs(), s) };
 
     this.busy = "sending";
     this.note = null;
     cx.notify();
-    cx.spawn(async (cx) => {
-      const r = await answer(cx, item, goal, (text) => {
-        this.busy = text;
-        cx.notify();
-      }).catch((cause: unknown) => ({ ok: false, reason: String(cause) } as const));
-
-      this.busy = null;
-      run("notifications.refresh");
-
-      if (r.ok) {
-        this.close();
-
-        return;
-      }
-
-      this.note = { text: r.reason, bad: true };
+    this.fx?.run(answer(item, goal, (text) => {
+      this.busy = text;
       cx.notify();
-    });
+    }).pipe(
+      Effect.tap((r) => Effect.sync(() => {
+        run("notifications.refresh");
+
+        if (r.ok) this.close();
+        else this.note = { text: r.reason, bad: true };
+      })),
+      // Whatever ends it (an answer, a failure, the dialog closing), it isn't sending any more.
+      Effect.ensuring(Effect.sync(() => {
+        this.busy = null;
+      })),
+    ), { key: "answer" });
   }
 
   key(e: KeyInput, cx: KeyContext) {
     const s = this.s;
 
-    if (!s) {
+    if (s === null) {
       if (e.key === "escape" || e.key === "q") this.close();
 
       return;
@@ -183,28 +195,28 @@ export default class AskDialog {
     const t = theme();
     // The request on the agent's screen changed or went away meanwhile.
     const now = this.find();
-
-    if (this.item && (!now || JSON.stringify(now.request.questions) !== this.asked) && !this.busy) this.changed = true;
-
     const it = this.item;
-    const root = v_flex().id("notify-ask").relative().size_full().bg(t.background).border(1).border_color(edge(t)).text_color(t.foreground).text_size(11);
 
-    const frame = (this.handle ? root.track_focus(this.handle) : root)
+    if (it !== null && (now === null || !sameQuestions(now.request.questions, it.request.questions)) && this.busy === null) this.changed = true;
+
+    const root = frameBox(t, v_flex().id("notify-ask").relative().size_full().bg(t.background).text_color(t.foreground).text_size(11));
+
+    const frame = (this.handle === null ? root : root.track_focus(this.handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx)));
 
-    const place = it ? where(it) : "";
+    const place = it === null ? "" : where(it);
 
     const head = h_flex().relative().h(34).flex_none().px(14).gap(10).items_center()
       .child(logo(it?.logo ?? "claude", t.foreground, 12))
-      .child(div().flex_1().min_w(0).truncate().text_size(12).child(it ? `${it.name} asks` : "Questions"))
-      .when(Boolean(place), (el) => el.child(div().flex_none().text_color(t.dim).child(place)))
+      .child(div().flex_1().min_w(0).truncate().text_size(12).child(it === null ? "Questions" : `${it.name} asks`))
+      .when(Str.isNonEmpty(place), (el) => el.child(div().flex_none().text_color(t.dim).child(place)))
       .child(div().flex_none().text_color(t.dim).child("esc"))
       .child(horizon(t));
 
     const s = this.s;
 
-    if (!it || !s) {
+    if (it === null || s === null) {
       return frame.child(head).child(v_flex().flex_1().items_center().justify_center().gap(8)
         .child(div().text_color(t.muted).child("These questions are gone: answered or withdrawn.")));
     }
@@ -222,77 +234,83 @@ export default class AskDialog {
       const review = i === qs.length;
       const color = on ? t.accent : done ? t.done : edge(t);
 
-      return div().id(`cell-${i}`).relative().w(review ? 22 : 34).h(8).flex_none().border(1).border_color(color).cursor_pointer()
+      return boxed(t, div().id(`cell-${i}`).relative().w(review ? 22 : 34).h(8).flex_none(), color).cursor_pointer()
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => {
           this.s = { ...s, q: i, editing: false };
           this.handle?.focus();
           cx.notify();
         })
-        .when(done || on, (el) => el.child(div().absolute().top(1).left(1).right(1).bottom(1).opacity(on ? 0.6 : 1).child(dither(on ? t.accent : t.done, on ? 2 : 1))));
+        .when(done || on, (el) => el.child(div().absolute().top(1).left(1).right(1).bottom(1).opacity(on ? 0.6 : 1).child(fill(on ? t.accent : t.done, on ? 2 : 1))));
     };
 
-    const where = isReview(qs, s) ? "review" : `${s.q + 1} of ${qs.length}`;
+    const at = isReview(qs, s) ? "review" : `${s.q + 1} of ${qs.length}`;
 
     return h_flex().px(18).pt(14).gap(4).items_center().flex_none()
-      .children(qs.length > 1 ? [...qs.map((_, i) => cell(i)), cell(qs.length)] : [cell(0)])
-      .child(div().ml(8).text_color(t.dim).child(qs.length > 1 ? where : ""));
+      .children(qs.length > 1 ? [...Arr.map(qs, (_, i) => cell(i)), cell(qs.length)] : [cell(0)])
+      .child(div().ml(8).text_color(t.dim).child(qs.length > 1 ? at : ""));
   }
 
   question(t: Theme, qs: readonly Question[], s: AskState): Element {
     const i = s.q;
     const q = qs[i];
 
-    if (!q) return v_flex();
+    if (q === undefined) return v_flex();
 
     const cur = s.cursor[i] ?? 0;
 
     const box = (on: boolean) => q.multiSelect
-      ? div().relative().size(9).flex_none().border(1).border_color(on ? t.accent : t.dim)
+      ? boxed(t, div().relative().size(9).flex_none(), on ? t.accent : t.dim)
         .when(on, (el) => el.child(div().absolute().top(1).left(1).right(1).bottom(1).bg(t.accent)))
       : div().relative().size(9).flex_none().flex().items_center().justify_center().child(on ? pip(t.accent, 6) : div());
 
-    const row = (r: number, label: string | null, desc: string | null, on: boolean, content?: Element) => h_flex().id(`q${i}-row-${r}`).relative().px(18).py(6).gap(10).items_start().flex_none().cursor_pointer()
-      .on_mouse_down("left", stop)
-      .on_click((_e, cx) => this.pick(qs, { ...s, cursor: s.cursor.map((c, j) => (j === i ? r : c)) }, cx))
-      .when(r === cur, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-      .child(div().relative().pt(3).w(14).flex_none().flex().justify_center().child(box(on)))
-      .child(content ?? v_flex().relative().flex_1().min_w(0).gap(2)
-        .child(div().text_color(on || r === cur ? t.foreground : t.muted).child(label ?? ""))
-        .when(Boolean(desc), (el) => el.child(div().text_color(t.dim).child(desc ?? ""))));
+    const row = (r: number, label: string | null, desc: string | null, on: boolean, content?: Element) => {
+      const el = h_flex().id(`q${i}-row-${r}`).relative().px(18).py(6).gap(10).items_start().flex_none().cursor_pointer()
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => this.pick(qs, { ...s, cursor: Arr.map(s.cursor, (c, j) => (j === i ? r : c)) }, cx));
+
+      return (r === cur ? lit(t, el, true) : el)
+        .child(div().relative().pt(3).w(14).flex_none().flex().justify_center().child(box(on)))
+        .child(content ?? v_flex().relative().flex_1().min_w(0).gap(2)
+          .child(div().text_color(on || r === cur ? t.foreground : t.muted).child(label ?? ""))
+          .when(desc !== null && Str.isNonEmpty(desc), (d) => d.child(div().text_color(t.dim).child(desc ?? ""))));
+    };
 
     const picked = s.picked[i] ?? [];
     const o = otherRow(qs, i);
     const typed = s.other[i] ?? "";
-    const otherOn = Boolean(s.otherOn[i]) && Boolean(typed);
+    const otherOn = s.otherOn[i] === true && Str.isNonEmpty(typed);
     const input = this.input;
 
-    const otherContent = s.editing && input
+    const otherContent = s.editing && input !== null
       ? h_flex().relative().flex_1().min_w(0).h(20).border_b_1().border_color(t.accent)
         .on_mouse_down("left", stop)
         .child(Input.new(input).flex_1().h_full().text_size(11).text_color(t.foreground))
-      : div().relative().flex_1().min_w(0).text_color(typed ? (otherOn ? t.foreground : t.muted) : t.dim).child(typed || "other: type an answer");
+      : div().relative().flex_1().min_w(0).text_color(Str.isEmpty(typed) ? t.dim : otherOn ? t.foreground : t.muted).child(Str.isEmpty(typed) ? "other: type an answer" : typed);
 
     const note = this.note;
 
     return v_flex().flex_1().min_h(0).id("ask-body").overflow_y_scrollbar()
-      .child(div().px(18).pt(12).text_color(t.dim).child(`${q.header ? `${q.header} · ` : ""}${q.multiSelect ? "pick any" : "pick one"}`))
+      .child(div().px(18).pt(12).text_color(t.dim).child(`${Str.isEmpty(q.header) ? "" : `${q.header} · `}${q.multiSelect ? "pick any" : "pick one"}`))
       .child(div().px(18).pt(6).pb(12).text_size(13).text_color(t.foreground).child(q.question))
-      .children(q.options.map((x, r) => row(r, x.label, x.description, picked.includes(r) && !(!q.multiSelect && otherOn))))
+      .children(Arr.map(q.options, (x, r) => row(r, x.label, x.description, Arr.contains(picked, r) && (q.multiSelect || !otherOn))))
       .child(row(o, null, null, otherOn, otherContent))
-      .when(note !== null, (el) => el.child(div().px(18).pt(10).text_color(note?.bad ? t.blocked : t.done).child(note?.text ?? "")));
+      .when(note !== null, (el) => el.child(div().px(18).pt(10).text_color(note?.bad === true ? t.blocked : t.done).child(note?.text ?? "")));
   }
 
   review(t: Theme, qs: readonly Question[], s: AskState): Element {
+    const busy = this.busy;
+
     const rowEl = (k: (typeof REVIEW)[number], i: number) => {
       const on = s.reviewCursor === i;
-      const label = k === "submit" ? (this.busy ? `sending… ${this.busy === "sending" ? "" : this.busy}` : "submit answers") : "back to the first question";
+      const label = k === "submit" ? (busy === null ? "submit answers" : `sending… ${busy === "sending" ? "" : busy}`) : "back to the first question";
 
-      return h_flex().id(`rv-${k}`).relative().h(28).px(18).gap(10).items_center().flex_none().cursor_pointer()
+      const el = h_flex().id(`rv-${k}`).relative().h(28).px(18).gap(10).items_center().flex_none().cursor_pointer()
         .text_color(on ? t.foreground : t.muted)
         .on_mouse_down("left", stop)
-        .on_click((_e, cx) => this.pick(qs, { ...s, reviewCursor: i }, cx))
-        .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(k === "submit" ? t.done : t.accent)))
+        .on_click((_e, cx) => this.pick(qs, { ...s, reviewCursor: i }, cx));
+
+      return (on ? lit(t, el, true, { mark: k === "submit" ? t.done : t.accent }) : el)
         .child(div().relative().w(14).flex_none().text_color(on ? t.accent : t.dim).child(String(i + 1)))
         .child(div().relative().child(label));
     };
@@ -303,27 +321,27 @@ export default class AskDialog {
     return v_flex().flex_1().min_h(0).id("ask-review").overflow_y_scrollbar()
       .child(div().px(18).pt(12).text_color(t.dim).child("review · nothing is sent until you submit"))
       .child(v_flex().px(18).pt(10).pb(12).gap(8)
-        .children(qs.map((q, i) => h_flex().gap(10).items_start()
+        .children(Arr.map(qs, (q, i) => h_flex().gap(10).items_start()
           .child(div().pt(4).child(pip(answered(qs, s, i) ? t.done : edge(t), 6)))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().text_color(t.muted).child(q.question))
             .child(div().text_color(answered(qs, s, i) ? t.foreground : t.dim).child(answered(qs, s, i) ? reviewText(q, a[i] ?? { picked: [], other: null }) : "not answered yet"))))))
-      .children(REVIEW.map(rowEl))
+      .children(Arr.map(REVIEW, rowEl))
       .when(this.changed, (el) => el.child(div().px(18).pt(10).text_color(t.blocked).child("The questions changed or went away in the terminal: nothing was sent. Close and look again.")))
-      .when(note !== null, (el) => el.child(div().px(18).pt(10).text_color(note?.bad ? t.blocked : t.done).child(note?.text ?? "")));
+      .when(note !== null, (el) => el.child(div().px(18).pt(10).text_color(note?.bad === true ? t.blocked : t.done).child(note?.text ?? "")));
   }
 
   footer(t: Theme, qs: readonly Question[], s: AskState): Element {
     const hint = (k: string, w: string) => h_flex().gap(5).items_center().flex_none().child(kbd(t, k)).child(div().text_color(t.dim).child(w));
-    const q = qs[s.q];
+    const multi = qs[s.q]?.multiSelect === true;
 
     return h_flex().relative().h(30).flex_none().px(18).gap(12).items_center()
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
+      .child(rule(t, "top"))
       .when(s.editing, (el) => el.child(hint("↵", "keep")).child(hint("⇥ ⇧⇥", "keep, move")).child(hint("esc", "drop")))
       .when(!s.editing, (el) => el
         .child(hint("⇥ ⇧⇥", "move"))
         .child(hint("j k", isReview(qs, s) ? "row" : "answer"))
-        .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, s) ? "choose" : "pick")))
+        .child(hint(multi ? "space" : "↵", multi ? "toggle" : isReview(qs, s) ? "choose" : "pick")))
       .when(!isReview(qs, s), (el) => el.child(hint(appWindow().platform === "macos" ? "⌘↵" : "ctrl-↵", "submit")))
       .child(hint(s.editing ? "esc" : "esc q", "close"))
       .child(div().flex_1())

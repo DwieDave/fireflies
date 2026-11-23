@@ -20,12 +20,14 @@
 //
 // Commands (keys.json, `herdr-app do`): notifications.open (the
 // overview; on shared OPEN's terminal when a toast asked for it), .refresh.
+// `mod.open {"name": "notifications"}` opens the overview in any layout
+// (mod.json's overlay gives it the role), as a centered dialog.
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { props } from "herdr";
-import { isString, object } from "./guard.ts";
+import { Option, Schema } from "effect";
 import Bell from "./bell.ts";
 import Overview from "./overview.ts";
 import AskDialog from "./ask-dialog.ts";
@@ -34,19 +36,16 @@ import AskDialog from "./ask-dialog.ts";
 interface Role {
   init(p: Props | undefined, cx: AsyncContext): void;
   render(cx: Context): Element;
-  closing?(): void;
+  /** Its copy closed: it forgets its overlay and its effects end. */
+  closing(): Promise<void> | undefined;
 }
 
 const ROLES: ReadonlyMap<string, () => Role> = new Map<string, () => Role>([["bell", () => new Bell()], ["overview", () => new Overview()], ["ask", () => new AskDialog()]]);
 
-/** Which role this copy plays (props.role; none: the bell). */
-const isRoleProps = object({}, { role: isString });
+/** Which role this copy plays (props.role; none: the bell, as a layout's block without props). */
+const readRole = Schema.decodeUnknownOption(Schema.Struct({ role: Schema.optionalKey(Schema.String) }));
 
-const roleOf = (p?: Props): string => {
-  const raw = props() ?? p;
-
-  return (isRoleProps(raw) ? raw.role : undefined) ?? "bell";
-};
+const roleOf = (p?: Props): string => Option.getOrElse(Option.flatMapNullishOr(readRole(props() ?? p), (x) => x.role), () => "bell");
 
 export default class Notifications extends View {
   role: Role | null = null;
@@ -57,12 +56,12 @@ export default class Notifications extends View {
   }
 
   override render(cx: Context) {
-    if (!this.role) return div().child(`notifications: no role "${roleOf()}"`);
+    if (this.role === null) return div().child(`notifications: no role "${roleOf()}"`);
 
     return this.role.render(cx);
   }
 
-  override async close() {
-    await this.role?.closing?.();
+  override close(): Promise<void> | undefined {
+    return this.role?.closing();
   }
 }

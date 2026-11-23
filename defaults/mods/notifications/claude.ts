@@ -18,6 +18,7 @@
 // asks. Pure: no herdr imports, so it is tested with captured screens and
 // hook payloads (scripts/fixtures/notifications).
 
+import { Array as Arr, Option, Order, String as Str } from "effect";
 import type { PermissionRequest, HookRecord, QuestionRequest, Question } from "./request.ts";
 import { recordOf, describe, sameRequest, questionMatches } from "./request.ts";
 import { parseScreen, norm } from "./screen.ts";
@@ -88,23 +89,26 @@ function move(from: number, to: number): string[] | null {
 
   if (from === to) return [];
 
-  return Array.from({ length: Math.abs(to - from) }, () => (to > from ? "down" : "up"));
+  return Arr.replicate(to > from ? "down" : "up", Math.abs(to - from));
 }
+
+/** The index of the first item `f` holds for, -1 for none. */
+const indexWhere = <A>(xs: readonly A[], f: (a: A) => boolean): number => Option.getOrElse(Arr.findFirstIndex(xs, f), () => -1);
 
 function permissionStep(goal: PermissionGoal, screen: string, state: StepState): Step {
   const now = describe(screen, goal.record ?? null);
   const s = parseScreen(screen);
 
-  if (state.sent) {
+  if (state.sent === true) {
     // Answered: done once the screen no longer shows this request.
-    if (!now || !sameRequest(now, goal.request)) return { done: true };
+    if (now === null || !sameRequest(now, goal.request)) return { done: true };
 
-    if (goal.amend !== undefined && s?.kind === "permission" && s.amend) {
+    if (goal.amend !== undefined && s?.kind === "permission" && s.amend !== null) {
       // The note is in the line but its Enter didn't land: press it, once.
       if (norm(s.amendText) === norm(oneLine(goal.amend))) {
         state.waited = (state.waited ?? 0) + 1;
 
-        if (state.waited >= 2 && !state.entered) {
+        if (state.waited >= 2 && state.entered !== true) {
           state.entered = true;
 
           return { keys: ["enter"] };
@@ -113,24 +117,24 @@ function permissionStep(goal: PermissionGoal, screen: string, state: StepState):
         return { wait: true, reason: "The note is typed in the terminal but wasn't sent: press enter there." };
       }
 
-      if (!s.amendText) return { wait: true, reason: "The note didn't arrive in the terminal: nothing was sent." };
+      if (Str.isEmpty(s.amendText)) return { wait: true, reason: "The note didn't arrive in the terminal: nothing was sent." };
     }
 
     return { wait: true, reason: "Sent, but the request is still showing: look at the terminal." };
   }
 
-  if (!now || now.type !== "permission" || s?.kind !== "permission") return { refuse: "The request is gone: it was answered or withdrawn." };
+  if (now === null || now.type !== "permission" || s?.kind !== "permission") return { refuse: "The request is gone: it was answered or withdrawn." };
 
   if (!sameRequest(now, goal.request)) return { refuse: "The request changed: look at it again." };
 
-  const t = s.options.findIndex((o) => o.n === goal.option);
-  const want = goal.request.options.find((o) => o.n === goal.option);
+  const t = indexWhere(s.options, (o) => o.n === goal.option);
+  const want = Option.getOrUndefined(Arr.findFirst(goal.request.options, (o) => o.n === goal.option));
 
-  if (t < 0 || !want || now.options[t]?.label !== want.label) return { refuse: "That option isn't there any more." };
+  if (t < 0 || want === undefined || now.options[t]?.label !== want.label) return { refuse: "That option isn't there any more." };
 
   if (s.cursor !== t) {
     // An amend field open on another option: moving would carry its text, so stop.
-    if (s.amend) return { refuse: "Someone is typing in that request: answer it there." };
+    if (s.amend !== null) return { refuse: "Someone is typing in that request: answer it there." };
 
     return { keys: move(s.cursor, t) ?? [] };
   }
@@ -138,14 +142,14 @@ function permissionStep(goal: PermissionGoal, screen: string, state: StepState):
   if (goal.amend !== undefined) {
     const kind = want.kind === "no" ? "no" : t === 0 ? "yes" : null;
 
-    if (!kind) return { refuse: "Only Yes and No take a note." };
+    if (kind === null) return { refuse: "Only Yes and No take a note." };
 
     if (s.amend !== kind) {
-      if (s.amend) return { refuse: "Someone is typing in that request: answer it there." };
+      if (s.amend !== null) return { refuse: "Someone is typing in that request: answer it there." };
 
       // Tab opens the note line and closes it again: pressed once, then
       // waited for (another change on the screen may draw first).
-      if (state.tabbed) return { wait: true, reason: "The note line didn't open in the terminal: nothing was sent." };
+      if (state.tabbed === true) return { wait: true, reason: "The note line didn't open in the terminal: nothing was sent." };
 
       if (!s.canAmend) return { refuse: "This request doesn't take a note." };
 
@@ -154,14 +158,14 @@ function permissionStep(goal: PermissionGoal, screen: string, state: StepState):
       return { keys: ["tab"] };
     }
 
-    if (s.amendText) return { refuse: "Someone is typing in that request: answer it there." };
+    if (Str.isNonEmpty(s.amendText)) return { refuse: "Someone is typing in that request: answer it there." };
 
     state.sent = true;
 
     return { paste: oneLine(goal.amend) };
   }
 
-  if (s.amend) return { refuse: "Someone is typing in that request: answer it there." };
+  if (s.amend !== null) return { refuse: "Someone is typing in that request: answer it there." };
 
   state.sent = true;
 
@@ -169,17 +173,16 @@ function permissionStep(goal: PermissionGoal, screen: string, state: StepState):
 }
 
 /** A control character (below space, or delete): typed text leaves them out. */
-const isControl = (c: string) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f;
+const isControl = (c: string): boolean => Option.exists(Str.charCodeAt(c, 0), (n) => n < 0x20 || n === 0x7f);
 
-export const oneLine = (s: string | null | undefined): string => [...(s ?? "").replace(/[\r\n\t]+/g, " ")].filter((c) => !isControl(c)).join("").trim();
+export const oneLine = (s: string | null | undefined): string =>
+  Str.trim(Arr.join(Arr.filter(Arr.fromIterable(Str.replace(/[\r\n\t]+/g, " ")(s ?? "")), (c) => !isControl(c)), ""));
 
 /** How Claude's review shows an answer: picked labels in option order, then typed text. */
 export function reviewText(q: Question, a: Answer): string {
-  const words = [...a.picked].sort((x, y) => x - y).map((i) => q.options[i]?.label);
+  const words = Arr.map(Arr.sort(a.picked, Order.Number), (i) => q.options[i]?.label ?? "");
 
-  if (a.other) words.push(oneLine(a.other));
-
-  return words.join(", ");
+  return Arr.join(a.other === null || Str.isEmpty(a.other) ? words : Arr.append(words, oneLine(a.other)), ", ");
 }
 
 /** Types the answer once per question: text that didn't arrive isn't typed again. */
@@ -212,7 +215,7 @@ function reviewStep(goal: QuestionGoal, s: ReviewScreen, state: StepState, at: n
     if (s.answers[i]?.answer !== norm(want)) return { refuse: `Claude's review shows “${s.answers[i]?.answer ?? ""}” for “${q.question}”, not “${want}”: nothing was submitted.` };
   }
 
-  const t = s.options.findIndex((o) => /^Submit answers$/.test(o.label));
+  const t = indexWhere(s.options, (o) => /^Submit answers$/.test(o.label));
 
   if (t < 0) return { refuse: "No submit button on Claude's review." };
 
@@ -228,9 +231,9 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
   const s = parseScreen(screen);
   const ours = s !== null && s.kind !== "permission" && questionMatches(s, qs);
 
-  if (state.sent) return ours ? { wait: true } : { done: true };
+  if (state.sent === true) return ours ? { wait: true } : { done: true };
 
-  if (!ours) return { refuse: state.started ? "The questions changed or went away while answering: nothing was submitted." : "The questions are gone: they were answered or withdrawn." };
+  if (!ours) return { refuse: state.started === true ? "The questions changed or went away while answering: nothing was submitted." : "The questions are gone: they were answered or withdrawn." };
 
   state.started = true;
 
@@ -242,7 +245,7 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
 
   if (s.kind === "review") return reviewStep(goal, s, state, at);
 
-  const qi = qs.findIndex((q) => norm(q.question) === s.question);
+  const qi = indexWhere(qs, (q) => norm(q.question) === s.question);
 
   // All answered and still on a question: on to the review.
   if (at >= qs.length) return single ? { refuse: "The question is still open after answering." } : { keys: ["tab"] };
@@ -252,13 +255,13 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
   const q = qs[qi];
   const a = goal.answers[qi] ?? NO_ANSWER;
 
-  if (!q) return { refuse: "The options on screen aren't the question's." };
+  if (q === undefined) return { refuse: "The options on screen aren't the question's." };
 
   const n = q.options.length;
-  const opts = s.rows.flatMap((r) => (r.kind === "option" ? [r] : []));
+  const opts = Arr.flatMap(s.rows, (r) => (r.kind === "option" ? [r] : []));
   const other = opts[n];
 
-  if (!other) return { refuse: "The options on screen aren't the question's." };
+  if (other === undefined) return { refuse: "The options on screen aren't the question's." };
 
   for (let i = 0; i < n; i++) if (norm(opts[i]?.label) !== norm(q.options[i]?.label)) return { refuse: "The options on screen aren't the question's." };
 
@@ -273,12 +276,12 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
   };
 
   if (!q.multiSelect) {
-    if (a.other) {
+    if (a.other !== null && Str.isNonEmpty(a.other)) {
       if (s.cursor !== otherRow) return { keys: move(s.cursor, otherRow) ?? [] };
 
-      if (otherText && otherText !== oneLine(a.other)) return { refuse: "There's other text typed in that answer already: answer it in the terminal." };
+      if (Str.isNonEmpty(otherText) && otherText !== oneLine(a.other)) return { refuse: "There's other text typed in that answer already: answer it in the terminal." };
 
-      if (otherText) {
+      if (Str.isNonEmpty(otherText)) {
         advance();
 
         return { keys: ["enter"] };
@@ -292,7 +295,7 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
     }
 
     const picked = opts[a.picked[0] ?? -1];
-    const t = picked ? s.rows.indexOf(picked) : -1;
+    const t = picked === undefined ? -1 : s.rows.indexOf(picked);
 
     if (s.cursor !== t) return { keys: move(s.cursor, t) ?? [] };
 
@@ -303,10 +306,10 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
 
   // multiSelect: every box as wanted, one at a time, then Next.
   for (let i = 0; i < n; i++) {
-    const want = a.picked.includes(i);
+    const want = Arr.contains(a.picked, i);
     const box = opts[i];
 
-    if (box && box.checked !== want) {
+    if (box !== undefined && box.checked !== want) {
       const t = s.rows.indexOf(box);
 
       if (s.cursor !== t) return { keys: move(s.cursor, t) ?? [] };
@@ -315,14 +318,15 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
     }
   }
 
-  const wantOther = Boolean(a.other);
+  const typed = a.other ?? "";
+  const wantOther = Str.isNonEmpty(typed);
 
-  if (a.other && otherText !== oneLine(a.other)) {
-    if (otherText) return { refuse: "There's other text typed in that answer already: answer it in the terminal." };
+  if (wantOther && otherText !== oneLine(typed)) {
+    if (Str.isNonEmpty(otherText)) return { refuse: "There's other text typed in that answer already: answer it in the terminal." };
 
     if (s.cursor !== otherRow) return { keys: move(s.cursor, otherRow) ?? [] };
 
-    return pasteOnce(state, a.other);
+    return pasteOnce(state, typed);
   }
 
   if (other.checked !== wantOther) {
@@ -332,7 +336,7 @@ function questionStep(goal: QuestionGoal, screen: string, state: StepState): Ste
     return { keys: ["enter"] };
   }
 
-  const next = s.rows.findIndex((r) => r.kind === "next");
+  const next = indexWhere(s.rows, (r) => r.kind === "next");
 
   if (next < 0) return { refuse: "No Next on screen." };
 

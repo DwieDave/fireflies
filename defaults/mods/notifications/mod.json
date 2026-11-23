@@ -1,1 +1,1 @@
-{ "place": "none" }
+{ "place": "none", "overlay": { "kind": "dialog", "frame": "none", "width": 880, "props": { "role": "overview" } } }

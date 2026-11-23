@@ -3,18 +3,22 @@
 // and key bar it settles at. gpui stand-ins record each element's calls (its
 // height, opacity, size callbacks); a "frame" is a render, then the size
 // callbacks fired with the sizes the real layout reports. Its own process: it
-// stands in for "herdr".
+// stands in for "herdr" (importMod can't copy @fireflies/look's re-exports
+// yet: with it, these become importMod stand-ins).
 import { test, expect, mock, beforeEach } from "bun:test";
+import { Effect } from "effect";
 
 let sharedState: Record<string, unknown> = {};
 let specs: any[] = [];
 let propsNow: any = { overlay: "o1", most: 580 };
-mock.module("herdr", () => ({
+const herdr = {
   closeOverlay: () => null, openOverlay: (spec: any) => { specs.push(spec); return "o9"; }, run: () => null, nextCommand: () => new Promise(() => {}),
-  props: () => propsNow, settings: () => ({ zoom: 0.9 }), theme: () => theme,
-  shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; return null; },
-  window: () => ({ platform: "macos" }), terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), exec: async () => ({ code: 1, stdout: "" }),
-}));
+  props: () => propsNow, settings: () => ({ zoom: 0.9, ui_font_family: "Departure Mono" }), theme: () => theme, layout: () => ({ scrim: { dither: true }, corners: "square" }),
+  shared: (k: string) => (k === "layout" ? "nocturne" : sharedState[k] ?? null), setShared: (k: string, v: unknown) => { sharedState[k] = v; return null; },
+  window: () => ({ platform: "macos" }), terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "", stderr: "" }), exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+  notify: () => null, keys: () => [],
+};
+mock.module("herdr", () => herdr);
 
 type Rec = { calls: Record<string, any[][]>; kids: any[] };
 function el(): any {
@@ -35,17 +39,19 @@ function el(): any {
   });
   return proxy;
 }
-mock.module("gpui-kit", () => ({ View: class {}, div: el, svg: el, image: el, PathBuilder: { fill: el }, Background: { checkerboard: el } }));
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} }
-mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () => new Input() }, Input: { new: el } }));
 (globalThis as any).window = { paint_path: el };
 const theme: any = new Proxy({}, { get: () => "#808080" });
+mock.module("gpui-kit", () => ({ View: class {}, div: el, svg: el, image: el, PathBuilder: { fill: el }, Background: { checkerboard: el } }));
+mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () => new Input() }, Input: { new: el } }));
 
 const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.ts");
 const notif = await import("../defaults/mods/notifications/open.ts");
 const { ITEMS } = await import("../defaults/mods/notifications/engine.ts");
+const { settled } = await import("../defaults/mods/notifications/drive.ts");
+const { dialog } = await import("../defaults/mods/notifications/request.ts");
 
-const cx: any = { focus_handle: () => ({ focus() {}, is_focused: () => true }), spawn() {}, notify() {}, stop_propagation() {}, timer: { after() {}, every() {} } };
+const cx: any = { focus_handle: () => ({ focus() {}, is_focused: () => true }), spawn() {}, notify() {}, stop_propagation() {}, timer: { after() { return { cancel() {} }; }, every() {} } };
 
 /** Every recorded element under `e`, depth first. */
 const all = (e: any): Rec[] => (e?.rec ? [e.rec, ...e.rec.kids.flatMap(all)] : []);
@@ -212,8 +218,6 @@ test("the empty overview is EMPTY_H tall (a center's height, not its note's), ne
 // ---- answering: the driver waits for the dialog, not for any change on a busy screen
 
 test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
-  const { settled } = await import("../defaults/mods/notifications/drive.ts");
-  const { dialog } = await import("../defaults/mods/notifications/request.ts");
   const rule = "─".repeat(80);
   const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
   const before = dlg("Yes", "Esc to cancel · Tab to amend");
@@ -221,11 +225,10 @@ test("drive settled(): a ticking status line isn't the key's effect; the dialog 
   // Three reads where only the status line ticks, then the note line drawn.
   const reads = [`${before}\n◐ 1`, `${before}\n◐ 2`, `${before}\n◐ 3`, `${after}\n◐ 4`, `${after}\n◐ 5`];
   let i = 0;
-  const read = async () => reads[Math.min(i++, reads.length - 1)];
-  const sleepy = { sleep: async () => {} };
-  const got = await settled(sleepy, "t1", `${before}\n◐ 0`, dialog, read);
+  const read = () => Effect.sync(() => reads[Math.min(i++, reads.length - 1)]);
+  const got = await Effect.runPromise(settled("t1", `${before}\n◐ 0`, dialog, read));
   expect(got).toContain("tell Claude what to do next");
   // Compared whole (no dialog view), the first tick would have counted.
   i = 0;
-  expect(await settled(sleepy, "t1", `${before}\n◐ 0`, undefined, read)).toBe(`${before}\n◐ 2`);
+  expect(await Effect.runPromise(settled("t1", `${before}\n◐ 0`, undefined, read))).toBe(`${before}\n◐ 2`);
 });
