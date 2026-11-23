@@ -139,16 +139,24 @@ export interface StandInOptions {
   readonly Editor?: new (o: any) => unknown;
   /** The view's focus handle, where a test follows the keyboard. */
   readonly focusHandle?: () => unknown;
-  /** The settings' zoom and the drawn element's extra builders. */
+  /** Told of each input and editor a render draws. */
+  readonly drawnInput?: (state: unknown) => void;
+  /** The app's home (the default: /tmp/herdr-test). */
+  readonly appHome?: string;
+  /** The settings' zoom. */
   readonly zoom?: () => number;
 }
 
 /** A text input: its text, its handlers, whether it's masked. */
 export class StandInput {
+  /** The copy's context a typed change is told with (standIn sets it). */
+  static cx: unknown = null;
   v = ""; masked = false; handlers: Record<string, Function> = {};
   constructor(o: any = {}) { this.v = o.value ?? ""; }
   on(ev: string, f: Function) { this.handlers[ev] = f; return true; }
   value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_masked(m: boolean) { this.masked = m; }
+  /** Typing: the text, then its change handler. */
+  type(v: string) { this.v = v; this.handlers.change?.({}, StandInput.cx); }
 }
 
 /** The SQL editor: its text, caret and selection; what the window asks of it. */
@@ -173,7 +181,7 @@ interface Timer { at: number; fire: (cx: unknown) => void; live: boolean }
  */
 export function standIn(options: StandInOptions = {}) {
   const h: DbHost = {
-    shared: {}, props: null, panes: [], spaces: [], terminals: [], focused: null, platform: "linux", appHome: "/tmp/herdr-test",
+    shared: {}, props: null, panes: [], spaces: [], terminals: [], focused: null, platform: "linux", appHome: options.appHome ?? "/tmp/herdr-test",
     reply: found, libsql: () => ({ status: 500, text: "no server" }), hcReply: () => ({ code: 1, stdout: "", stderr: "" }), picked: { file: null, folder: null }, queue: [],
     files: new Map(), written: [], execs: [], hcCalls: [], commands: [], opened: [], closed: [], stores: new Map(),
     overlayN: 0, clipboard: "", drawn: [],
@@ -204,14 +212,12 @@ export function standIn(options: StandInOptions = {}) {
   class View {}
   mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 
-  const InputClass = options.Input ?? StandInput;
-  const EditorClass = options.Editor ?? StandEditor;
   const scroll = () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }), release: () => true });
 
   mock.module("gpui-base", () => ({
     h_flex: () => el, v_flex: () => el, ScrollHandle: { new: scroll },
-    InputState: { new: (o: any) => new InputClass(o) }, Input: { new: () => el },
-    EditorState: { new: (o: any) => new EditorClass(o) }, Editor: { new: () => el },
+    InputState: { new: (o: any) => new (options.Input ?? StandInput)(o) }, Input: { new: (state: unknown) => { options.drawnInput?.(state); return el; } },
+    EditorState: { new: (o: any) => new (options.Editor ?? StandEditor)(o) }, Editor: { new: (state: unknown) => { options.drawnInput?.(state); return el; } },
   }));
   (globalThis as any).window = { paint_path: () => el };
   (globalThis as any).localStorage = {
@@ -246,6 +252,7 @@ export function standIn(options: StandInOptions = {}) {
     },
   };
 
+  StandInput.cx = cx;
   setSystemTime(new Date(start));
 
   const next = (): Timer | undefined => timers.filter((t) => t.live).sort((a, b) => a.at - b.at)[0];
