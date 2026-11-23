@@ -95,6 +95,7 @@ const NAMED = [
   ["mod.open", { name: "databases" }, "Window", "Databases", "sql postgres mysql sqlite query tables"],
   ["mod.open", { name: "procs" }, "Window", "Processes", "ports cpu memory kill top"],
   ["mod.open", { name: "scripts" }, "Window", "Scripts", "just npm make run tasks"],
+  ["mod.open", { name: "notifications" }, "Window", "Notifications", "permissions questions agents waiting answer"],
   ["pane.split", { direction: "right", mod: "file-tree" }, "Pane", "Files beside", "tree folder explorer"],
 ];
 

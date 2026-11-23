@@ -59,7 +59,7 @@ types:
 
 # The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
 # converted mod joins this list in its conversion's commit.
-effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts defaults/mods/git defaults/mods/github defaults/mods/github/card-menu.ts"
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts defaults/mods/git defaults/mods/github defaults/mods/github/card-menu.ts defaults/mods/notifications"
 
 # oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
@@ -140,8 +140,12 @@ test:
     bun test scripts/nocturne-tab-drag.test.ts
     # The pointer's firefly glow over nocturne's sidebar: placed by the sky's real mouse handlers, calm and leave, only its own view rebuilt.
     bun test scripts/nocturne-fireglow.test.ts
-    # The notifications overview opens without a jump: its first seen frame has the height and key bar it settles at, with recording gpui stand-ins.
+    # The notifications overview opens without a jump: its first seen frame has the height and key bar it settles at; an entry's menu at the press, under the selected request on m, with recording gpui stand-ins.
     bun test scripts/notifications-open.test.ts
+    # The notifications engine on the kit's test layers: terminals, agents, hook records and screens into shared notifications.items, one read at a time.
+    bun test scripts/notifications-engine.test.ts
+    # The notifications views by layout: nocturne's checker and square chrome, main's popovers and rounded rows, no checker (recording stand-ins).
+    bun test scripts/notifications-look.test.ts
     # The blue corner ticks on what's shown: the focused agent's firefly square, the shown space open and on the rail, with recording gpui stand-ins.
     bun test scripts/nocturne-highlight.test.ts
     # Nocturne's one key help (@fireflies/keyhelp): no mod carries a copy; in every mod ? opens the overview, ? or esc closes it.

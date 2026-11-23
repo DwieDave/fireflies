@@ -1715,7 +1715,7 @@ layout's look and a block can differ:
   `@fireflies/layout-look` (`flat(color, cell)` first in a dither
   function, `dithered()`, `radius(n)`). The windows open in any layout with
   `mod.open {name}` (the palette's Window rows: Git, GitHub, Databases,
-  Processes, Scripts; a second run closes): each mod's `mod.json` `overlay`
+  Processes, Scripts, Notifications; a second run closes): each mod's `mod.json` `overlay`
   says how; Nocturne's own commands (`nocturne.git`, …) exist only there.
 - `terminal_line_height`: row height multiplier (default 1, clamped to 0.8..2).
   Text stays centred; joining characters, cursors and images follow the rows.

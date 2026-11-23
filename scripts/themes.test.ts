@@ -236,6 +236,6 @@ test("git's and github's mod.json open the window nocturne opens (same kind, key
 test("the frame palette's window rows open mods that say how their window opens", () => {
   const palette = readFileSync(`${import.meta.dir}/../defaults/frame/palette/main.js`, "utf8");
   const opened = [...palette.matchAll(/\["mod\.open", \{ name: "([\w-]+)" \}, "Window"/g)].map((m) => m[1]!);
-  expect(opened.sort()).toEqual(["databases", "git", "github", "procs", "scripts"]);
+  expect(opened.sort()).toEqual(["databases", "git", "github", "notifications", "procs", "scripts"]);
   for (const m of opened) expect([m, Boolean(modJson(m).overlay)]).toEqual([m, true]);
 });

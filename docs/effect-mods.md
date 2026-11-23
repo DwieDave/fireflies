@@ -772,6 +772,37 @@ showed, and what closed each:
 Left for later: the github tests (scripts/github*.test.ts) still drive the
 window with their own async herdr stand-ins; github-host.ts is where they go.
 
+**Wave 1: notifications, done (2026-11-23).** The whole mod in the Effect
+pass (`effect_sources` names `defaults/mods/notifications`): its findings
+fixed, its guard.ts gone, every shape a Schema (model.ts `ItemSchema`,
+request.ts, the hook's payload), the items and put-away errors through the
+kit's `listOf` / `mapOf` (`notifications.items`, `notifications.dismissed`),
+screens and answers through `Hc` (engine.ts `readScreen`, drive.ts), the hook
+records through `Exec` on the agent's machine, terminals and agents through
+`Workspace`. Each role (bell, overview, ask) attaches to the mod's runtime in
+`init` (fx.ts): the bell's poll (a `Queue` pokes it on a status change), the
+command loop, the overview's beat and late focus, the answers (one at a time
+under a key) are runs on it, ended by `closing`. Its tests run on
+scripts/notifications-host.ts (the kit's test layers, one herdr stand-in;
+`settled` on a `TestClock`, a held read on a `Deferred`). What a read of it
+showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| A screen or a machine's hook records that couldn't be read were `catch(() => null)`, the reason gone | engine.ts | `ExecError` caught by tag and named: "no records this time, the next poll asks again", "the generic item" |
+| A failed `hc keys` / `hc send` became `String(cause)` | drive.ts, overview.ts, ask-dialog.ts | the outcome's reason in words (hc's last line, else what was sent) |
+| The poll, the command loop, the beat and each refresh were `cx.timer.every` / `cx.spawn`, running on after the copy closed | bell.ts, overview.ts, open.ts, ask-dialog.ts | runs on the copy's runtime; `closing()` ends them |
+| A refresh failure went to `console.log` | bell.ts | a refresh can't fail (`Effect<boolean, never>`): each read that can is handled where it happens; anything else is the runtime's report (a toast titled Notifications) |
+| `Date.now()` per age, per beat, per toast request | model.ts, open.ts, bell.ts | the runtime's Clock: one read per render (`nowMs`) |
+| The items and the put-away list decoded whole: one entry of another shape dropped all | engine.ts | `listOf` / `mapOf`, entry by entry |
+| The terminals list cast to its shape | engine.ts | `listOf(TerminalSchema)`; a value that isn't a list reads as none this time |
+| Tests mocked herdr's `hc` and `exec` with promises and slept on the wall clock | scripts/notifications-*.test.ts | `hcTest`, `execTest` (a real shell for the hook), `TestClock`, `Deferred` |
+| No menu on a request: its actions only by key or the buttons | overview.ts | entry-menu.ts: at the press on a right-click, under the selected request on `m` (@fireflies/menu-place), the same actions with their keys |
+
+Left: the tests still load the mod after `mock.module("herdr")` and
+`await import` at the top (as git's do): the views read the theme, props and
+shared state from herdr directly in a render.
+
 **fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
 exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
 files under mod/; the Effect pass over it today: 2,049 findings

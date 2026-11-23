@@ -24,7 +24,7 @@
 //   ?                 these keys, over the requests (? or esc hides them)
 
 
-import { div, svg } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, FocusHandle, Size } from "gpui-kit";
 
 /** Where an element is drawn (on_bounds_change), window px. */
@@ -703,7 +703,8 @@ export default class Overview {
 
     return v_flex().flex_1().h_full().items_center().justify_center().px(40)
       .child(v_flex().id("notify-empty").flex_none().items_center().gap(10).on_size_change(sized)
-        .when(art !== null, (el) => el.child(svg(art ?? "").size(48)))
+        // The art in its own colors (an image, not a tinted svg), only where the look draws art.
+        .when(art !== null, (el) => el.child(image(art ?? "").size(48)))
         .child(div().text_size(12).text_color(t.foreground).child("Nothing waits on you"))
         .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and agents that need a look, from every agent in every space and machine, gather here."))
         .child(div().text_color(t.dim).max_w(380).child(`For Claude Code's exact requests and its questions: ${HOOK_DOC}.`)));

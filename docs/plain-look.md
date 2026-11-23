@@ -187,7 +187,7 @@ the focused terminal's, else a terminal's in the shown tab, else the space's
 | procs | needs none: the machine's processes; its tab defaults to "procs" | none |
 | file-tree | lists the home folder (main.ts `reroot(…, pr.path \|\| pr.folder \|\| home())`) | fall back to the shown space's folder, as scripts |
 | finder | "No folder: open a terminal in the project first" (main.ts) | the same fallback |
-| notifications | the overview needs `role` (nocturne passes it): `mod.open` can't open it | a default role when none is given, then a palette row |
+| notifications | fixed: mod.json's overlay gives `role: overview`; the palette's Window row opens it | none |
 | editor, markdown, preview | need a file (`path`): "no file given" | nothing: they open from a file (the files pane, a link) |
 
 
@@ -541,7 +541,18 @@ checks each row off in its report.
 | `stats-view.ts:statsBody` | title ×1, hairline ×1, fill ×3 | `titleBar()` / `heading()`, `hairline()`, `fill()` |
 | `stats-view.ts:statsStrip` | title ×1, lit ×1, fill ×1 | `titleBar()` / `heading()`, `lit()`, `fill()` |
 
-#### notifications (3394 lines of its own, 23 functions)
+#### notifications (3394 lines of its own, 23 functions): done
+
+Done on 2026-11-23: every row below draws through the primitive named
+(fill, lit, boxed, frameBox, rule, dot, icon). An agent's logo stays its
+1-bit mark in both looks (it is the agent's identity, as the agent graph's
+nodes); the empty overview's fireflies art only in nocturne (`icon(art,
+null)`). Nocturne's element tree is unchanged (recorded in sixteen states,
+before and after: identical but for the overview's new `m menu` key row and
+zero radii); scripts/notifications-look.test.ts proves both looks. The
+overview opens without a role from `mod.open {"name": "notifications"}`
+(mod.json's overlay gives it `role: overview`) and from the palette's
+Window row. The shots are owed while scratch apps are off.
 
 | file: function | draws | becomes |
 | --- | --- | --- |
