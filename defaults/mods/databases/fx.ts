@@ -48,3 +48,9 @@ export class Libsql extends Context.Service<Libsql, {
 /** The response of a status error, when the error is one. */
 const refused = (error: HttpClientError.HttpClientError) =>
   (Predicate.isTagged(error.reason, "StatusCodeError") ? Option.some(error.reason.response) : Option.none());
+
+/** The system's pickers: a path, or none when cancelled (app.ts gives herdr's). */
+export class Pickers extends Context.Service<Pickers, {
+  readonly file: (prompt: string) => Effect.Effect<Option.Option<string>>;
+  readonly folder: (prompt: string) => Effect.Effect<Option.Option<string>>;
+}>()("@fireflies/databases/Pickers") {}

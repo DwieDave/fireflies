@@ -351,7 +351,7 @@ export default class Databases extends View {
     // mod's runtime (as github's cache write), so the close waits for them and no run of the copy can stop them.
     void this.fx?.close();
 
-    return runtime.runtime.runPromise(Effect.andThen(Effect.yieldNow, last));
+    return runtime.managed().runPromise(Effect.andThen(Effect.yieldNow, last));
   }
 
   // ---- what the modules ask of the view
