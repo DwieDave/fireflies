@@ -742,10 +742,12 @@ the highlighted line shows where it will land.
   doesn't take (the note line didn't open, the note didn't arrive) it says
   so in place of the answer. Fireflies' "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
-  x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
+  x puts an error away; a right-click on a request opens a menu of those
+  actions at the pointer (its options, but…, peek, go to, put away), `m`
+  the same menu under the selected request; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
   `down`, `enter`, `space`, `tab`, `back`, `yes-but`, `no-but`, `peek`,
-  `goto`, `put-away`, `close`, `keys` (its ? overview), `1`…`9`. Claude Code's exact requests and its
+  `goto`, `put-away`, `menu`, `close`, `keys` (its ? overview), `1`…`9`. Claude Code's exact requests and its
   questions come from its PermissionRequest hook, which only records them and
   never answers (it prints nothing; outside a herdr-core terminal it does
   nothing). Turn it on in `~/.claude/settings.json` (on each machine its

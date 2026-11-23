@@ -216,7 +216,7 @@ export const COMMAND_KEYS = {
   next: { key: "j" }, prev: { key: "k" }, up: { key: "up" }, down: { key: "down" },
   enter: { key: "enter" }, space: { key: "space" }, tab: { key: "tab" }, back: { key: "tab", shift: true },
   "yes-but": { key: "tab" }, "no-but": { key: "tab", shift: true },
-  peek: { key: "p" }, goto: { key: "g" }, "put-away": { key: "x" }, close: { key: "escape" }, keys: { key: "?" },
+  peek: { key: "p" }, goto: { key: "g" }, "put-away": { key: "x" }, menu: { key: "m" }, close: { key: "escape" }, keys: { key: "?" },
 } as const satisfies { readonly [command: string]: CommandKey };
 
 /** Every command and its key: COMMAND_KEYS and 1-9. */

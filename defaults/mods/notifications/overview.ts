@@ -18,12 +18,18 @@
 //   p / g             peek at its terminal / go to it
 //   x                 put an error away
 //   up / down         on a question or a needs-a-look: the next / previous request
+//   m                 the request's menu (those keys as a list), under it; a
+//                     right-click on a request opens it at the pointer
 //   esc q             close (from the note's line: back to the options)
 //   ?                 these keys, over the requests (? or esc hides them)
 
 
 import { div, svg } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, FocusHandle, Size } from "gpui-kit";
+
+/** Where an element is drawn (on_bounds_change), window px. */
+type Bounds = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { theme, props, closeOverlay, run } from "herdr";
@@ -41,6 +47,10 @@ import { fill, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.ts";
 import { attach, nowMs } from "./fx.ts";
 import type { NotifyFx } from "./fx.ts";
 import type { KeyRow } from "@fireflies/keyhelp";
+import { inView } from "@fireflies/menu-place";
+import type { Anchor, Box, Pt } from "@fireflies/menu-place";
+import { menuEntries, menuKey, menuView, rectInView } from "./entry-menu.ts";
+import type { EntryMenu } from "./entry-menu.ts";
 import { hint as barHint, keysHint, keysView, keysKey } from "@fireflies/keyhelp";
 import type { OptionKind, PermissionRequest, QuestionRequest } from "./request.ts";
 
@@ -50,7 +60,7 @@ export const EMPTY_H = 560;
 
 /** What ? lists, ? keys last. */
 export const KEYS: readonly KeyRow[] = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
-  ["p", "peek"], ["g", "go to"], ["x", "put an error away"], ["esc q", "close"], ["?", "keys"]];
+  ["p", "peek"], ["g", "go to"], ["x", "put an error away"], ["m", "menu"], ["esc q", "close"], ["?", "keys"]];
 
 // The key bar's hints in the order a narrow drop-down leaves them out (the ?
 // list has them all); esc close goes last.
@@ -103,6 +113,12 @@ export default class Overview {
   fx: NotifyFx | null = null;
   /** The time this render draws at (ms): one clock read per render, so every age agrees. */
   now = 0;
+  /** The open entry menu (entry-menu.ts), and what places it: the overview's top left corner in
+   *  the window and its size (layout px), each entry's and the list's place (window px). */
+  menu: EntryMenu | null = null;
+  origin: Pt | null = null;
+  room: Box = { width: 0, height: 0 };
+  placed = new Map<string, Bounds>();
 
   init(p: Props | undefined, cx: AsyncContext) {
     const fx = attach(cx);
@@ -254,6 +270,15 @@ export default class Overview {
     const k = e.key;
     const m = e.modifiers;
 
+    if (this.menu !== null) {
+      if (menuKey(this.menu, k, m.shift, cx, () => this.closeMenu())) {
+        cx.stop_propagation();
+        cx.notify();
+      }
+
+      return;
+    }
+
     if (this.but !== null) {
       if (k === "escape") {
         this.closeBut();
@@ -293,12 +318,56 @@ export default class Overview {
     } else if (k === "p" && it !== null) this.peek(it);
     else if (k === "g" && it !== null) this.goTo(it);
     else if (k === "x" && it?.type === "other" && it.status === "error") dismiss(it.id);
+    else if (k === "m" && it !== null) this.openMenu(it, this.entryAnchor(it));
     else handled = false;
 
     if (handled) {
       cx.stop_propagation();
       cx.notify();
     }
+  }
+
+  /** Opens `it`'s menu (entry-menu.ts) standing at `at`. */
+  openMenu(it: Item, at: Anchor) {
+    const perm = permissionOf(it);
+
+    this.closeBut();
+    this.menu = {
+      id: it.id, title: `${it.name} ${headline(it)}`, at, sel: 0,
+      entries: menuEntries(it, perm?.request ?? null, questionsOf(it), {
+        answer: (option, cx) => {
+          this.cursor = Option.getOrElse(Arr.findFirstIndex(perm?.request.options ?? [], (o) => o.n === option), () => 0);
+          this.answerWith(cx, { option });
+        },
+        but: (kind) => this.openBut(kind, it),
+        ask: () => openAsk(it),
+        peek: () => this.peek(it),
+        goTo: () => this.goTo(it),
+        putAway: () => dismiss(it.id),
+      }),
+    };
+  }
+
+  closeMenu() {
+    this.menu = null;
+  }
+
+  /** Where a key's menu for `it` stands: its entry in the list, while that is in sight; else the middle. */
+  entryAnchor(it: Item): Anchor {
+    const row = this.placed.get(`entry-${it.id}`), list = this.placed.get("notify-list"), o = this.origin;
+
+    if (row === undefined || list === undefined || o === null) return null;
+
+    if (row.y < list.y || row.y + row.height > list.y + list.height) return null;
+
+    return rectInView(row, o, zoom());
+  }
+
+  /** Keeps where `id` is drawn (window px), for a menu to stand at; no redraw. */
+  place(id: string) {
+    return (b: Bounds) => {
+      this.placed.set(id, b);
+    };
   }
 
   /** A part's height (or `dim`) as drawn, kept in layout px; a change draws again. */
@@ -357,8 +426,16 @@ export default class Overview {
     // The window's size, for the most a mod.open overview takes (none while not drawing: the last stays).
     noteWindow(Option.getOrNull(Option.liftThrowable(() => window.viewport_size())()));
 
-    const root = frameBox(t, v_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).text_color(t.foreground).text_size(11))
-      .when(!this.measured(it), (el) => el.opacity(0));
+    const root = frameBox(t, v_flex().id("notify-overview").relative().w_full().h(this.height(it)).bg(t.background).text_color(t.foreground).text_size(11))
+      .when(!this.measured(it), (el) => el.opacity(0))
+      .on_bounds_change((b) => {
+        const z = zoom() > 0 ? zoom() : 1;
+
+        this.origin = { x: b.x, y: b.y };
+        this.room = { width: b.width / z, height: b.height / z };
+      });
+
+    const menu = this.menu?.id === it?.id ? this.menu : null;
 
     // The key bar (and the ? list) spans the drop-down, under both columns.
     return (this.handle === null ? root : root.track_focus(this.handle))
@@ -367,7 +444,8 @@ export default class Overview {
         .child(this.side(t, list, it))
         .child(this.main(t, it))
         .when(this.keysShown, (el) => el.child(this.keysStrip(t))))
-      .child(this.footer(t, it));
+      .child(this.footer(t, it))
+      .map((el) => (menu === null ? el : el.child(menuView(t, menu, this.room, () => this.closeMenu()))));
   }
 
   // ---- the list
@@ -398,7 +476,7 @@ export default class Overview {
 
     return v_flex().w(280).h_full().flex_none().border_r_1().border_color(edge(t))
       .child(head)
-      .child(v_flex().id("notify-list").flex_1().min_h(0).pb(8).overflow_y_scrollbar()
+      .child(v_flex().id("notify-list").flex_1().min_h(0).pb(8).overflow_y_scrollbar().on_bounds_change(this.place("notify-list"))
         .child(v_flex().id("notify-list-body").flex_none().on_size_change(this.measure("list")).children(groups)));
   }
 
@@ -409,10 +487,19 @@ export default class Overview {
 
     const row = v_flex().id(`entry-${x.id}`).relative().h(42).px(12).pl(14).justify_center().gap(3).flex_none().cursor_pointer()
       .hover((s) => s.bg(t.hover))
+      .on_bounds_change(this.place(`entry-${x.id}`))
       .on_click((_e, cx) => {
         this.sel = x.id;
         this.cursor = 0;
         this.closeBut();
+        cx.notify();
+      })
+      // Its menu at the press (entry-menu.ts), the entry chosen.
+      .on_mouse_down("right", (e, cx) => {
+        cx.stop_propagation();
+        this.sel = x.id;
+        this.cursor = 0;
+        this.openMenu(x, this.origin === null ? null : inView(e.position, this.origin, zoom()));
         cx.notify();
       });
 

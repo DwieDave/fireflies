@@ -231,3 +231,76 @@ test("drive settled(): a ticking status line isn't the key's effect; the dialog 
     expect(yield* settle(undefined)).toBe(`${before}\n◐ 2`);
   }).pipe(Effect.provide(notificationsServices({}).layer), Effect.provide(TestClock.layer())));
 });
+
+// ---- an entry's menu (entry-menu.ts): at the press on a right-click, under the entry for m
+
+/** The overview with `items`, drawn and measured, its parts at these window px (zoom 0.9). */
+function placed(items: readonly unknown[], where: Record<string, { x: number; y: number; width: number; height: number }>) {
+  host.shared[ITEMS] = items;
+  const v: any = new Overview();
+  v.init({}, cx);
+  frame(v); frame(v);
+  for (const e of all(v.render(cx))) {
+    const b = where[idOf(e)];
+    for (const [cb] of e.calls.on_bounds_change ?? []) if (b) cb(b, cx);
+  }
+  return v;
+}
+
+/** The open menu as drawn: its box's place, its rows' keys and labels. */
+function menuDrawn(v: any) {
+  const els = all(v.render(cx));
+  const box = els.find((e) => idOf(e) === "ov-menu");
+  if (!box) return null;
+  const rows = els.filter((e) => String(idOf(e)).startsWith("ov-mi-")).map((r) => all({ rec: r }).flatMap((e) => (e.calls.child ?? []).map(([c]: any[]) => c)).filter((c) => typeof c === "string"));
+  return { left: box.calls.left?.[0]?.[0], top: box.calls.top?.[0]?.[0], rows };
+}
+
+const AT = {
+  "notify-overview": { x: 90, y: 45, width: 900, height: 522 },
+  "notify-list": { x: 90, y: 45 + 34 * 0.9, width: 252, height: 400 },
+  "entry-t2:perm": { x: 90, y: 45 + 68 * 0.9, width: 252, height: 42 * 0.9 },
+};
+
+test("a right-click on an entry opens its menu at the press: its options, but…, peek, go to", () => {
+  const v = placed([permission], AT);
+  const entry = all(v.render(cx)).find((e) => idOf(e) === "entry-t2:perm")!;
+  const [, press] = entry.calls.on_mouse_down.find(([b]: any[]) => b === "right");
+  press({ position: { x: 90 + 180, y: 45 + 90 } }, cx);
+  const m = menuDrawn(v)!;
+  // The press in the overview (layout px): (180, 90) / 0.9 = (200, 100); the corner 2 px right of and below it.
+  expect([m.left, m.top]).toEqual([202, 102]);
+  expect(m.rows).toEqual([["1", "Yes"], ["2", "No"], ["⇥", "Yes, but…"], ["⇧⇥", "No, but…"], ["p", "Peek"], ["g", "Go to"]]);
+});
+
+test("m opens the selected entry's menu under it; escape closes it; a key runs its entry", () => {
+  const v = placed([permission], AT);
+  v.key({ key: "m", modifiers: {} }, cx);
+  const m = menuDrawn(v)!;
+  // Under the entry at its left edge: the entry at (0, 68) in the overview, 42 tall.
+  expect([m.left, m.top]).toEqual([8, 68 + 42]);
+  v.key({ key: "escape", modifiers: {} }, cx);
+  expect(menuDrawn(v)).toBeNull();
+  // The overlay stays open: escape closed the menu, not the overview.
+  expect(host.closed).toEqual([]);
+  v.key({ key: "m", modifiers: {} }, cx);
+  v.key({ key: "p", modifiers: {} }, cx);
+  expect(menuDrawn(v)).toBeNull();
+  expect(host.commands.at(-1)).toEqual(["terminal.peek", { terminal: "t2" }]);
+});
+
+test("m with the selected entry scrolled out of the list's sight: the menu in the middle", () => {
+  const v = placed([permission], { ...AT, "entry-t2:perm": { x: 90, y: 45 + 500, width: 252, height: 42 * 0.9 } });
+  v.key({ key: "m", modifiers: {} }, cx);
+  const m = menuDrawn(v)!;
+  // The overview is 1000 x 580 layout px, the menu 180 wide: the middle, 2.4 down.
+  expect(m.left).toBe(Math.round((1000 - 180) / 2));
+  expect(m.top).toBeGreaterThan(100);
+});
+
+test("an error's menu offers to put it away (x), and nothing it can't do", () => {
+  const error = { ...ITEM, id: "t3:err", type: "other", status: "error", address: "t3", name: "codex", logo: "codex", since: Date.now() };
+  const v = placed([error], { ...AT, "entry-t3:err": AT["entry-t2:perm"] });
+  v.key({ key: "m", modifiers: {} }, cx);
+  expect(menuDrawn(v)!.rows).toEqual([["p", "Peek"], ["g", "Go to"], ["x", "Put away"]]);
+});
