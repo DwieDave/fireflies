@@ -165,7 +165,8 @@ export const cancel = (dir: string, n: string): Effect.Effect<void, never, Exec>
 
 /** The window's private folder: a new 0700 folder in the temp folder (mktemp -d); why not, when it can't be made. */
 export const privateDir: Effect.Effect<string, ExecError | ExitError | DecodeError, Exec> = Effect.gen(function* () {
-  const out = Str.trim(yield* execOk("sh", ["-c", 'umask 077; mktemp -d "${TMPDIR:-/tmp}/fireflies-db.XXXXXX"', "ff-dir"]));
+  const made = yield* execOk("sh", ["-c", 'umask 077; mktemp -d "${TMPDIR:-/tmp}/fireflies-db.XXXXXX"', "ff-dir"]);
+  const out = Str.trim(made);
 
   if (!Str.startsWith("/")(out)) return yield* DecodeError.make({ what: "mktemp -d", message: `mktemp gave no folder (${Str.isEmpty(out) ? "nothing" : out})` });
 

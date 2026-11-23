@@ -150,7 +150,7 @@ export function where(c: Conn, home = ""): string {
 
 /** A new connection's id: its kind and a few random letters (also the keychain item's account). */
 export const newId = (kind: Kind): Effect.Effect<string> => Effect.map(
-  Effect.all(Arr.replicate(Random.nextIntBetween(0, ID_LETTERS.length, { halfOpen: true }), 8)),
+  Effect.all(Arr.replicate(Random.nextIntBetween(0, ID_LETTERS.length, { halfOpen: true }), 8), { concurrency: 1 }),
   (picks) => `${KIND_MARK[kind]}-${Arr.join(Arr.map(picks, (n) => Option.getOrElse(Str.charAt(n)(ID_LETTERS), () => "x")), "")}`,
 );
 

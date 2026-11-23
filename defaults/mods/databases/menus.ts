@@ -363,7 +363,7 @@ export function closeOthers(v: DbView, q: QueryTab): void {
   v.queries = [q];
   v.mainTab = 1;
   v.queriesDirty = true;
-  void saveQueries(v);
+  v.run(saveQueries(v));
   v.focusShown();
 }
 

@@ -191,7 +191,8 @@ export class ExportForm {
         return "copied";
       }
 
-      const folder = Option.getOrNull(yield* pickFolder("Export here"));
+      const picked = yield* pickFolder("Export here");
+      const folder = Option.getOrNull(picked);
       const dir = this.v.dir;
 
       if ((folder === null || Str.isEmpty(folder)) || (dir === null || Str.isEmpty(dir))) {
@@ -201,7 +202,8 @@ export class ExportForm {
       }
 
       const name = Str.trim(this.name.value());
-      const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.isNonEmpty(name) ? name : exportName("export", this.format, yield* Clock.currentTimeMillis)}`;
+      const now = yield* Clock.currentTimeMillis;
+      const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.isNonEmpty(name) ? name : exportName("export", this.format, now)}`;
 
       return yield* writeOut(dir, dest, text).pipe(
         Effect.as(`to ${dest}`),

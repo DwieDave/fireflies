@@ -24,7 +24,8 @@ export class Libsql extends Context.Service<Libsql, {
 }>()("@fireflies/databases/Libsql") {
   /** Over the HttpClient: 60 s an attempt (a long statement), never retried (a POST may have landed). */
   static readonly layer = Layer.effect(Libsql, Effect.gen(function* () {
-    const client = policy({ timeout: "60 seconds", retries: 0 })(yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    const client = policy({ timeout: "60 seconds", retries: 0 })(http);
 
     return Libsql.of({
       pipeline: (url, token, body) => {

@@ -122,7 +122,7 @@ export const startForward = (v: DbView, ask: ForwardAsk, connectNow: (c: Conn) =
   ask.note = null;
   yield* redraw;
 
-  const r = yield* Hc.use((h) => h.run(forwardStartArgs(f, kind))).pipe(Effect.catch((error) => Effect.succeed({ code: -1, stdout: "", stderr: error.message })));
+  const r = yield* Effect.flatMap(forwardStartArgs(f, kind), (args) => Hc.use((h) => h.run(args))).pipe(Effect.catch((error) => Effect.succeed({ code: -1, stdout: "", stderr: error.message })));
 
   if (v.forwardAsk !== ask) return;
 
@@ -145,7 +145,8 @@ export const startForward = (v: DbView, ask: ForwardAsk, connectNow: (c: Conn) =
     if (yield* portOpen(f.local)) {
       v.forwardAsk = null;
       v.say(`forward started: ${f.target} :${f.remote} → localhost:${f.local} (the Kubernetes window lists it)`, "done");
-      connectNow(yield* placedOn(v, c, f));
+      const placed = yield* placedOn(v, c, f);
+      connectNow(placed);
 
       return;
     }
@@ -157,7 +158,8 @@ export const startForward = (v: DbView, ask: ForwardAsk, connectNow: (c: Conn) =
     seen ||= t !== null;
 
     if (t?.live === false || (address !== null && Str.isNonEmpty(address) && t === null && (seen || i >= 4))) {
-      failed(v, ask, yield* output);
+      const said = yield* output;
+      failed(v, ask, said);
 
       return;
     }
@@ -165,7 +167,8 @@ export const startForward = (v: DbView, ask: ForwardAsk, connectNow: (c: Conn) =
     yield* Effect.sleep(500);
   }
 
-  failed(v, ask, yield* output, `no forward on localhost:${f.local} after ${(TRIES * 500) / 1000} s`);
+  const said = yield* output;
+  failed(v, ask, said, `no forward on localhost:${f.local} after ${(TRIES * 500) / 1000} s`);
 }).pipe(Effect.catchDefect((d) => Effect.sync(() => {
   ask.starting = null;
   ask.note = causeMessage(d);
@@ -232,7 +235,8 @@ export const takenAfter = (v: DbView, c: Conn, error: string): Effect.Effect<boo
 
   if (f === undefined || !NOT_THE_DATABASE.test(error) || (yield* forwardRunning(f))?.live === true) return false;
 
-  askForward(v, c, "taken", yield* freePort(f.local));
+  const free = yield* freePort(f.local);
+  askForward(v, c, "taken", free);
 
   return true;
 });

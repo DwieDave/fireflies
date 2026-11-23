@@ -115,7 +115,7 @@ export const RUNNING = "running…";
 const tokenOf = (v: DbView, c: Conn): Effect.Effect<Option.Option<Redacted.Redacted>, string, DbRun> => {
   if (c.secret === "ask") return Effect.succeed(Option.map(Option.fromUndefinedOr(v.secrets.get(c.id)), Redacted.make));
 
-  if (c.secret !== "keychain") return Effect.succeed(Option.none());
+  if (c.secret !== "keychain") return Effect.succeedNone;
 
   return Effect.mapError(readSecret(c.id), (e) => `the keychain didn't give its token: ${e.message}`);
 };
@@ -138,7 +138,8 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
     );
 
     // An error of no statement is the request's own (the server not reached, the token refused).
-    heard(v, c, o.error === null || o.error.index !== null, o.error?.message ?? null, yield* Clock.currentTimeMillis);
+    const now = yield* Clock.currentTimeMillis;
+    heard(v, c, o.error === null || o.error.index !== null, o.error?.message ?? null, now);
 
     return { ...o, ms: (yield* Clock.currentTimeMillis) - at };
   }
@@ -188,7 +189,9 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
   const stopped = r.code === 130 || r.code === 137;
 
   // What the run says of the connection (connstate.ts): an answer, or the connection gone.
-  if (!stopped && r.code !== NO_KEYCHAIN_ITEM) heard(v, c, !lostRun(c.kind, r.code, r.stderr), error?.message ?? null, yield* Clock.currentTimeMillis);
+  const now = yield* Clock.currentTimeMillis;
+
+  if (!stopped && r.code !== NO_KEYCHAIN_ITEM) heard(v, c, !lostRun(c.kind, r.code, r.stderr), error?.message ?? null, now);
 
   // Interrupted or killed (the window's stop): said so, not as the shell's words for it.
   if (pending !== null) settle({ sql: pending.sql, ok: error === null, ms: r.ms, said: stopped ? "stopped" : error !== null ? error.message : `exit ${r.code}`, conn: c.name, run: line });
@@ -227,7 +230,9 @@ export const loadTables = (v: DbView): Effect.Effect<void, never, DbRun> => Effe
       cat.error = endWords(e, "reading the tables");
 
       // No answer in time: the connection isn't known to stand (a stop says nothing of it).
-      if ("late" in e) heard(v, c, false, cat.error, yield* Clock.currentTimeMillis);
+      const now = yield* Clock.currentTimeMillis;
+
+      if ("late" in e) heard(v, c, false, cat.error, now);
 
       return;
     }

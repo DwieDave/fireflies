@@ -283,7 +283,7 @@ export function forwardNote(f: KubeForward, kind: "postgres" | "mysql"): Forward
 }
 
 /** A note as the label's text (JSON). */
-export const noteText = Schema.encodeSync(Schema.fromJsonString(ForwardNoteSchema));
+export const noteText = Schema.encodeEffect(Schema.fromJsonString(ForwardNoteSchema));
 
 /** What a forward's label says of it, as this window finds one (the k8s mod writes more: a web
  *  port, a database's kind): none for a label in another shape. */
@@ -298,16 +298,16 @@ export function forwardArgv(f: KubeForward): string[] {
 
 /** hc's arguments that start it: a terminal of its own in the background, labelled as the k8s mod
  *  labels its forwards (so its window lists it, and stops it). */
-export function forwardStartArgs(f: KubeForward, kind: "postgres" | "mysql"): string[] {
+export const forwardStartArgs = (f: KubeForward, kind: "postgres" | "mysql"): Effect.Effect<string[], Schema.SchemaError> => {
   const n = forwardNote(f, kind);
 
-  return [
+  return Effect.map(noteText(n), (label) => [
     "run", "--bg", "--no-parent", "--no-notify", "--json",
-    "--label", `${FORWARD_LABEL}=${noteText(n)}`,
+    "--label", `${FORWARD_LABEL}=${label}`,
     "--label", `nocturne.name=forward ${n.name} :${n.local}`,
     "--", ...forwardArgv(f),
-  ];
-}
+  ]);
+};
 
 /** The command in words, as the ask shows it. */
 export const forwardCommand = (f: KubeForward): string => Arr.join(forwardArgv(f), " ");

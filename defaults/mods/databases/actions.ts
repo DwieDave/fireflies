@@ -225,7 +225,7 @@ export function disconnect(v: DbView): void {
     return;
   }
 
-  void saveQueries(v);
+  v.run(saveQueries(v));
   v.active = null;
   v.catalog = { tables: [], error: null, busy: false };
   v.struct = { table: null, data: null, busy: false, error: null };

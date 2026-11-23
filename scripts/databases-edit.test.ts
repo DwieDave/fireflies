@@ -219,7 +219,7 @@ describe("the save's statements", () => {
     const u = r.statements[3];
     expect(u?.text).toBe("UPDATE \"lanterns\" SET \"name\" = ?, \"lumens\" = ? WHERE \"id\" = ? AND CAST(\"name\" AS TEXT) = ? AND \"lumens\" IS NULL");
     expect(u?.args).toEqual([{ type: "null" }, { type: "integer", value: "120" }, { type: "integer", value: "2" }, { type: "text", value: "Wisp" }]);
-    const body = JSON.parse(pipelineBody(r.statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text }))));
+    const body = JSON.parse(Effect.runSync(pipelineBody(r.statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })))));
     expect(body.requests[0].batch.steps[3]).toEqual({ stmt: { sql: u?.text, args: [{ type: "null" }, { type: "integer", value: "120" }, { type: "integer", value: "2" }, { type: "text", value: "Wisp" }] }, condition: { type: "ok", step: 2 } });
     // No value of the person's in any statement's text.
     expect(r.statements.some((s) => s.text.includes("it's lit") || s.text.includes("Wisp"))).toBe(false);

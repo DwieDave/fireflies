@@ -76,7 +76,7 @@ describe("a remote libSQL database (Hrana over HTTP, a fake server)", () => {
     expect(parseHrana(401, "", 1).error!.message).toBe("the token was refused");
     expect(parseHrana(200, "{}", 1).error!.message).toBe("the server's answer isn't a pipeline's");
     expect(httpBase("https://x.turso.io/")).toBe("https://x.turso.io");
-    expect(pipelineBody([{ sql: "a" }])).toBe('{"requests":[{"type":"batch","batch":{"steps":[{"stmt":{"sql":"a"}}]}},{"type":"close"}]}');
+    expect(Effect.runSync(pipelineBody([{ sql: "a" }]))).toBe('{"requests":[{"type":"batch","batch":{"steps":[{"stmt":{"sql":"a"}}]}},{"type":"close"}]}');
   });
 });
 

@@ -65,7 +65,8 @@ export const changeConnections = (appHome: string, change: (list: Conn[]) => Con
   const list = yield* Option.match(was, { onNone: () => Effect.succeed([]), onSome: decodeConnections(path) });
   const next = change(list);
 
-  yield* files.write(path, yield* encodeConnections(next), Option.getOrNull(was));
+  const text = yield* encodeConnections(next);
+  yield* files.write(path, text, Option.getOrNull(was));
 
   return next;
 }).pipe(Effect.retry({ while: stale, times: AGAIN }));
@@ -115,7 +116,8 @@ const changeHistory = (path: string, change: (list: readonly HistoryEntry[]) => 
   const was = yield* files.read(path);
   const list = change(entriesOf(was));
 
-  yield* files.write(path, yield* historyText(list), Option.getOrNull(was));
+  const text = yield* historyText(list);
+  yield* files.write(path, text, Option.getOrNull(was));
 
   return list;
 }).pipe(Effect.retry({ while: stale, times: AGAIN }));

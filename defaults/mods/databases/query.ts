@@ -202,7 +202,8 @@ const execute = (v: DbView, tab: QueryTab, c: Conn, list: readonly Statement[], 
   tab.shown = withRows >= 0 ? withRows : Math.max(0, o.results.length - 1);
   tab.inResults = false;
   placeError(tab, list, o);
-  record(v, c, list, verdicts, o, yield* Clock.currentTimeMillis);
+  const now = yield* Clock.currentTimeMillis;
+  record(v, c, list, verdicts, o, now);
   tab.verdicts = Arr.map(verdicts, (x) => x.risk);
 
   // A statement that changed the schema: read the tables again.

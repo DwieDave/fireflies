@@ -27,10 +27,10 @@ const hranaValue = (b: BoundValue): Schema.Json => (b.type === "null" ? { type: 
 /** A statement as Hrana writes it. */
 const stmt = (s: HranaStatement): Schema.Json => (s.args !== undefined ? { sql: s.sql, args: Arr.map(s.args, hranaValue) } : { sql: s.sql });
 
-const bodyText = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
+const bodyText = Schema.encodeEffect(Schema.fromJsonString(Schema.Json));
 
 /** The pipeline's body: one batch of the statements, each after the one before went well, then close. */
-export function pipelineBody(statements: readonly HranaStatement[]): string {
+export function pipelineBody(statements: readonly HranaStatement[]): Effect.Effect<string, Schema.SchemaError> {
   const steps = Arr.map(statements, (s, i): Schema.Json => (i === 0 ? { stmt: stmt(s) } : { stmt: stmt(s), condition: { type: "ok", step: i - 1 } }));
 
   return bodyText({ requests: [{ type: "batch", batch: { steps } }, { type: "close" }] });
@@ -124,7 +124,10 @@ export function parseHrana(status: number, text: string, count: number): Outcome
 /** Runs the statements on a remote libSQL database (the token, when there is one, as the request's
  *  bearer header). A request that got no answer is the outcome's error, in its words. */
 export const runHrana = (url: string, token: Redacted.Redacted | null, statements: readonly HranaStatement[]): Effect.Effect<Outcome, never, Libsql> =>
-  Libsql.use((l) => l.pipeline(`${httpBase(url)}/v2/pipeline`, token, pipelineBody(statements))).pipe(
+  Effect.flatMap(pipelineBody(statements), (body) => Libsql.use((l) => l.pipeline(`${httpBase(url)}/v2/pipeline`, token, body))).pipe(
     Effect.map((r) => parseHrana(r.status, r.text, statements.length)),
-    Effect.catchTag("HttpClientError", (e) => Effect.succeed({ results: [], error: requestError(e.message), cut: false })),
+    Effect.catchTags({
+      HttpClientError: (e) => Effect.succeed({ results: [], error: requestError(e.message), cut: false }),
+      SchemaError: (e) => Effect.succeed({ results: [], error: requestError(`the request couldn't be written: ${e.message}`), cut: false }),
+    }),
   );

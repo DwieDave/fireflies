@@ -3,7 +3,7 @@
 // exactly, NULL as null) or SQL inserts for the same kind of database (one
 // INSERT per row, names and texts quoted for it).
 
-import { Array as Arr, DateTime, Effect, Record as Rec, Schema, String as Str } from "effect";
+import { Array as Arr, DateTime, Effect, Match, Option, Record as Rec, Schema, String as Str } from "effect";
 import { Exec, Files, execOk } from "@fireflies/kit";
 import type { ExecError, ExitError, FileError, StaleFile } from "@fireflies/kit";
 import type { Kind } from "./kinds.ts";
@@ -40,7 +40,8 @@ function numberColumns(set: ResultSet): boolean[] {
   });
 }
 
-const jsonText = Schema.encodeSync(Schema.fromJsonString(Schema.Json, { space: 2 }));
+/** JSON text of a JSON value; none only for a number JSON can't hold (a result's numbers are exact ones: exactNumber). */
+const jsonText = Schema.encodeOption(Schema.fromJsonString(Schema.Json, { space: 2 }));
 
 /** A result as a JSON array of objects. */
 export function toJson(set: ResultSet): string {
@@ -52,7 +53,7 @@ export function toJson(set: ResultSet): string {
     return [c, v === null ? null : nums[i] === true ? Number(v) : v];
   })));
 
-  return `${jsonText(rows)}\n`;
+  return `${Option.getOrElse(jsonText(rows), () => "[]")}\n`;
 }
 
 /** A result as INSERT statements into `table` (a name as the kind writes it, already quoted). */
@@ -73,7 +74,12 @@ export function toInserts(set: ResultSet, kind: Kind, table: string): string {
 
 /** A result in a format. */
 export function exportText(set: ResultSet, format: Format, kind: Kind, table: string): string {
-  return format === "csv" ? toCsv(set) : format === "json" ? toJson(set) : toInserts(set, kind, table);
+  return Match.value(format).pipe(
+    Match.when("json", () => toJson(set)),
+    Match.when("csv", () => toCsv(set)),
+    Match.when("sql", () => toInserts(set, kind, table)),
+    Match.exhaustive,
+  );
 }
 
 /** A file name for an export: the table's (or "result") and the date, safe in a path. */
@@ -99,7 +105,7 @@ export const writeOut = (dir: string, dest: string, text: string): Effect.Effect
     const part = `${dir}/x-${n}-${Str.padStart(5, "0")(String(i))}`;
 
     return Effect.map(files.write(part, Str.slice(i * PART, (i + 1) * PART)(text), null), () => parts.push(part));
-  }).pipe(Effect.onError(() => Effect.ignore(Exec.use((x) => x.run("rm", ["-f", ...parts])))));
+  }, { concurrency: 1 }).pipe(Effect.onError(() => Effect.ignore(Exec.use((x) => x.run("rm", ["-f", ...parts])))));
 
   yield* execOk("sh", ["-c", 'dest=$1; shift; cat "$@" > "$dest"; r=$?; rm -f "$@"; exit $r', "ff-export", dest, ...parts]);
 });

@@ -155,7 +155,9 @@ export const recheck = (v: DbView): Effect.Effect<void, never, DbRun> => Effect.
   return Effect.gen(function* () {
     const e = yield* reading(v, "checking it still answers", "conns", (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, "a check that it answers"), 20000);
 
-    if (!("value" in e)) heard(v, c, false, "late" in e ? `no answer after ${Math.round(e.late / 1000)} s` : "the check was stopped", yield* Clock.currentTimeMillis);
+    const now = yield* Clock.currentTimeMillis;
+
+    if (!("value" in e)) heard(v, c, false, "late" in e ? `no answer after ${Math.round(e.late / 1000)} s` : "the check was stopped", now);
   }).pipe(
     Effect.catchDefect((d) => Effect.sync(() => heard(v, c, false, causeMessage(d), nowMs()))),
     Effect.ensuring(Effect.andThen(Effect.sync(() => {

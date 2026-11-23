@@ -47,7 +47,8 @@ export function togglePin(v: DbView, c: Conn): void {
 /** Reads the pinned list again when another window changed it (the window's tick). A file that
  *  can't be read leaves the list as it is (the next change tries again). */
 export const syncPinned = (v: DbView): Effect.Effect<void, never, DbRun> => Effect.gen(function* () {
-  const n = Option.getOrNull(yield* Shared.use((s) => s.get(PINNED_KEY)));
+  const kept = yield* Shared.use((s) => s.get(PINNED_KEY));
+  const n = Option.getOrNull(kept);
 
   if (n === null || n.at <= v.pinnedAt || n.by === v.me) return;
 

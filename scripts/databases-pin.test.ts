@@ -4,6 +4,7 @@
 // fixture), its failures. herdr, kubectl, psql, hc and the ports are stand-ins: no cluster touched.
 // Its own process: it stands in for "herdr".
 import { test, expect, mock } from "bun:test";
+import { Effect } from "effect";
 
 let sharedState: Record<string, unknown> = {};
 const files = new Map<string, string>();
@@ -178,9 +179,9 @@ test("the contract's forward: checked as a secret's names are, local the connect
 });
 
 test("the start: the k8s mod's own arguments for the shared fixture, and the command the ask shows", () => {
-  expect(forwardStartArgs(FORWARD as any, "postgres")).toEqual(FORWARD_FIXTURE);
+  expect(Effect.runSync(forwardStartArgs(FORWARD as any, "postgres"))).toEqual(FORWARD_FIXTURE);
   expect(forwardCommand(FORWARD as any)).toBe("kubectl --context nightjar-dev -n glowworm port-forward pod/glowworm-pg-1 25432:5432 --address 127.0.0.1");
-  expect(forwardStartArgs({ ...FORWARD, kubectl: "/nix/store/x-kubectl/bin/kubectl" } as any, "postgres")).toContain("/nix/store/x-kubectl/bin/kubectl");
+  expect(Effect.runSync(forwardStartArgs({ ...FORWARD, kubectl: "/nix/store/x-kubectl/bin/kubectl" } as any, "postgres"))).toContain("/nix/store/x-kubectl/bin/kubectl");
 });
 
 test("a request with a bad forward is refused: nothing listed, nothing checked", async () => {

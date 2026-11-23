@@ -447,7 +447,7 @@ export function closeQuery(v: DbView, q: QueryTab, _cx: Context): void {
   v.queries = Arr.filter(v.queries, (x) => x !== q);
   v.mainTab = Math.min(v.mainTab, v.queries.length);
   v.queriesDirty = true;
-  void saveQueries(v);
+  v.run(saveQueries(v));
   v.focusShown();
 }
 

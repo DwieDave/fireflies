@@ -242,7 +242,7 @@ export default class Databases extends View {
     this.handle.focus();
 
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
-    if (this.overlay !== null) fx.run(Effect.forEach([60, 190, 350], (ms) => Effect.andThen(Effect.sleep(ms), Effect.sync(() => this.focusShown()))));
+    if (this.overlay !== null) fx.run(Effect.forEach([60, 190, 350], (ms) => Effect.andThen(Effect.sleep(ms), Effect.sync(() => this.focusShown())), { concurrency: 1 }));
 
     this.beat();
     fx.run(this.opening(pr));

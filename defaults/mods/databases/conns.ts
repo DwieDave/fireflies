@@ -49,7 +49,7 @@ export const discover = (v: DbView): Effect.Effect<void, never, DbRun> => Effect
 
   const files = yield* Files;
   // A file that can't be read is one not there.
-  const texts = yield* Effect.forEach(ENV_FILES, (f) => Effect.map(Effect.orElseSucceed(files.read(`${folder}/${f}`), () => Option.none<string>()), (text) => [f, text] as const));
+  const texts = yield* Effect.forEach(ENV_FILES, (f) => Effect.map(Effect.orElseSucceed(files.read(`${folder}/${f}`), () => Option.none<string>()), (text) => [f, text] as const), { concurrency: "unbounded" });
   const lists: Found[][] = Arr.flatMap(texts, ([f, text]) => (Option.isSome(text) && Str.isNonEmpty(text.value) ? [foundInVars(parseEnvFile(text.value), f, folder)] : []));
   const found = yield* Effect.orElseSucceed(Effect.map(Exec.use((x) => x.run("sh", ["-c", FIND_SCRIPT, "ff-find", folder])), (r) => r.stdout), () => "");
 

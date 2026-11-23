@@ -13,7 +13,7 @@ import type { DbRun } from "./app.ts";
 
 const QueriesDocSchema = Schema.Struct({ tabs: Schema.Array(Schema.Struct({ name: Schema.String, text: Schema.String })) });
 const queriesDoc = decodeJsonOption(QueriesDocSchema);
-const docText = Schema.encodeSync(Schema.fromJsonString(QueriesDocSchema, { space: 2 }));
+const docText = Schema.encodeEffect(Schema.fromJsonString(QueriesDocSchema, { space: 2 }));
 
 /** The file of a connection's tabs. */
 export const queriesFile = (home: string, id: string): string => `${home}/data/databases/queries/${Str.replace(/[^A-Za-z0-9_-]/g, "_")(id)}.json`;
@@ -44,19 +44,25 @@ export const loadQueries = (v: DbView, c: Conn): Effect.Effect<void, never, DbRu
   v.queriesDirty = false;
 });
 
-/** Writes the tabs of the connection they belong to (a saved one). */
-export const saveQueries = (v: DbView): Effect.Effect<void, FileError | StaleFile, Files> => Effect.gen(function* () {
+/** Writes the tabs of the connection they belong to (a saved one): the tabs as they are when this
+ *  is called, so a disconnect or a switch right after still keeps the ones it left. */
+export const saveQueries = (v: DbView): Effect.Effect<void, FileError | StaleFile | Schema.SchemaError, Files> => {
   const id = owner.get(v);
   const c = Option.getOrUndefined(Arr.findFirst(v.saved, (s) => s.id === id));
+  const tabs = Arr.map(v.queries, (q) => ({ name: q.name, text: q.editor.value() }));
 
   v.queriesDirty = false;
 
-  if (c === undefined) return;
+  if (c === undefined) return Effect.void;
 
-  const files = yield* Files;
-  const path = queriesFile(dataHome(), c.id);
-  const was = Option.getOrNull(yield* files.read(path));
-  const text = `${docText({ tabs: Arr.map(v.queries, (q) => ({ name: q.name, text: q.editor.value() })) })}\n`;
+  return Effect.gen(function* () {
+    const files = yield* Files;
+    const path = queriesFile(dataHome(), c.id);
+    const read = yield* files.read(path);
+    const was = Option.getOrNull(read);
+    const doc = yield* docText({ tabs });
+    const text = `${doc}\n`;
 
-  if (text !== was) yield* files.write(path, text, was);
-});
+    if (text !== was) yield* files.write(path, text, was);
+  });
+};
