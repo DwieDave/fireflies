@@ -7,6 +7,8 @@
 //                   the top pick one and keep it.
 //   click a node    its details below: an agent's task and its steps, oldest
 //                   first (a run: its agents; the session: its own steps)
+//   right-click     a node's menu at the pointer: follow, oldest step, fold or
+//                   open, ask, focus its terminal (node-menu.ts)
 //   follow          keeps the details at the newest step as it works;
 //                   scrolling up stops it, scrolling to the bottom (or
 //                   clicking it, or G) starts it again
@@ -33,6 +35,8 @@
 //   s               every agent's time, tokens and cost
 //   esc             close the details
 //   [ ]             the previous / next Claude Code session (the chips)
+//   m               the selected node's menu beside it (nothing selected: the
+//                   session's, in the middle); j k enter, its keys, esc
 //   ?               every key (the bar along the bottom shows the main ones)
 //   focus           jump to the Claude Code terminal
 //   ask             asks that Claude Code, in its own terminal, how the
@@ -70,13 +74,16 @@ import { statsStrip } from "./stats-view.ts";
 import { viewport } from "./viewport.ts";
 import type { AgentsFx } from "./fx.ts";
 import { attach, nowMs } from "./fx.ts";
+import type { NodeMenu } from "./node-menu.ts";
+import { menuEntries, menuKey, nodeAnchor } from "./node-menu.ts";
+import type { Anchor, Pt } from "@fireflies/menu-place";
 
 /** What ? lists: every key key() takes, ? keys last. */
 export const KEYS: readonly KeyRow[] = [
   ["h l", "parent / first child"], ["j k", "down / up the column"], ["H J K L", "move the graph"],
   ["+ - 0", "zoom in / out / reset"], ["enter space", "fold or open a run"], ["G", "newest step, follow it"],
   ["gg", "oldest step"], ["w", "next working agent"], ["s", "every agent's time, tokens, cost"], ["f", "focus its terminal"],
-  ["[ ]", "previous / next session"], ["esc", "close the details"], ["?", "keys"],
+  ["[ ]", "previous / next session"], ["m", "the selected node's menu"], ["esc", "close the details"], ["?", "keys"],
 ];
 
 export default class Agents extends View {
@@ -102,6 +109,8 @@ export default class Agents extends View {
   fx: AgentsFx | null = null;
   now = 0; // the time this render draws at (ms)
   selectWorking = false; // opened with props { select: "working" }
+  origin: Pt | null = null; // the graph's view in the window (window px), for a press's place
+  menu: NodeMenu | null = null; // a node's open menu
   usage: ReadonlyMap<string, Usage | null> | null = null;
   startedOn = false;
   kept: string | null = null; // the last entry written to the cache, as JSON
@@ -181,6 +190,29 @@ export default class Agents extends View {
     ), { key: "follow" });
   }
 
+  /** Opens `n`'s menu at `at` (a press, `n`'s place, none: the middle). */
+  openMenu(n: GraphNode, at: Anchor): void {
+    const pane = this.target();
+
+    if (pane === null) return;
+
+    this.menu = { node: n.key, title: n.kind === "main" ? "the session" : n.label, entries: menuEntries(this, n, pane), at, sel: 0 };
+  }
+
+  closeMenu(): void {
+    this.menu = null;
+  }
+
+  /** m: the selected node's menu beside it; nothing selected (or the stats): the session's, in the middle. */
+  menuByKey(): void {
+    const nodes = this.layout ?? [];
+
+    Option.match(Arr.findFirst(nodes, (n) => n.key === this.selected), {
+      onSome: (n) => this.openMenu(n, nodeAnchor(this, n)),
+      onNone: () => Option.map(Arr.findFirst(nodes, (n) => n.kind === "main"), (n) => this.openMenu(n, null)),
+    });
+  }
+
   /** Focuses the Claude Code terminal shown. */
   focusTerminal(pane: ClaudePane): void {
     this.fx?.run(Commands.use((c) => c.run("pane.focus", { pane: pane.pane })), { redraw: false });
@@ -215,6 +247,15 @@ export default class Agents extends View {
     }
 
     if (this.help) return;
+
+    if (this.menu !== null) {
+      if (menuKey(this.menu, e.key, typed, () => this.closeMenu())) {
+        cx.stop_propagation();
+        cx.notify();
+      }
+
+      return;
+    }
 
     if (typed === "[" || typed === "]") {
       cycleAgents(this, typed === "]" ? 1 : -1);
@@ -259,7 +300,8 @@ export default class Agents extends View {
 
         return;
       }
-    } else if (k === "w") {
+    } else if (k === "m" && !upper) this.menuByKey();
+    else if (k === "w") {
       if (toWorking(this)) this.poll();
     }
     else if (k === "s") {

@@ -8,6 +8,7 @@ import type { GraphNode } from "./graph.ts";
 import { place, canvas, sky, dims, ZOOM } from "./graph.ts";
 import { stop, PLACEHOLDER } from "./state.ts";
 import { pickNode, saveState, zoomTo } from "./navigate.ts";
+import { menuView, pressAt } from "./node-menu.ts";
 import type { default as Agents } from "./main.ts";
 import { edge } from "@fireflies/tones";
 
@@ -35,6 +36,11 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
   const { el } = canvas(t, root, v.selected, (n, cx) => {
     pickNode(v, n);
     cx.notify();
+  }, (n, position, cx) => {
+    // As a click picks it, then its menu at the press.
+    pickNode(v, n, false);
+    v.openMenu(n, pressAt(v, position));
+    cx.notify();
   }, at.x, at.y, d);
 
   const end = (cx: Context) => {
@@ -46,6 +52,9 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
 
   return div().id("ag-graph").relative().flex_1().min_h(0).overflow_hidden()
     .when(v.drag !== null, (el) => el.cursor_grabbing()).when(v.drag === null, (el) => el.cursor_grab())
+    .on_bounds_change((b) => {
+      v.origin = { x: b.x, y: b.y };
+    })
     .on_size_change((size, cx) => {
       if (size.width >= PLACEHOLDER && size.height >= PLACEHOLDER) {
         v.view = size;
@@ -107,5 +116,6 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
         saveState(v);
         cx.notify();
       })
-      .child(`${Math.round(v.zoom * 100)}%`)));
+      .child(`${Math.round(v.zoom * 100)}%`)))
+    .when(v.menu !== null, (el) => (v.menu === null ? el : el.child(menuView(t, v.menu, v.view, () => v.closeMenu()))));
 }

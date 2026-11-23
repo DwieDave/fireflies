@@ -1,7 +1,9 @@
 // The agent graph's reads (claude.ts, reading.ts) and moves: a session read
 // from a scratch ~/.claude by the real snapshot script (GNU or BSD stat), a
 // transcript's steps and tokens, the poll on the kit's test layers (the
-// cache, a read that can't run, another machine), an ask through hc.
+// cache, a read that can't run, another machine), an ask through hc, a
+// node's menu (at the press on a right-click, beside the selected node on m,
+// the session's in the middle with nothing selected; its keys).
 // herdr is agent-graph-host.ts' one stand-in. Its own process: it stands in
 // for herdr, gpui-kit and gpui-base.
 import { test, expect, mock } from "bun:test";
@@ -11,14 +13,37 @@ import { join } from "node:path";
 import { Effect, Option } from "effect";
 import { agentsHerdr, agentsServices, newHost, runOn, shellExec, testFx } from "./agent-graph-host.ts";
 
-const host = newHost({});
+const host = newHost(new Proxy({}, { get: () => "#808080" }));
 mock.module("herdr", () => agentsHerdr(host));
-const el = (): any => new Proxy({}, { get: (_o, k) => (k === "then" ? undefined : () => el()) });
+type Rec = { calls: [string, unknown[]][] };
+/** An element that keeps every call (its handlers too); `when` runs its branch. */
+const el = (): any => {
+  const rec: Rec = { calls: [] };
+  const p: any = new Proxy(rec, { get: (o, k) => (k === "calls" ? o.calls : k === "then" ? undefined : (...a: unknown[]) => {
+    o.calls.push([String(k), a]);
+    if (k === "when" && a[0] === true) return (a[1] as (e: unknown) => unknown)(p);
+    return p;
+  }) });
+  return p;
+};
+(globalThis as any).window = { paint_path: el };
+const isRec = (v: unknown): v is Rec => typeof v === "object" && v !== null && "calls" in v;
+/** The element with `id` in a drawn tree. */
+const byId = (v: unknown, id: string): Rec | null => {
+  if (Array.isArray(v)) { for (const x of v) { const f = byId(x, id); if (f) return f; } return null; }
+  if (!isRec(v)) return null;
+  if (v.calls.some(([k, a]) => k === "id" && a[0] === id)) return v;
+  for (const [, a] of v.calls) { const f = byId(a, id); if (f) return f; }
+  return null;
+};
+/** An element's handler: `name` (with its first argument `button`, when it has one). */
+const handler = (r: Rec, name: string, button?: string): any => r.calls.find(([k, a]) => k === name && (button === undefined || a[0] === button))?.[1].at(-1);
 mock.module("gpui-kit", () => ({ View: class {}, div: el, svg: el, image: el, PathBuilder: { fill: el }, Background: { checkerboard: el } }));
 mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, v_virtual_list: el, VirtualListScrollHandle: { new: () => ({ scroll_to_bottom() {}, scroll_to_item() {} }) } }));
 const claude = await import("../defaults/mods/agent-graph/claude.ts");
 const reading = await import("../defaults/mods/agent-graph/reading.ts");
 const navigate = await import("../defaults/mods/agent-graph/navigate.ts");
+const { panFor } = await import("../defaults/mods/agent-graph/viewport.ts");
 const { default: Agents } = await import("../defaults/mods/agent-graph/main.ts");
 
 const line = (x: unknown) => `${JSON.stringify(x)}\n`;
@@ -198,4 +223,91 @@ test("ask: that Claude Code is asked in its own terminal through hc", () => {
     ["send", "t1", "How is the workflow run review (wf_1) doing? Brief status, anything blocked or worth my attention."],
     ["send", "t1", 'How is the subagent "explore" (a1) doing? Brief status, anything blocked or worth my attention.'],
   ]);
+});
+
+// ---- a node's menu
+
+const NOW = Date.now();
+const menuAgent = (id: string, x: Record<string, unknown>) => ({
+  id, run: null, file: `/d/s1/subagents/agent-${id}.jsonl`, changed: NOW - 60_000, started: NOW - 300_000, rel: "", label: id, type: "Explore",
+  depth: 1, toolUseId: null, phase: null, model: null, background: false, status: "done", parent: "main", ...x,
+});
+
+/** A copy drawn once (laid out) over the session: a1, and the run wf_1 with b1; the app's zoom 2. */
+function laidOut(selected: string | null) {
+  const s = agentsServices({}, host);
+  const v: any = new Agents();
+
+  showClaude();
+  host.settings = { zoom: 2 };
+  Object.assign(v, {
+    terminal: "t1", pinned: true, session: { pid: 4242, id: "s1" }, open: new Set(), now: NOW, selected, fx: testFx(s.layer),
+    data: { dir: "/d/s1", main: "/d/s1.jsonl", mainChanged: NOW, mainStarted: NOW - 1000, runs: [{ id: "wf_1", name: "review", summary: "", phases: ["Plan"], agents: ["b1"], status: "running", started: NOW - 200_000, ended: null }],
+      agents: new Map([["a1", menuAgent("a1", { label: "explore" })], ["b1", menuAgent("b1", { run: "wf_1", parent: "wf_1", phase: "Plan", status: "working" })]]) },
+  });
+  v.render();
+  // The graph's view, measured: at (100, 50) in the window.
+  handler(byId(v.render(), "ag-graph")!, "on_bounds_change")({ x: 100, y: 50, width: 1200, height: 800 });
+
+  const cx: any = { stopped: 0, stop_propagation() { this.stopped += 1; }, notify() {} };
+  const key = (k: string, typed: string | null = k.length === 1 ? k : null) => v.key({ key: k, key_char: typed, modifiers: { shift: /^[A-Z]$/.test(k) } }, cx);
+
+  return { s, v, cx, key };
+}
+
+test("a right-click on a node picks it and opens its menu at the press (window px less the view's place, over the app's zoom)", () => {
+  const { v, cx } = laidOut(null);
+  const node = byId(v.render(), "node-a1")!;
+
+  handler(node, "on_mouse_down", "right")({ position: { x: 500, y: 300 } }, cx);
+
+  expect(v.selected).toBe("a1");
+  expect(v.menu.at).toEqual({ x: 200, y: 125 });
+  expect([v.menu.title, v.menu.entries.map((e: any) => [e.key, e.label])]).toEqual(["explore", [["G", "Follow its newest step"], ["gg", "Its oldest step"], ["", "Ask how it's doing"], ["f", "Focus the terminal"]]]);
+
+  // Drawn at the press: its corner just right of and below it.
+  const menu = byId(v.render(), "ag-menu")!;
+  const at = (name: string) => menu.calls.find(([k]) => k === name)?.[1][0];
+
+  expect([at("left"), at("top")]).toEqual([202, 127]);
+});
+
+test("m opens the selected node's menu beside it (its box in the view); nothing selected: the session's, in the middle", () => {
+  const { v, key } = laidOut("wf_1");
+  const run = v.layout.find((n: any) => n.key === "wf_1");
+
+  key("m");
+  const p = panFor(v, v.graphH);
+
+  expect(v.menu.at).toEqual({ x: run.x + p.x, y: run.y + p.y, w: 210, h: run.h });
+  expect(v.menu.entries.map((e: any) => e.label)).toEqual(["Fold the run", "Ask how it's doing", "Focus the terminal"]);
+  key("escape");
+  expect(v.menu).toBeNull();
+
+  const none = laidOut(null);
+
+  none.key("m");
+  expect([none.v.menu.title, none.v.menu.at]).toEqual(["the session", null]);
+});
+
+test("the menu's keys: j k choose, enter runs the chosen one, an entry's key runs it, esc closes; nothing else reaches the graph", () => {
+  const { s, v, key } = laidOut("wf_1");
+
+  key("m");
+  key("j");
+  expect(v.menu.sel).toBe(1);
+  key("enter");
+  expect(v.menu).toBeNull();
+  expect(s.hc.calls).toEqual([["send", "t1", "How is the workflow run review (wf_1) doing? Brief status, anything blocked or worth my attention."]]);
+
+  key("m");
+  key("w");
+  expect([v.menu !== null, v.selected]).toEqual([true, "wf_1"]);
+  key("f");
+  expect(v.menu).toBeNull();
+  expect(s.commands.ran).toEqual([{ name: "pane.focus", args: { pane: "p1" } }]);
+
+  key("m");
+  key("enter");
+  expect(v.open.has("-wf_1")).toBe(true);
 });

@@ -7,7 +7,7 @@
 // Older finished runs fold to one node (click twice to open them).
 
 import { div, svg } from "gpui-kit";
-import type { Color, Context, Element } from "gpui-kit";
+import type { Color, Context, Element, Point } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { Array as Arr, Option, String as Str } from "effect";
 import type { Status, Theme } from "herdr";
@@ -306,6 +306,9 @@ const pipStatus = (s: NodeStatus): Status | null => (s === "working" || s === "d
 /** Hands a picked node (and the event's context) on. */
 export type OnPick = (n: GraphNode, cx: Context) => void;
 
+/** Hands a node right-clicked at `position` (window px) on, for its menu. */
+export type OnMenu = (n: GraphNode, position: Point, cx: Context) => void;
+
 /** A phase's name: bright where the run is now, dim not started yet. */
 function phaseInk(t: Theme, n: PhaseNode): Color {
   if (n.now) return t.foreground;
@@ -323,7 +326,7 @@ function nodeMark(t: Theme, n: GraphNode, color: Color, d: Dims): Element {
 }
 
 /** One node at zoom d. */
-function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d: Dims): Element {
+function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, onMenu: OnMenu, d: Dims): Element {
   const color = toneOf(t, n.status);
   const sel = selected === n.key;
 
@@ -331,6 +334,10 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d
     .border(1).border_color(sel ? t.accent : n.status === "working" ? color : edge(t))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => onPick(n, cx))
+    .on_mouse_down("right", (e, cx) => {
+      cx.stop_propagation();
+      onMenu(n, e.position, cx);
+    })
     .hover((s) => s.border_color(t.foreground));
 
   if (n.kind === "phase") {
@@ -364,12 +371,12 @@ function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d
 }
 
 /** The canvas at zoom d, moved by (panX, panY): lines, then nodes. Positions come back for navigation. */
-export function canvas(t: Theme, root: GraphNode, selected: string | null, onPick: OnPick, panX: number, panY: number, d: Dims = dims()): Placed & { readonly el: Element } {
+export function canvas(t: Theme, root: GraphNode, selected: string | null, onPick: OnPick, onMenu: OnMenu, panX: number, panY: number, d: Dims = dims()): Placed & { readonly el: Element } {
   const { nodes, width, height } = place(root, d);
 
   const el = div().id("graph-canvas").absolute().left(panX).top(panY).w(width).h(height)
     .children(Arr.flatMap(nodes, (n) => edges(t, n, d)))
-    .children(Arr.map(nodes, (n) => node(t, n, selected, onPick, d)));
+    .children(Arr.map(nodes, (n) => node(t, n, selected, onPick, onMenu, d)));
 
   return { el, width, height, nodes };
 }

@@ -1,6 +1,9 @@
 // The agent graph's views by layout (docs/plain-look.md): in nocturne the
 // dithered, square chrome, drawn as before the Effect conversion (the trees
-// recorded at integrate: each state's hash in scripts/agent-graph-look.nocturne.json); in
+// recorded at integrate, then with the node menu's handlers added: a node's
+// right-click, the view's bounds, the closed menu's `when(false)`, and `m` in
+// the ? list, nothing else; each state's hash in
+// scripts/agent-graph-look.nocturne.json); in
 // herdr-app's default layout (main) no checker anywhere, rounded cards and
 // rows, dots for pips. Elements are recorders (every call kept); herdr is
 // agent-graph-host.ts' one stand-in. Its own process: it stands in for herdr,
