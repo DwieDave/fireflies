@@ -44,6 +44,7 @@ let ids = 0;
 export const reading = <A, E, R>(v: DbView, what: string, panel: ReadPanel, work: (started: (nonce: string) => void) => Effect.Effect<A, E, R>, deadline: number | null = null): Effect.Effect<Ended<A>, E, R | DbRun> => Effect.gen(function* () {
   const ended = Deferred.makeUnsafe<Ended<A>>();
   const at = yield* Clock.currentTimeMillis;
+
   const unlist = (read: Read) => {
     v.reads = Arr.filter(v.reads, (r) => r !== read);
   };

@@ -211,7 +211,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
 
   // Editing: only where the rows can be (else no row for it: c says why).
   if (place === "rows" && !("why" in editableNow(v)) && !range) {
-    const changed = g.raw ? changeAt(liveEdits(v), g.raw, row, column) : null;
+    const changed = g.raw !== null ? changeAt(liveEdits(v), g.raw, row, column) : null;
 
     rows.push(
       entry(place, "cell-edit", `Change ${column}…`, () => { startEdit(v); }),
@@ -318,7 +318,7 @@ export function tabMenu(v: DbView, n: number, cx: Context): void {
   const rows: MenuRow[] = [];
 
   if (b !== null && v.active !== null) {
-    rows.push(entry("rows", "refresh", "Read it again", () => refresh(v, cx)));
+    rows.push(entry("rows", "refresh", "Read it again", () => refresh(v)));
 
     if (Str.isNonEmpty(b.filter)) rows.push(entry("rows", null, "Clear the filter", () => filterTo(v, ""), { sub: `where ${b.filter}` }));
 

@@ -62,7 +62,7 @@ function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boole
       cx.stop_propagation();
 
       // A cell being edited: kept if it can be (else dropped), as the keyboard leaves the grid.
-      if (v.cellEdit) settleEdit(v);
+      if (v.cellEdit !== null) settleEdit(v);
 
       if (e.click_count >= 2) h.open(cx);
       else {
@@ -143,7 +143,7 @@ function secretMark(t: Theme, v: DbView, c: Conn, name: string): Element {
 function clientMark(t: Theme, v: DbView, c: Conn): Element[] {
   const f = v.clients.get(c.kind);
 
-  if (f === undefined || !("missing" in f) || (c.kind === "libsql" && c.url)) return [];
+  if (f === undefined || !("missing" in f) || (c.kind === "libsql" && c.url !== undefined && Str.isNonEmpty(c.url))) return [];
 
   return [h_flex().id(`conn-noclient-${c.id}`).flex_none().tooltip(f.missing).child(text(t, `no ${PROGRAMS[c.kind][0]}`, t.ansi3))];
 }
@@ -263,7 +263,7 @@ export function rowsBefore(all: readonly Conn[], i: number): number {
 
 /** The tables the panel lists: by tab (tables or views), schema and the find line. */
 export function shownTables(v: DbView): TableRef[] {
-  const find = v.tableFind?.value().trim().toLowerCase() ?? "";
+  const find = Str.toLowerCase(Str.trim(v.tableFind?.value() ?? ""));
   const type = v.tablesTab === "views" ? "view" : "table";
 
   return Arr.filter(v.catalog.tables, (x) => x.type === type && (v.schema === null || x.schema === v.schema) && (Str.isEmpty(find) || Str.includes(find)(Str.toLowerCase(x.name))));
@@ -319,7 +319,7 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
     press: (e) => pressAt(v, e, {
       kind: "name", label: qualified(kind, x), takes: ["editor:", "rows-tab"],
       drop: (to) => {
-        if (to?.startsWith("editor:") === true) insertName(v, qualified(kind, x));
+        if (to !== null && Str.startsWith("editor:")(to)) insertName(v, qualified(kind, x));
         else if (to === "rows-tab") openTable(v, x);
       },
     }),
@@ -363,7 +363,7 @@ export function tablesCaption(v: DbView): TablesCaption {
 
   if (c === null) return { count: String(n), where: "" };
 
-  if (onFile(c) || (c.kind === "libsql" && c.url)) return { count: String(n), where: Str.split(where(c, home()), "/").at(-1) ?? "" };
+  if (onFile(c) || (c.kind === "libsql" && c.url !== undefined && Str.isNonEmpty(c.url))) return { count: String(n), where: Str.split(where(c, home()), "/").at(-1) ?? "" };
 
   const db = whereNow(c, v.catalog.here).database ?? "every database";
 
@@ -432,7 +432,7 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const rows = Arr.map(names, (name, i) => {
     const on = name === here;
-    const size = name === null ? null : d?.list.find((x) => x.name === name)?.size ?? null;
+    const size = name === null ? null : Option.getOrUndefined(Arr.findFirst(d?.list ?? [], (x) => x.name === name))?.size ?? null;
 
     return listRow(t, v, `db-${i}`, v.tableAt === i, active, [
       on ? pip(t.done, 6) : pip(edge(t), 6),
@@ -523,7 +523,7 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
     press: r.name !== null && Str.isNonEmpty(r.name) ? (e) => pressAt(v, e, {
       kind: "name", label: quoteName(kind, r.name ?? ""), takes: ["editor:"],
       drop: (to) => {
-        if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, r.name ?? ""));
+        if (to !== null && Str.startsWith("editor:")(to)) insertName(v, quoteName(kind, r.name ?? ""));
       },
     }) : undefined,
   })), v.structAt, v.seen.structure);

@@ -221,7 +221,7 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
 
   const edit = editKey(v, e);
 
-  if (edit) return edit;
+  if (edit !== false) return edit;
 
   // The SQL editor has the keyboard: its typing (a ? too) is its own, not the window's.
   if (!v.help && v.place() === "editor" && v.shownQuery()?.editor.focused() === true) return "typing";

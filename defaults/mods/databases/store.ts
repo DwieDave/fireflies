@@ -53,7 +53,7 @@ export const PINNED_KEY = sharedKey("databases.pinned", Schema.NullOr(Schema.Str
 /** How often a write refused as stale is made again on the file as it is now. */
 const AGAIN = 4;
 
-const stale = (e: unknown): boolean => Predicate.isTagged(e, "StaleFile");
+const stale = Predicate.isTagged("StaleFile");
 
 /** Changes the pinned connections as the file has them now (another window may have changed it
  *  since this one read it): `change` gets the file's list, its result is written only if the file

@@ -182,6 +182,7 @@ export const plainLayout = (l: ColumnLayout): boolean => Rec.keys(l.widths).leng
 // ---- kept per table
 
 const WidthSchema = Schema.Struct({ name: Schema.String, px: Schema.Finite });
+
 const KeptSchema = Schema.Struct({
   at: Schema.Finite,
   widths: Schema.optionalKey(Schema.Array(WidthSchema)),

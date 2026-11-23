@@ -16,6 +16,7 @@ import type { DbRun } from "./app.ts";
 
 const connectArgsOf = decodeJsonOption(ConnectArgsSchema);
 const keptCopyOf = decodeJsonOption(KeptCopySchema);
+
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
 import { shownTables } from "./panels.ts";
@@ -36,7 +37,7 @@ export interface Place {
 /** The shown space's folder and machine (an attached folder first, then the focused pane's). */
 export function here(): Place {
   const space = Option.getOrUndefined(Arr.findFirst(spaces(), (s) => s.active)) ?? null;
-  const tab = space?.tabs.find((c) => c.active)?.id ?? null;
+  const tab = Option.getOrUndefined(Arr.findFirst(space?.tabs ?? [], (c) => c.active))?.id ?? null;
   const ps = panes();
   const pane = Option.getOrUndefined(Arr.findFirst(ps, (p) => p.focused && p.tab === tab)) ?? Option.getOrUndefined(Arr.findFirst(ps, (p) => p.tab === tab && p.terminal !== null && p.cwd !== null && Str.isNonEmpty(p.cwd)));
   const cwd = pane !== undefined && pane.terminal !== null ? pane.cwd : null;
@@ -277,7 +278,7 @@ function runShown(v: DbView, all: boolean): void {
 
 /** Opens a table by name (databases.table:<name> or <schema>.<name>) on the connection. */
 function openNamed(v: DbView, name: string): void {
-  const [a, b] = Str.includes(".")(name) ? name.split(".", 2) : [null, name];
+  const [a, b] = Str.includes(".")(name) ? Str.split(name, ".") : [null, name];
   const t = Option.getOrUndefined(Arr.findFirst(v.catalog.tables, (x) => x.name === b && (a === null || x.schema === a)));
 
   if (t === undefined) {

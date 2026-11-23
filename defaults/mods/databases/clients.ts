@@ -70,7 +70,7 @@ export function installHow(setup: Setup): string {
 export const NIX_NOTE = { postgres: "on nix psql comes with postgresql: libpq alone has no psql", mysql: null, sqlite: null, libsql: null } as const satisfies { readonly [K in Kind]: string | null };
 
 /** A conninfo value, quoted (libpq: single quotes, a quote or backslash escaped). */
-const conninfo = (s: string): string => `'${s.replace(/[\\']/g, (ch) => `\\${ch}`)}'`;
+const conninfo = (s: string): string => `'${Str.replace(/[\\']/g, "\\$&")(s)}'`;
 
 /** psql's arguments: CSV, no psqlrc, stop at the first error, never prompt, rows fetched 500 at a
  *  time. An sslmode goes into -d's conninfo (`dbname='…' sslmode=…`): the Log's line shows it, and

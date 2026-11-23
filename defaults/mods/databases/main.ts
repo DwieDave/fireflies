@@ -261,38 +261,36 @@ export default class Databases extends View {
   /** The window's start: its private folder, the pinned connections, where it was (or what was
    *  sent), the folder's connections, each listed kind's client. */
   opening(pr: DbProps): Effect.Effect<void, never, DbRun> {
-    const self = this;
-
-    return Effect.gen(function* () {
+    return Effect.gen({ self: this }, function* () {
       const dir = yield* Effect.result(privateDir);
 
-      if (dir._tag === "Success") self.dir = dir.success;
-      else self.dirProblem = dir.failure.message;
+      if (dir._tag === "Success") this.dir = dir.success;
+      else this.dirProblem = dir.failure.message;
 
-      self.run(Effect.map(setupOf, (s) => {
-        self.setup = s;
+      this.run(Effect.map(setupOf, (s) => {
+        this.setup = s;
       }));
 
       const saved = yield* Effect.result(readConnections(dataHome()));
 
-      if (saved._tag === "Success") self.saved = saved.success;
-      else self.say(`the pinned connections couldn't be read: ${saved.failure.message}`, "failed");
+      if (saved._tag === "Success") this.saved = saved.success;
+      else this.say(`the pinned connections couldn't be read: ${saved.failure.message}`, "failed");
 
-      self.pinnedAt = yield* Clock.currentTimeMillis;
+      this.pinnedAt = yield* Clock.currentTimeMillis;
 
       // The folder's environment loads beside the first connect (a client may come from it).
-      self.run(loadFolderEnv(self));
-      yield* start(self, pr);
-      yield* discover(self);
+      this.run(loadFolderEnv(this));
+      yield* start(this, pr);
+      yield* discover(this);
 
-      restoreFound(self);
+      restoreFound(this);
       // Each listed kind's client looked for once the folder's environment is known: a row whose
       // client is missing says so before it's connected to.
-      const env = self.env;
+      const env = this.env;
 
       if (env.kind === "loading") yield* Deferred.await(env.done);
 
-      yield* Effect.forEach(Arr.dedupe(Arr.map(connList(self), (c) => c.kind)), (k) => clientOf(self, k), { concurrency: "unbounded", discard: true });
+      yield* Effect.forEach(Arr.dedupe(Arr.map(connList(this), (c) => c.kind)), (k) => clientOf(this, k), { concurrency: "unbounded", discard: true });
     });
   }
 
@@ -307,32 +305,30 @@ export default class Databases extends View {
   /** Every second: the beat, another window's pins, the focus coming back, the reads' seconds,
    *  the query tabs kept, an old note gone. */
   tick(): Effect.Effect<void, never, DbRun> {
-    const self = this;
-
-    return Effect.gen(function* () {
+    return Effect.gen({ self: this }, function* () {
       const now = yield* Clock.currentTimeMillis;
 
-      if (now - self.beatAt >= BEAT) self.beat();
+      if (now - this.beatAt >= BEAT) this.beat();
 
       // Another window changed the pinned connections: read them again.
-      yield* syncPinned(self);
+      yield* syncPinned(this);
 
       // The window got the keyboard back after a while: its connection is asked once more.
-      if (self.focusAt !== 0) {
-        self.focusAt = 0;
-        focusArrived(self, now);
+      if (this.focusAt !== 0) {
+        this.focusAt = 0;
+        focusArrived(this, now);
       }
 
       // A read's seconds count up where it's shown; one past its deadline ends.
-      if (self.reads.length !== 0) {
-        overdue(self, now);
+      if (this.reads.length !== 0) {
+        overdue(this, now);
         yield* redraw;
       }
 
-      if (self.queriesDirty) self.run(saveQueries(self), { key: "queries" });
+      if (this.queriesDirty) this.run(saveQueries(this), { key: "queries" });
 
-      if (self.note !== null && self.note.tone !== "working" && now - self.note.at > 6000) {
-        self.note = null;
+      if (this.note !== null && this.note.tone !== "working" && now - this.note.at > 6000) {
+        this.note = null;
         yield* redraw;
       }
     });

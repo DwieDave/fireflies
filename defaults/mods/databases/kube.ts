@@ -38,7 +38,14 @@ const KUBECTL = /^(kubectl|\/[^\0\n\r]*\/kubectl)$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 /** A kubeconfig context's name: anything printable, not too long. */
-const contextOk = (c: string): boolean => Str.isNonEmpty(c) && Str.length(c) <= 253 && !/[\u0000-\u001f\u007f]/.test(c);
+const contextOk = (c: string): boolean => Str.isNonEmpty(c) && Str.length(c) <= 253 && !Arr.some(Arr.fromIterable(c), control);
+
+/** A control character (below space, or DEL). */
+const control = (ch: string): boolean => {
+  const n = Option.getOrElse(Str.codePointAt(ch, 0), () => 0);
+
+  return n < 0x20 || n === 0x7f;
+};
 
 /** Why the window won't read this source for a connection to `host`, or null. */
 export function kubeProblem(s: KubeSource, kind: string, host: string | undefined): string | null {
@@ -105,11 +112,11 @@ export function base64Bytes(b64: string): number[] | null {
   let bits = 0;
 
   for (const ch of clean) {
-    const v = B64.indexOf(ch);
+    const at = Str.indexOf(ch)(B64);
 
-    if (v < 0) return null;
+    if (Option.isNone(at)) return null;
 
-    acc = ((acc << 6) | v) & 0xffffff;
+    acc = ((acc << 6) | at.value) & 0xffffff;
     bits += 6;
 
     if (bits >= 8) {

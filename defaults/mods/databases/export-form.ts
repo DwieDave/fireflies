@@ -152,65 +152,61 @@ export class ExportForm {
 
   /** Exports: the rows read (again where they must be), written or copied, said in the bar. */
   go(): Effect.Effect<void, never, DbRun> {
-    const self = this;
-
-    return Effect.gen(function* () {
-      const v = self.v;
+    return Effect.gen({ self: this }, function* () {
+      const v = this.v;
       const c = v.active;
 
-      self.busy = true;
-      self.error = null;
+      this.busy = true;
+      this.error = null;
       yield* redraw;
 
-      const got = yield* self.rows();
+      const got = yield* this.rows();
 
       if ("error" in got) {
-        self.error = got.error;
+        this.error = got.error;
 
         return;
       }
 
-      const table = "table" in self.of && c !== null ? qualified(c.kind, self.of.table) : "result";
+      const table = "table" in this.of && c !== null ? qualified(c.kind, this.of.table) : "result";
       const set = got.set;
-      const text = exportText(set, self.format, c?.kind ?? "sqlite", table);
-      const done = yield* self.write(text);
+      const text = exportText(set, this.format, c?.kind ?? "sqlite", table);
+      const done = yield* this.write(text);
 
       if (done !== null && Str.isNonEmpty(done)) {
-        v.say(`${set.rows.length} rows as ${FORMAT_NAME[self.format]} ${done}`, "done");
-        self.close();
+        v.say(`${set.rows.length} rows as ${FORMAT_NAME[this.format]} ${done}`, "done");
+        this.close();
       }
     }).pipe(Effect.ensuring(Effect.sync(() => {
-      self.busy = false;
+      this.busy = false;
     })));
   }
 
   /** Writes the text where asked; says where, or null (the error is shown). */
   write(text: string): Effect.Effect<string | null, never, DbRun> {
-    const self = this;
-
-    return Effect.gen(function* () {
-      if (!self.toFile) {
-        self.v.own?.write_to_clipboard(text);
+    return Effect.gen({ self: this }, function* () {
+      if (!this.toFile) {
+        this.v.own?.write_to_clipboard(text);
 
         return "copied";
       }
 
       const folder = Option.getOrNull(yield* pickFolder("Export here"));
-      const dir = self.v.dir;
+      const dir = this.v.dir;
 
       if ((folder === null || Str.isEmpty(folder)) || (dir === null || Str.isEmpty(dir))) {
-        self.error = folder !== null && Str.isNonEmpty(folder) ? "the window's private folder is missing" : null;
+        this.error = folder !== null && Str.isNonEmpty(folder) ? "the window's private folder is missing" : null;
 
         return null;
       }
 
-      const name = Str.trim(self.name.value());
-      const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.isNonEmpty(name) ? name : exportName("export", self.format, yield* Clock.currentTimeMillis)}`;
+      const name = Str.trim(this.name.value());
+      const dest = `${Str.replace(/\/$/, "")(folder)}/${Str.isNonEmpty(name) ? name : exportName("export", this.format, yield* Clock.currentTimeMillis)}`;
 
       return yield* writeOut(dir, dest, text).pipe(
         Effect.as(`to ${dest}`),
         Effect.catch((error) => Effect.sync(() => {
-          self.error = error.message;
+          this.error = error.message;
 
           return null;
         })),

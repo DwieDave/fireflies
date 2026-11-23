@@ -183,7 +183,7 @@ export function cellRefusal(e: Editability, columns: readonly ColumnInfo[] | nul
 
   if (column === ROWID && e.keyCols[0] === ROWID) return "the rowid is SQLite's own: it isn't edited";
 
-  const type = columns?.find((c) => c.name === column)?.type ?? "";
+  const type = Option.getOrUndefined(Arr.findFirst(columns ?? [], (c) => c.name === column))?.type ?? "";
 
   if (typeOf(type) === "blob") return `${column} holds a blob: it isn't edited here`;
 

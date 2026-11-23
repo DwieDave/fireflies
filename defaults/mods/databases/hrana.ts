@@ -70,7 +70,7 @@ const answerOf = Schema.decodeUnknownOption(Schema.fromJsonString(AnswerSchema))
 const refusalOf = Schema.decodeUnknownOption(Schema.fromJsonString(RefusalSchema));
 
 /** A blob's bytes as the grid shows them (x'…'). */
-const blob = (b64: string): string => `x'${Arr.join(Arr.map(Arr.fromIterable(atob(b64)), (c) => Str.padStart(2, "0")((c.codePointAt(0) ?? 0).toString(16))), "")}'`;
+const blob = (b64: string): string => `x'${Arr.join(Arr.map(Arr.fromIterable(atob(b64)), (c) => Str.padStart(2, "0")(Option.getOrElse(Str.codePointAt(c, 0), () => 0).toString(16))), "")}'`;
 
 /** A value as the grid shows it. */
 function cell(v: Value): Cell {

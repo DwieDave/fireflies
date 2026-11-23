@@ -34,7 +34,7 @@ const READ_PRAGMAS = new Set([
 
 /** The words of blanked text: names and keywords lowercased, other characters one by one. */
 function words(blank: string): string[] {
-  return Str.toLowerCase(blank).match(/[a-z_][a-z0-9_$]*|[^\s]/g) ?? [];
+  return Option.match(Str.match(/[a-z_][a-z0-9_$]*|[^\s]/g)(Str.toLowerCase(blank)), { onNone: () => [], onSome: (m) => Arr.fromIterable(m) });
 }
 
 /** A name as written at `at` in the raw text (quotes taken off, the last dotted part). */
@@ -46,8 +46,8 @@ function nameAt(raw: string, blank: string, word: number): string | null {
     if (n++ !== word) continue;
 
     // The name runs over names, dots and quoted parts in the raw text.
-    const rest = Str.slice(m.index)(raw).match(/^(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+)(?:\.(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+))*/);
-    const last = rest?.[0].split(".").at(-1) ?? null;
+    const rest = Option.getOrNull(Str.match(/^(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+)(?:\.(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+))*/)(Str.slice(m.index)(raw)));
+    const last = rest === null ? null : Arr.lastNonEmpty(Str.split(rest[0], "."));
 
     return last !== null && Str.isNonEmpty(last) ? Str.replace(/""/g, '"')(Str.replace(/^["`[]|["`\]]$/g, "")(last)) : null;
   }

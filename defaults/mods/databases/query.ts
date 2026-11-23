@@ -40,11 +40,11 @@ export function offsetOf(text: string, p: Pos): number {
   let at = 0;
 
   for (let l = 0; l < p.line; l++) {
-    const nl = text.indexOf("\n", at);
+    const nl = Str.indexOf("\n")(Str.slice(at)(text));
 
-    if (nl < 0) return text.length;
+    if (Option.isNone(nl)) return text.length;
 
-    at = nl + 1;
+    at += nl.value + 1;
   }
 
   return Math.min(text.length, at + p.col);
@@ -53,7 +53,7 @@ export function offsetOf(text: string, p: Pos): number {
 /** An offset as a 0-based place. */
 export function posOf(text: string, offset: number): Pos {
   const before = Str.slice(0, offset)(text);
-  const nl = before.lastIndexOf("\n");
+  const nl = Option.getOrElse(Str.lastIndexOf("\n")(before), () => -1);
 
   return { line: Str.split(before, "\n").length - 1, col: offset - nl - 1 };
 }
@@ -132,7 +132,7 @@ function askText(c: Conn, v: Verdict, count: number): string {
 
   const said = v.risk === "destructive" ? `${what}${more} on ${c.name}? It can't be undone.` : `Run ${what}${more} on ${c.name}?`;
 
-  return Str.toUpperCase(said.charAt(0)) + Str.slice(1)(said);
+  return Str.capitalize(said);
 }
 
 /** Runs the tab's statements, after the asks. */

@@ -8,7 +8,7 @@
 // Turso's Hrana takes instead, and the check that a cell still holds what was
 // read (the old value in the UPDATE's WHERE). Names are catalog.ts' quoteName.
 
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell } from "./parse-out.ts";
 import type { BoundValue } from "./script.ts";
@@ -64,7 +64,7 @@ export function utf8Hex(s: string): string {
   let out = "";
 
   for (const ch of s) {
-    const c = ch.codePointAt(0) ?? 0;
+    const c = Option.getOrElse(Str.codePointAt(ch, 0), () => 0);
 
     const bytes = c < 0x80 ? [c]
       : c < 0x800 ? [0xc0 | (c >> 6), 0x80 | (c & 63)]

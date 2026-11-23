@@ -131,6 +131,7 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
 
   if (c.kind === "libsql" && c.url !== undefined && Str.isNonEmpty(c.url)) {
     const url = c.url;
+
     const o: Outcome = yield* tokenOf(v, c).pipe(
       Effect.flatMap((token) => runHrana(url, Option.getOrNull(token), Arr.map(statements, hranaOf))),
       Effect.catch((said) => Effect.succeed<Outcome>({ results: [], error: ownError(said), cut: false })),
@@ -161,6 +162,7 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
   // The run is named in the Log as it starts (a run stopped or never answering is named too).
   const runs = runLine(v, c.kind, found, client.args);
   const pending: LogLine | null = label !== undefined && Str.isNonEmpty(label) ? { sql: label, ok: true, ms: 0, said: RUNNING, conn: c.name, run: runs } : null;
+
   const settle = (done: LogLine) => {
     if (pending !== null) v.log = Arr.map(v.log, (l) => (l === pending ? done : l));
   };
@@ -198,7 +200,7 @@ export const runOn = (v: DbView, c: Conn, statements: readonly ScriptStatement[]
 let reads = 0;
 
 /** A bug's throw in a read: the panel says it (as its own error) instead of the read hanging busy. */
-const failedWith = (what: string, set: (words: string) => void) => Effect.catchDefect((defect: unknown) => Effect.sync(() => set(`${what} failed: ${causeMessage(defect)}`)));
+const failedWith = (what: string, set: (words: string) => void) => Effect.catchDefect((defect) => Effect.sync(() => set(`${what} failed: ${causeMessage(defect)}`)));
 
 /** Reads the active connection's tables (and, for SQLite, counts them): a read of [2], stoppable,
  *  busy cleared however it ends. */

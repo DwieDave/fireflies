@@ -98,7 +98,7 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
     setPanel(v, PANELS[i % PANELS.length] ?? "conns");
   } else if (action === "query-new") v.addQuery("");
   else if (action === "history") historyMenu(v);
-  else if (action === "refresh") refresh(v, cx);
+  else if (action === "refresh") refresh(v);
   else if (action === "databases") showDatabases(v, cx);
   else if (action === "conn-menu") stateMenu(v, cx);
   else if (action === "move") v.move();
@@ -139,9 +139,9 @@ function closeCopy(v: DbView): void {
 }
 
 /** Reads everything shown again: the folder's connections, the tables, the structure, the page. */
-export function refresh(v: DbView, cx: Context): void {
+export function refresh(v: DbView): void {
   if (counted(v.edits).cells !== 0) {
-    beforeLeaving(v, "read it again", () => refresh(v, cx));
+    beforeLeaving(v, "read it again", () => refresh(v));
 
     return;
   }

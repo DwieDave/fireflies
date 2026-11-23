@@ -128,7 +128,7 @@ export function blankLiterals(text: string, kind: Kind): string {
     const piece = Str.slice(from, sc.i)(text);
     const name = was === "double" || was === "back" || ((sc.inside === "double" || sc.inside === "back") && was === "code");
 
-    out += code ? piece : piece.replace(/[^\n]/g, name ? "x" : " ");
+    out += code ? piece : Str.replace(/[^\n]/g, name ? "x" : " ")(piece);
   }
 
   return out;
@@ -189,7 +189,7 @@ export function statementAt(list: readonly Statement[], text: string, caret: num
 
   if (holding !== undefined) return holding;
 
-  const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
+  const lineStart = Option.getOrElse(Str.lastIndexOf("\n")(Str.slice(0, caret)(text)), () => -1) + 1;
   const before = Option.getOrUndefined(Arr.findFirst([...list].reverse(), (s) => s.end <= caret && s.end >= lineStart));
 
   return before ?? Option.getOrUndefined(Arr.findFirst(list, (s) => s.start >= caret)) ?? list.at(-1) ?? null;
@@ -204,7 +204,7 @@ export interface Place {
 /** A 0-based offset in `text` as a 1-based line and column. */
 export function lineCol(text: string, offset: number): Place {
   const before = Str.slice(0, Math.max(0, offset))(text);
-  const nl = before.lastIndexOf("\n");
+  const nl = Option.getOrElse(Str.lastIndexOf("\n")(before), () => -1);
 
   return { line: Str.split(before, "\n").length, col: offset - nl };
 }

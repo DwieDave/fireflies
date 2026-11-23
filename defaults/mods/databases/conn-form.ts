@@ -120,7 +120,7 @@ export class ConnForm {
   }
 
   value(f: Field): string {
-    return this.inputs.get(f)?.value().trim() ?? "";
+    return Str.trim(this.inputs.get(f)?.value() ?? "");
   }
 
   /** A URL pasted into the host: its parts into the fields (the password into the masked one). */
@@ -233,7 +233,7 @@ export class ConnForm {
 
     const secret = this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? "none"
       : source !== undefined ? "kubernetes"
-      : this.ask || (typed && !keychain) ? "ask" : Str.isNonEmpty(typed) || this.editing?.secret === "keychain" ? "keychain" : "none";
+      : this.ask || (Str.isNonEmpty(typed) && !keychain) ? "ask" : Str.isNonEmpty(typed) || this.editing?.secret === "keychain" ? "keychain" : "none";
 
     const c: ConnDraft = { id, name: this.value("name") || this.value("database") || Str.split(this.value("path"), "/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
 
@@ -282,35 +282,33 @@ export class ConnForm {
 
   /** Saves the fields as a pinned connection (its password into the keychain first, if one). */
   save(): Effect.Effect<void, never, DbRun> {
-    const self = this;
-
-    return Effect.gen(function* () {
-      const problem = self.problem();
+    return Effect.gen({ self: this }, function* () {
+      const problem = this.problem();
 
       if (problem !== null && Str.isNonEmpty(problem)) {
-        self.error = problem;
+        this.error = problem;
 
         return;
       }
 
-      const id = self.editing?.origin === "saved" ? self.editing.id : yield* newId(self.kind);
-      const c = self.conn(id);
-      const pw = self.value("password");
-      const dir = self.v.dir;
+      const id = this.editing?.origin === "saved" ? this.editing.id : yield* newId(this.kind);
+      const c = this.conn(id);
+      const pw = this.value("password");
+      const dir = this.v.dir;
 
       if (Str.isNonEmpty(pw) && c.secret === "keychain" && (dir !== null && Str.isNonEmpty(dir))) {
         const saved = yield* Effect.result(saveSecret(dir, id, `Fireflies database ${c.name}`, pw));
 
         if (saved._tag === "Failure") {
-          self.error = `the keychain refused it: ${saved.failure.message}`;
+          this.error = `the keychain refused it: ${saved.failure.message}`;
 
           return;
         }
       }
 
-      if (Str.isNonEmpty(pw) && c.secret === "ask") self.v.secrets.set(id, pw);
+      if (Str.isNonEmpty(pw) && c.secret === "ask") this.v.secrets.set(id, pw);
 
-      const v = self.v;
+      const v = this.v;
       const i = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
 
       const list = yield* changePinned(v, (now) => (Arr.some(now, (s) => s.id === id) ? Arr.map(now, (s) => (s.id === id ? c : s)) : [...now, c]));
@@ -321,7 +319,7 @@ export class ConnForm {
 
       v.connAt = Option.getOrElse(Arr.findFirstIndex(v.saved, (s) => s.id === id), () => -1);
       v.say(`${i >= 0 ? "saved" : "added"} ${c.name}`, "done");
-      self.close();
+      this.close();
     });
   }
 

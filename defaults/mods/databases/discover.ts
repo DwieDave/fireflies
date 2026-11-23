@@ -44,9 +44,10 @@ export function parseEnvFile(text: string): Map<string, string> {
 
     let v = Str.trim((m[2] ?? ""));
     const q = v[0];
+    // A quoted value ends at its closing quote (its index in the rest, after the opening one).
+    const closing = q === '"' || q === "'" ? Str.indexOf(q)(Str.slice(1)(v)) : Option.none();
 
-    if ((q === '"' || q === "'") && v.indexOf(q, 1) > 0) v = Str.slice(1, v.indexOf(q, 1))(v);
-    else v = Str.replace(/\s+#.*$/, "")(v);
+    v = Option.isSome(closing) ? Str.slice(1, closing.value + 1)(v) : Str.replace(/\s+#.*$/, "")(v);
 
     out.set(m[1], v);
   }
@@ -137,7 +138,7 @@ function libsqlUrl(scheme: string, rest: string): DbUrl {
 /** A database URL's parts, or null. `folder` resolves a relative file. */
 export function parseDbUrl(text: string, folder = ""): DbUrl | null {
   const m = /^([a-z][a-z0-9+]*):(.*)$/i.exec(Str.trim(text));
-  const scheme = m?.[1]?.toLowerCase() ?? "";
+  const scheme = Str.toLowerCase(m?.[1] ?? "");
   const kind = SCHEMES.get(Str.replace(/\+.*$/, "")(scheme));
   const rest = m?.[2] ?? "";
 
@@ -177,7 +178,7 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
     if (u === null) continue;
 
     const { password, ...parts } = u;
-    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: (password !== null && Str.isNonEmpty(password)) || (u.kind === "libsql" && token) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
+    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: (password !== null && Str.isNonEmpty(password)) || (u.kind === "libsql" && token !== null && Str.isNonEmpty(token)) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
 
     out.push({ conn, secret: password ?? (u.kind === "libsql" ? token : null) });
   }

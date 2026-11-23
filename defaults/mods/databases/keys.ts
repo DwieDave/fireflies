@@ -6,6 +6,7 @@
 import type { KeyEvent } from "gpui-kit";
 import type { KeySection } from "@fireflies/keyhelp";
 import { Array as Arr, Option, String as Str } from "effect";
+import { replaceWith } from "@fireflies/kit";
 
 /** Where a key is read: the window (always), or what has the keyboard. */
 export type Place = "window" | "conns" | "tables" | "structure" | "rows" | "results" | "editor" | "log";
@@ -90,7 +91,7 @@ export const BINDINGS = { window: WINDOW, conns: CONNS, tables: TABLES, structur
 export function keyName(e: KeyEvent): string {
   const m = e.modifiers;
   const c = e.key_char;
-  const printable = c && c.length === 1 && Str.trim(c) && !m.platform && !m.control && !m.alt;
+  const printable = c !== undefined && c.length === 1 && Str.isNonEmpty(Str.trim(c)) && !m.platform && !m.control && !m.alt;
 
   if (printable) return c;
 
@@ -125,7 +126,7 @@ const PLACE_NAME = {
 /** A key as the overview writes it (escape as esc, arrows as arrows). */
 const ARROWS: readonly (readonly [string, string])[] = [["left", "←"], ["right", "→"], ["up", "↑"], ["down", "↓"]];
 
-export const shown = (k: string): string => (k === "escape" ? "esc" : k.replace(/\b(left|right|up|down)$/, (m) => Option.getOrUndefined(Arr.findFirst(ARROWS, ([n]) => n === m))?.[1] ?? m));
+export const shown = (k: string): string => (k === "escape" ? "esc" : replaceWith(/\b(left|right|up|down)$/, ([m]) => Option.getOrUndefined(Arr.findFirst(ARROWS, ([n]) => n === m))?.[1] ?? m)(k));
 
 /** The ? overview: the place's keys, then the window's. */
 export function helpSections(place: Place): KeySection[] {

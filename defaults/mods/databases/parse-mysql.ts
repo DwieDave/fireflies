@@ -6,6 +6,7 @@
 // '…' at line N" places it in that line. MariaDB prints the same.
 
 import { Array as Arr, Option, String as Str } from "effect";
+import { replaceWith } from "@fireflies/kit";
 import type { Cell, Outcome, ResultSet, RunError, StatementResult } from "./parse-out.ts";
 import { MARK } from "./script.ts";
 
@@ -19,13 +20,13 @@ const ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", '"'],
 
 /** XML text with its entities (&lt; &#10; &#x9;) read. */
 export function unescapeXml(s: string): string {
-  return s.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/g, (whole, name: string) => {
+  return replaceWith(/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/g, ([whole, name = ""]) => {
     if (Str.startsWith("#x")(name)) return String.fromCodePoint(Number.parseInt(Str.slice(2)(name), 16));
 
     if (Str.startsWith("#")(name)) return String.fromCodePoint(Number(Str.slice(1)(name)));
 
     return ENTITIES.get(name) ?? whole;
-  });
+  })(s);
 }
 
 const RESULTSET = /<resultset\b[^>]*?(\/>|>([\s\S]*?)<\/resultset>)/g;
@@ -89,9 +90,9 @@ function place(message: string, statement: string): { line: number; col: number 
   const line = Number(m[2]);
   const text = Str.split(statement, "\n")[line - 1] ?? "";
   const near = Str.split((m[1] ?? ""), "\n")[0] ?? "";
-  const at = Str.isNonEmpty(near) ? text.indexOf(near) : -1;
+  const at = Str.isNonEmpty(near) ? Str.indexOf(near)(text) : Option.none();
 
-  return { line, col: at >= 0 ? at + 1 : null };
+  return { line, col: Option.getOrNull(Option.map(at, (i) => i + 1)) };
 }
 
 /** What mysql printed; `lines` where each statement starts in the script, `statements` their texts. */

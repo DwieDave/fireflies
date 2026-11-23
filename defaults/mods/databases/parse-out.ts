@@ -112,9 +112,9 @@ export function psqlError(stderr: string, index: number | null): RunError | null
 
   const lineAt = Option.getOrElse(Arr.findFirstIndex(lines, (l, i) => i > at && /^LINE \d+: /.test(l)), () => -1);
   const where = lineAt >= 0 ? /^LINE (\d+): (\.\.\.)?/.exec(lines[lineAt] ?? "") : null;
-  const caret = lineAt >= 0 ? (lines[lineAt + 1] ?? "").indexOf("^") : -1;
+  const caret = lineAt >= 0 ? Option.getOrElse(Str.indexOf("^")(lines[lineAt + 1] ?? ""), () => -1) : -1;
   const lead = where !== null ? where[0].length - (where[2] !== undefined && Str.isNonEmpty(where[2]) ? 3 : 0) : 0;
-  const hint = Option.getOrUndefined(Arr.findFirst(lines, (l, i) => i > at && Str.startsWith("HINT:")(l)))?.replace(/^HINT:\s+/, "") ?? null;
+  const hint = Option.getOrNull(Option.map(Arr.findFirst(lines, (l, i) => i > at && Str.startsWith("HINT:")(l)), Str.replace(/^HINT:\s+/, "")));
   const startup = !Str.startsWith("psql:")(head) || Str.startsWith("psql: error:")(head);
 
   return { index: startup ? null : index, message, line: where !== null ? Number(where[1]) : null, col: where !== null && caret >= 0 ? caret - lead + 1 : null, hint };
@@ -155,7 +155,7 @@ export function sqliteError(stderr: string, index: number | null, statement: str
   const head = lines[at] ?? "";
   const message = Str.replace(/\s*\(\d+\)$/, "")(Str.replace(/^in prepare,\s*/, "")(Str.replace(/^fireflies-db: /, "")(Str.replace(/^(Parse error|Runtime error|Error)[^:]*:\s*/, "")(head))));
   const caretLine = Option.getOrUndefined(Arr.findFirst(lines, (l, i) => i > at && Str.includes("^--- error here")(l))) ?? "";
-  const offset = caretLine.indexOf("^") - 2;
+  const offset = Option.getOrElse(Str.indexOf("^")(caretLine), () => -1) - 2;
 
   if (offset < 0 || statement === null) return { index, message, line: null, col: null, hint: null };
 
@@ -193,7 +193,7 @@ const NAMED = /(?:no such (?:table|column|function)|relation|column|table|unknow
 
 /** The name an error is about ("lantern" in "no such table: lantern"), its last dotted part. */
 export function namedIn(message: string): string | null {
-  return NAMED.exec(message)?.[1]?.split(".").at(-1) ?? null;
+  return Option.getOrNull(Option.map(Option.fromNullishOr(NAMED.exec(message)?.[1]), (n) => Arr.lastNonEmpty(Str.split(n, "."))));
 }
 
 /** Where in the statement an error without a place is: at the name it is about, if that's there. */

@@ -15,7 +15,7 @@
 import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import type { Theme } from "herdr";
-import { String as Str } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { dither, unzoom } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
@@ -120,7 +120,7 @@ export function pressLeave(o: PressOwner, cx: Context): boolean {
 }
 
 /** Whether `target` takes the press going on. */
-export const takes = (p: Press | null, target: string): boolean => Boolean(p?.takes.some((t) => Str.startsWith(t)(target)));
+export const takes = (p: Press | null, target: string): boolean => p !== null && Arr.some(p.takes, (t) => Str.startsWith(t)(target));
 
 /** The pointer moved over a drop target (before the view's root hears the same move). */
 export function overTarget(o: PressOwner, target: string): void {

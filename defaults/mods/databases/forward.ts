@@ -39,6 +39,7 @@ const TerminalEntrySchema = Schema.Struct({
   state: Schema.optionalKey(Schema.String),
   labels: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
+
 const terminalEntry = Schema.decodeUnknownOption(TerminalEntrySchema);
 
 const live = (state: string | undefined): boolean => state !== "exited" && state !== "dead";

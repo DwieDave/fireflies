@@ -224,11 +224,11 @@ export function pgForeignKey(def: string): KeyDef {
   const m = /^FOREIGN KEY \(([^)]*)\) REFERENCES ([^(]+)\(([^)]*)\)(.*)$/.exec(Str.trim(def));
   const del = /ON DELETE (CASCADE|SET NULL|SET DEFAULT|RESTRICT|NO ACTION)/.exec(m?.[4] ?? "");
 
-  return { fromColumns: m?.[1] ?? "", to: Str.trim((m?.[2] ?? "")), toColumns: m?.[3] ?? "", onDelete: del?.[1]?.toLowerCase() ?? null };
+  return { fromColumns: m?.[1] ?? "", to: Str.trim((m?.[2] ?? "")), toColumns: m?.[3] ?? "", onDelete: Option.getOrNull(Option.map(Option.fromNullishOr(del?.[1]), Str.toLowerCase)) };
 }
 
 /** The last dotted part of a name (Postgres' regclass text may carry its schema). */
-const bare = (name: string): string => Str.split(name, ".").at(-1)?.replace(/^"|"$/g, "") ?? name;
+const bare = (name: string): string => Str.replace(/^"|"$/g, "")(Arr.lastNonEmpty(Str.split(name, ".")));
 
 function keysOf(kind: Kind, set: ResultSet | null | undefined, table: string): ForeignKey[] {
   return Arr.map(records(set), (r) => {
@@ -242,7 +242,7 @@ function keysOf(kind: Kind, set: ResultSet | null | undefined, table: string): F
       fromColumns: pg !== null ? pg.fromColumns : r.get("from_cols") ?? "",
       to,
       toColumns: pg !== null ? pg.toColumns : r.get("to_cols") ?? "",
-      onDelete: pg !== null ? pg.onDelete : Str.replace("no action", "")(Str.toLowerCase((r.get("on_delete") ?? ""))) || null,
+      onDelete: pg !== null ? pg.onDelete : Option.getOrNull(Option.liftPredicate(Str.replace("no action", "")(Str.toLowerCase(r.get("on_delete") ?? "")), Str.isNonEmpty)),
       incoming: from !== table,
     };
   });

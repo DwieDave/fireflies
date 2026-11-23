@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import { chip, dither, pip, popupScrim, stop } from "./kit.ts";
 import { changeAt, changesWord, counted } from "./edits.ts";
 import type { SaveStatement } from "./save-sql.ts";
@@ -77,7 +77,7 @@ function tokenColor(t: Theme, tok: string): Color {
 export function statementLines(sql: string): string[][] {
   const lines: string[][] = [[]];
 
-  for (const tok of sql.match(TOKENS) ?? []) {
+  for (const tok of Option.getOrElse(Str.match(TOKENS)(sql), (): readonly string[] => [])) {
     const word = Str.toUpperCase(tok);
     const breaks = word === "SET" || word === "WHERE" || word === "AND";
     const line = lines.at(-1) ?? [];

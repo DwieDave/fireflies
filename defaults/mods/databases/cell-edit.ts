@@ -90,7 +90,7 @@ export function startEdit(v: DbView): boolean {
 }
 
 /** The column as the structure has it (its declared type, whether it takes NULL). */
-const columnOf = (v: DbView, column: string): ColumnInfo | undefined => gridFacts(v).columns?.find((x) => x.name === column);
+const columnOf = (v: DbView, column: string): ColumnInfo | undefined => Option.getOrUndefined(Arr.findFirst(gridFacts(v).columns ?? [], (x) => x.name === column));
 
 /** A value staged on a shown cell (the edits made for this table when there are none yet). */
 function stageCell(v: DbView, row: number, column: string, value: string | null): string | null {

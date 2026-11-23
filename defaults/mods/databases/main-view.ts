@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import type { Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
-import { Array as Arr, String as Str } from "effect";
+import { Array as Arr, Option, String as Str } from "effect";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
 import type { TabMore } from "./kit.ts";
@@ -188,7 +188,7 @@ function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col:
 
         // Dropped on a header: it takes that header's place (after it when moving right).
         moveTo(g2, col, col < target ? (target + 1 < g2.set.columns.length ? target + 1 : null) : target);
-      } else if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, name));
+      } else if (to !== null && Str.startsWith("editor:")(to)) insertName(v, quoteName(kind, name));
     },
   });
 }
@@ -210,7 +210,7 @@ function headerTips(v: DbView, g: GridNow): string[] {
   const s = v.struct.data;
 
   return Arr.map(g.set.columns, (name) => {
-    const c = s?.columns.find((x) => x.name === name);
+    const c = Option.getOrUndefined(Arr.findFirst(s?.columns ?? [], (x) => x.name === name));
 
     if (c === undefined) return name;
 

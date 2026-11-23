@@ -287,10 +287,13 @@ export function grid(t: Theme, look: GridLook, set: ResultSet, cols: readonly Gr
 
 /** A wheel's move in (rows, columns): down and up by rows, sideways by a column; with shift
  *  an up-and-down wheel goes sideways. */
+/** `n`, or `or` when it rounds to none. */
+const nonZeroOr = (n: number, or: number): number => (n === 0 ? or : n);
+
 export function wheelStep(dx: number, dy: number, shift: boolean): readonly [number, number] {
   if (shift && Math.abs(dy) > Math.abs(dx)) return [0, -Math.sign(dy)];
 
-  const by = Math.abs(dy) >= Math.abs(dx) ? Math.round(-dy / ROW) || -Math.sign(dy) : 0;
+  const by = Math.abs(dy) >= Math.abs(dx) ? nonZeroOr(Math.round(-dy / ROW), -Math.sign(dy)) : 0;
   const across = Math.abs(dx) > Math.abs(dy) ? -Math.sign(dx) : 0;
 
   return [by, across];
