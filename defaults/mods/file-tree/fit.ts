@@ -2,6 +2,7 @@
 // stops (tab) and what fits on it (labels full, short or icons; one row or
 // two), and the toolbar's parts by priority.
 
+import { Array as Arr } from "effect";
 import type { KeyRow } from "@fireflies/keyhelp";
 
 /** About how wide a character is at the header's size 11 (logical px). */
@@ -40,7 +41,7 @@ export const ADDS = {
 export function lensStops(add: Adds = "both"): Stop[] {
   const adds: readonly (readonly [NewKind, string])[] = ADDS[add];
 
-  return ["hidden", "ignored", ...adds.map(([kind]): Stop => (kind === "file" ? "add-file" : "add-folder")), "keys"];
+  return ["hidden", "ignored", ...Arr.map(adds, ([kind]): Stop => (kind === "file" ? "add-file" : "add-folder")), "keys"];
 }
 
 /** tab (+1) / shift-tab (-1) from stop `at` (null: the list) over `stops`;
@@ -140,7 +141,7 @@ export function chipsFit(w: number, cut: Cut = { hidden: 0, ignored: 0 }): Chips
   for (const [chips, cuts, add] of variants) {
     const [h, i] = LABELS[chips];
     const adds: readonly (readonly [NewKind, string])[] = ADDS[add];
-    const parts = [chipW(h, cuts ? cut.hidden : 0), chipW(i, cuts ? cut.ignored : 0), ...adds.map(([, l]) => addW(l)), KEYS_CHIP];
+    const parts = [chipW(h, cuts ? cut.hidden : 0), chipW(i, cuts ? cut.ignored : 0), ...Arr.map(adds, ([, l]) => addW(l)), KEYS_CHIP];
     let sum = 0;
 
     for (const p of parts) sum += p;
@@ -156,7 +157,7 @@ function lensWidth(fit: LensFit, cut: Cut, count: number | null): number {
   const [h, i] = fit.labels;
   const find = CH + (fit.find !== "" ? 5 + fit.find.length * CH : 0);
   const adds: readonly (readonly [NewKind, string])[] = ADDS[fit.add];
-  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...adds.map(([, l]) => addW(l)), KEYS_CHIP];
+  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...Arr.map(adds, ([, l]) => addW(l)), KEYS_CHIP];
 
   if (fit.count) parts.push(String(count).length * CH);
 

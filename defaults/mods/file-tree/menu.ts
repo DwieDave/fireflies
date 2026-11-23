@@ -3,6 +3,7 @@
 // (flipped left or up near the pane's edges), m under the selected row (above
 // it near the foot), the root's by m in the middle: menu-place.ts.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import type { Theme } from "herdr";
@@ -32,7 +33,7 @@ export function rootRow(v: Files): TreeRow {
 /** A listed row's rectangle in the pane (layout px) while it's drawn in the tree: what a key's
  *  menu stands at; null for the root (the empty space) or a row out of sight. */
 export function rowRect(v: Files, row: Row): Rect | null {
-  const i = row.path !== "" ? v.listed.findIndex((r) => r.path === row.path) : -1;
+  const i = row.path !== "" ? Option.getOrElse(Arr.findFirstIndex(v.listed, (r) => r.path === row.path), () => -1) : -1;
 
   if (i < 0) return null;
 
@@ -53,7 +54,7 @@ export function openMenu(v: Files, row: Row, cx: Context | null, at: Anchor = ro
   const all = set.length > 1 ? setMenuItems(row, set.length, { pane: v.alone, clip, look: v.lookState.on, reveal })
     : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: v.on === null || v.on === "", viewer: !row.dir && Boolean(viewerFor(row.path)), databases: (v.on === null || v.on === "") && v.dbMod, reveal });
 
-  const items = row.head === true ? all.filter((x) => x.act !== "root") : all;
+  const items = row.head === true ? Arr.filter(all, (x) => x.act !== "root") : all;
 
   v.sel = row.path || v.sel;
   v.menu = { row, items, at, n: 0 };
@@ -108,7 +109,7 @@ export function menuKey(v: Files, e: KeyEvent, cx: Context): void {
   if (m === null) return;
 
   const k = e.key;
-  const char = e.modifiers.shift && /^[a-z]$/.test(k) ? k.toUpperCase() : k;
+  const char = e.modifiers.shift && /^[a-z]$/.test(k) ? Str.toUpperCase(k) : k;
 
   if (k === "escape" || k === "m") v.menu = null;
   else if (k === "j" || k === "down") m.n = Math.min(m.items.length - 1, m.n + 1);
@@ -120,7 +121,7 @@ export function menuKey(v: Files, e: KeyEvent, cx: Context): void {
 
     if (it !== undefined) v.act(it.act, m.row, cx);
   } else {
-    const it = m.items.find((x) => x.key === char && x.key !== "enter");
+    const it = Option.getOrUndefined(Arr.findFirst(m.items, (x) => x.key === char && x.key !== "enter"));
 
     if (it === undefined) return;
 
@@ -142,10 +143,10 @@ export function menuBox(v: Files, t: Theme, m: Menu): Element {
   const edge = (where: "top" | "bottom"): Element => h_flex().absolute().left(0).right(0).h(13).items_center().text_size(11)
     .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
     .child(div().h(1).w(8).flex_none().bg(t.accent))
-    .when(where === "top", (el) => el.child(div().flex_shrink(1).min_w(0).px(4).truncate().text_color(t.foreground).child(m.row.path !== "" ? m.row.name.split("/").pop() ?? "" : tilde(v.root))))
+    .when(where === "top", (el) => el.child(div().flex_shrink(1).min_w(0).px(4).truncate().text_color(t.foreground).child(m.row.path !== "" ? Str.split(m.row.name, "/").pop() ?? "" : tilde(v.root))))
     .child(div().h(1).flex_1().min_w(8).bg(t.accent));
 
-  const rows = m.items.map((it, i) => h_flex().id(`nf-mi-${i}`).relative().h(MENU_ROW).px(10).gap(10).items_center().text_size(11)
+  const rows = Arr.map(m.items, (it, i) => h_flex().id(`nf-mi-${i}`).relative().h(MENU_ROW).px(10).gap(10).items_center().text_size(11)
     .hover((s) => s.bg(`${edgeTone(t)}66`))
     .on_mouse_move((_e, cx) => {
       if (m.n !== i) {

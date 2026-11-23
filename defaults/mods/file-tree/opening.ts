@@ -3,6 +3,7 @@
 // files pane of a folder; copying paths; closing a pane of its own; what the
 // pane shows, for its header.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context } from "gpui-kit";
 import * as herdr from "herdr";
 import { editorProps, openInEditor } from "@fireflies/editor-route";
@@ -23,15 +24,15 @@ import { setOf } from "./drag.ts";
 export function ownPane(v: Files): herdr.PaneInfo | null {
   const slot = v.slot;
 
-  return slot !== null && slot !== "" ? panes().find((p) => p.mod === MOD && isSlotted(p.props) && p.props.slot === slot) ?? null : null;
+  return slot !== null && slot !== "" ? Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.mod === MOD && isSlotted(p.props) && p.props.slot === slot)) ?? null : null;
 }
 
 /** The shown tab, and the editor pane this panel opened there (nocturne-edit's terminal). */
 export function editorPlace(v: Files): EditorPlace {
   const tab = v.shownTab();
-  const ours = new Set(terminals().flatMap((x) => (isTerminal(x) && isEdit(x.argv?.[0]) ? [x.address] : [])));
+  const ours = new Set(Arr.flatMap(terminals(), (x) => (isTerminal(x) && isEdit(x.argv?.[0]) ? [x.address] : [])));
 
-  return { tab, pane: panes().find((p) => p.tab === tab && p.terminal && ours.has(p.terminal)) ?? null };
+  return { tab, pane: Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.tab === tab && p.terminal !== undefined && p.terminal !== null && ours.has(p.terminal))) ?? null };
 }
 
 /** Where files open: beside a pane of its own; from the panel, beside the tab's first other pane. */
@@ -44,8 +45,8 @@ export function besidePane(v: Files): herdr.PaneInfo | null {
 
   const tab = v.shownTab();
 
-  return panes().find((p) => p.tab === tab && p.mod !== MOD && !p.parked)
-    ?? panes().find((p) => p.tab === tab && p.mod === MOD) ?? null;
+  return Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.tab === tab && p.mod !== MOD && !p.parked))
+    ?? Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.tab === tab && p.mod === MOD)) ?? null;
 }
 
 /** Edits a file (relative to the root) in the app's editor (editor),
@@ -91,9 +92,9 @@ export function terminalEdit(v: Files, path: string, cx: Context): void {
   const abs = path !== "" ? `${v.root}/${path}` : v.root;
   const { tab, pane } = editorPlace(v);
   // One socket per tab; ids from other machines carry a "machine/" prefix.
-  const key = (tab ?? "default").replace(/[^A-Za-z0-9_-]/g, "_");
+  const key = Str.replace(/[^A-Za-z0-9_-]/g, "_")((tab ?? "default"));
   // Left of this pane: the files column stays on the tab's right edge.
-  const self = ownPane(v) ?? panes().find((p) => p.tab === tab && p.mod === MOD);
+  const self = ownPane(v) ?? Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.tab === tab && p.mod === MOD));
   const argv = [editTool(v.on), "--listen", key, abs];
   const open = (): null => run("terminal.open", self !== undefined ? { argv, folder: v.root, place: "left", pane: self.pane } : { argv, folder: v.root, place: "left" });
 
@@ -116,7 +117,7 @@ export function terminalEdit(v: Files, path: string, cx: Context): void {
 export function nvim(v: Files, row: Row | null): void {
   const path = row?.path ?? "";
   const { argv, folder } = nvimLaunch(path !== "" ? `${v.root}/${path}` : v.root, path === "" || Boolean(row?.dir));
-  const self = ownPane(v) ?? (v.alone ? null : panes().find((p) => p.tab === editorPlace(v).tab && p.mod === MOD));
+  const self = ownPane(v) ?? (v.alone ? null : Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.tab === editorPlace(v).tab && p.mod === MOD)));
   const place = v.alone ? "auto" : "left";
 
   run("terminal.open", self !== null && self !== undefined ? { argv, folder, place, pane: self.pane } : { argv, folder, place });
@@ -149,9 +150,9 @@ export function copiedNow(v: Files, cx: Context): void {
 function copied(v: Files, abs: string, relative: boolean): string {
   if (!relative) return v.on !== null && v.on !== "" ? `${v.on}:${abs}` : abs;
 
-  const shown = spaces().find((s) => s.active);
+  const shown = Option.getOrUndefined(Arr.findFirst(spaces(), (s) => s.active));
   const folder = shown !== undefined && (shown.machine ?? null) === (v.on ?? null) ? shown.folder : "";
-  const space = folder !== "" && (v.on || folder.replace(/\/+$/, "") !== home()) ? [folder] : [];
+  const space = folder !== "" && (v.on || Str.replace(/\/+$/, "")(folder) !== home()) ? [folder] : [];
 
   return relativeTo(abs, [...space, v.root]);
 }
@@ -159,9 +160,9 @@ function copied(v: Files, abs: string, relative: boolean): string {
 /** y (Y: relative) with marks: every marked path, one a line. */
 export function copySet(v: Files, cx: Context, relative = false): void {
   const rows = setOf(v, rowAt(v, v.sel));
-  const paths = rows.map((r) => copied(v, absOf(v, r.path), relative));
+  const paths = Arr.map(rows, (r) => copied(v, absOf(v, r.path), relative));
 
-  cx.write_to_clipboard(paths.join("\n"));
+  cx.write_to_clipboard(Arr.join(paths, "\n"));
   v.copiedText = `${paths.length} ${relative ? "relative paths" : "paths"} copied`;
   copiedNow(v, cx);
 }
@@ -202,7 +203,7 @@ export function closePane(v: Files): void {
 
   run("pane.close", { pane: me.pane });
 
-  if (!v.alone && had && (from !== null && from !== "") && from !== me.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+  if (!v.alone && had && (from !== null && from !== "") && from !== me.pane && Arr.some(panes(), (p) => p.pane === from)) run("pane.focus", { pane: from });
 }
 
 /** p: a file in the app's viewer pane for it (the preview, Markdown), on
@@ -263,12 +264,12 @@ export function publish(v: Files): void {
   if (!v.alone || (slot === null || slot === "")) return;
 
   const live = liveSlots();
-  const name = v.root === "/" ? "/" : v.root.split("/").pop() ?? "";
+  const name = v.root === "/" ? "/" : Str.split(v.root, "/").pop() ?? "";
 
   for (const [key, value] of [[TITLES, name], [PATHS, v.root]] as const) {
     const was = readSharedMap(shared, key);
 
-    if (was.get(slot) === value && [...was.keys()].every((k) => live.has(k) || k === slot)) continue;
+    if (was.get(slot) === value && Arr.every([...was.keys()], (k) => live.has(k) || k === slot)) continue;
 
     writeSharedMap(setShared, key, keptFor(v, was, slot, value));
   }

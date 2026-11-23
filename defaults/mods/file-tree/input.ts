@@ -3,6 +3,7 @@
 // the filter line's tab ring), then the list's keys in groups (marks, the
 // preview split, file operations, moving, opening), tried in that order.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context, KeyEvent, Modifiers } from "gpui-kit";
 import type { Row } from "./logic.ts";
 import type { default as Files } from "./main.ts";
@@ -141,9 +142,9 @@ export function keyDown(v: Files, e: KeyEvent, cx: Context): void {
   }
 
   const upper = m.shift || /^[A-Z]$/.test(k);
-  const low = k.toLowerCase();
+  const low = Str.toLowerCase(k);
   const rows = v.shown();
-  const i = rows.findIndex((r) => r.path === v.sel);
+  const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.sel), () => -1);
   const row = rows[i];
 
   // A move ends a shift-range; in V's range it grows the range.
@@ -246,7 +247,7 @@ function moveKey(v: Files, l: ListKey): boolean {
     else selectRow(v, rows, i + 1);
   } else if ((k === "h" || k === "left") && row !== undefined && row.hit !== true) {
     if (row.dir && v.folders.has(row.path)) v.toggle(row.path, cx);
-    else if (row.depth > 0) selectRow(v, rows, rows.findIndex((r) => r.path === parent(row.path)));
+    else if (row.depth > 0) selectRow(v, rows, Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === parent(row.path)), () => -1));
   } else if (k === "enter" && row !== undefined) {
     if (row.dir) v.toggle(row.path, cx);
     else v.openFile(row.path, cx);
@@ -279,7 +280,7 @@ function openKey(v: Files, l: ListKey): boolean {
     v.go(parent(v.root), cx);
     v.pendingSel = from;
   } else if (k === "." && row !== undefined) {
-    const into = row.dir ? row.path : row.path.includes("/") ? parent(row.path) : "";
+    const into = row.dir ? row.path : Str.includes("/")(row.path) ? parent(row.path) : "";
 
     if (into !== "") v.go(`${v.root}/${into}`, cx);
   } else if (k === "r") v.refresh(cx);

@@ -9,6 +9,7 @@
 // for m in defaults/mods/*/guard.ts; do cp defaults/mods/pip/guard.ts "$m"; done
 
 // Types only: this file runs nothing at import, so any test can load it as it is.
+import { Array as Arr } from "effect";
 import type { setShared, shared } from "herdr";
 
 /** Proves that a value is a T. */
@@ -33,12 +34,12 @@ export const isUndefined = (value: unknown): value is undefined => value === und
 
 /** One of these literal values. */
 export function literal<const T extends readonly Literal[]>(...options: T): Guard<T[number]> {
-  return (value: unknown): value is T[number] => options.some((option) => option === value);
+  return (value: unknown): value is T[number] => Arr.some(options, (option) => option === value);
 }
 
 /** Any of these guards' types. */
 export function oneOf<const G extends readonly Guard<Literal | object | undefined>[]>(...guards: G): Guard<Guarded<G[number]>> {
-  return (value: unknown): value is Guarded<G[number]> => guards.some((guard) => guard(value));
+  return (value: unknown): value is Guarded<G[number]> => Arr.some(guards, (guard) => guard(value));
 }
 
 /** T or null. */
@@ -50,7 +51,7 @@ const isList = (value: unknown): value is readonly unknown[] => Array.isArray(va
 
 /** An array whose every item is a T. */
 export function arrayOf<T>(guard: Guard<T>): Guard<readonly T[]> {
-  return (value: unknown): value is readonly T[] => isList(value) && value.every((item) => guard(item));
+  return (value: unknown): value is readonly T[] => isList(value) && Arr.every(value, (item) => guard(item));
 }
 
 const isObject = (value: unknown): value is object => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -134,7 +135,7 @@ export const sharedListKey = <T>(name: string, item: Guard<T>): SharedListKey<T>
 export function readSharedList<T>(read: typeof shared, key: SharedListKey<T>): readonly T[] {
   const value = read(key.name);
 
-  return isList(value) ? value.filter((item) => key.item(item)) : [];
+  return isList(value) ? Arr.filter(value, (item) => key.item(item)) : [];
 }
 
 // ---- dictionaries: an object whose keys are data (slots, paths), read as a Map

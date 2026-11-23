@@ -2,6 +2,7 @@
 // name row), moves, cut and paste, delete to the Trash after asking; each
 // change recorded for the editors to follow.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context, KeyEvent } from "gpui-kit";
 import { exec, home, shared, setShared } from "herdr";
 import { readShared, readSharedList, writeShared } from "./guard.ts";
@@ -56,11 +57,11 @@ export function forget(v: Files, rel: string | null, to: string | null, abs: str
   if (rel !== null) {
     v.folders = movedFolders(v.folders, rel, to);
 
-    for (const k of v.entries.keys()) if (k === rel || k.startsWith(`${rel}/`)) v.entries.delete(k);
+    for (const k of v.entries.keys()) if (k === rel || Str.startsWith(`${rel}/`)(k)) v.entries.delete(k);
   }
 
   const all = cutItems(clipNow(v));
-  const left = all.filter((c) => c.abs !== abs && !c.abs.startsWith(`${abs}/`));
+  const left = Arr.filter(all, (c) => c.abs !== abs && !Str.startsWith(`${abs}/`)(c.abs));
 
   if ((clipNow(v)) !== null && left.length !== all.length) writeShared(setShared, CUT, left.length !== 0 ? { on: v.on, items: left } : null);
 }
@@ -70,7 +71,7 @@ export async function trashTool(v: Files): Promise<string> {
   if (v.trash === null) {
     const r = await exec("sh", ["-c", PROBE, "files-trash-probe"], { on: v.on }).catch(() => null);
 
-    v.trash = r?.code === 0 ? r.stdout.trim() : "";
+    v.trash = r?.code === 0 ? Str.trim(r.stdout) : "";
   }
 
   return v.trash;
@@ -252,7 +253,7 @@ export function clipNow(v: Files): Clip | null {
 
 /** Whether `abs` is cut (on this machine). */
 export function isCut(v: Files, abs: string): boolean {
-  return cutItems(clipNow(v)).some((c) => c.abs === abs);
+  return Arr.some(cutItems(clipNow(v)), (c) => c.abs === abs);
 }
 
 /** x: cuts the row for P (again on the same row: uncut); with marks, all of them. */
@@ -260,7 +261,7 @@ export function cutRow(v: Files, row: Row | null | undefined, cx: Context): void
   const set = setOf(v, row ?? null);
 
   if (set.length > 1) {
-    const items = set.map((r): CutItem => ({ abs: absOf(v, r.path), dir: r.dir, name: base(r.path) }));
+    const items = Arr.map(set, (r): CutItem => ({ abs: absOf(v, r.path), dir: r.dir, name: base(r.path) }));
 
     writeShared(setShared, CUT, { on: v.on, items });
     v.say(`Cut ${items.length} items: P pastes them in the selected folder`, cx, { error: false });
@@ -307,7 +308,7 @@ export function paste(v: Files, row: Row | null | undefined, cx: Context): void 
   const into = absOf(v, row?.path === undefined || row?.path === "" ? "" : row.dir ? row.path : dirOf(row.path));
 
   if (items.length === 1) moveEntry(v, first.abs, join(into, first.name), relTo(v.root, first.abs), cx, "Moved to");
-  else v.moveSet(items.map((x) => x.abs), into, cx);
+  else v.moveSet(Arr.map(items, (x) => x.abs), into, cx);
 }
 
 /** d: asks first (the item named, a folder's contents, trash or permanently);
@@ -325,7 +326,7 @@ export function askDelete(v: Files, row: Row | null | undefined, cx: Context): v
   cx.spawn(async (cx) => {
     const trash = await trashTool(v);
 
-    if (set.length > 1) v.ask = { set: set.map((r) => ({ path: r.path, dir: r.dir, name: base(r.path) })), trash };
+    if (set.length > 1) v.ask = { set: Arr.map(set, (r) => ({ path: r.path, dir: r.dir, name: base(r.path) })), trash };
     else if ((row !== null && row !== undefined) && (path !== undefined && path !== "")) {
       v.ask = { path, dir: row.dir, name: base(path), trash };
       v.sel = path;
@@ -353,7 +354,7 @@ export function removeAsked(v: Files, a: Ask, cx: Context): void {
     const verb = a.trash !== "" ? "Moved" : "Deleted";
     const where = a.trash !== "" ? " to the Trash" : "";
 
-    runSet(v, a.set.map((x) => ({ abs: absOf(v, x.path), args: ["delete", a.trash, absOf(v, x.path)], to: null })), cx,
+    runSet(v, Arr.map(a.set, (x) => ({ abs: absOf(v, x.path), args: ["delete", a.trash, absOf(v, x.path)], to: null })), cx,
       (n) => `${verb} ${n} ${n === 1 ? "item" : "items"}${where}`);
 
     return;
@@ -369,7 +370,7 @@ export function removeAsked(v: Files, a: Ask, cx: Context): void {
       v.want = next;
 
       // From the search's hits: they're looked up again without it.
-      if ((v.query.trim()) !== "") v.search(cx);
+      if ((Str.trim(v.query)) !== "") v.search(cx);
 
       v.say(a.trash !== "" ? `Moved “${a.name}” to the Trash` : `Deleted “${a.name}”`, cx, { error: false });
       v.refresh(cx);
@@ -388,13 +389,13 @@ export function withDraft(v: Files, rows: readonly Row[]): readonly Row[] {
   let at = 0;
 
   if (d.after !== null) {
-    const i = rows.findIndex((r) => r.path === d.after);
+    const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === d.after), () => -1);
 
-    at = i >= 0 ? i + 1 : d.dir !== "" ? rows.findIndex((r) => r.path === d.dir) + 1 : 0;
+    at = i >= 0 ? i + 1 : d.dir !== "" ? Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === d.dir), () => -1) + 1 : 0;
   }
 
-  const folder = d.kind === "folder" || (v.nameInput?.value() ?? "").endsWith("/");
-  const row: DraftRow = { path: DRAFT, name: "", dir: folder, depth: d.dir !== "" ? d.dir.split("/").length : 0, draft: true };
+  const folder = d.kind === "folder" || Str.endsWith("/")((v.nameInput?.value() ?? ""));
+  const row: DraftRow = { path: DRAFT, name: "", dir: folder, depth: d.dir !== "" ? Str.split(d.dir, "/").length : 0, draft: true };
 
   return [...rows.slice(0, at), row, ...rows.slice(at)];
 }

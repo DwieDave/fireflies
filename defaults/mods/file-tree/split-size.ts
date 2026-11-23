@@ -2,6 +2,7 @@
 // pane's shape), how big (a share of the room, clamped), the divider's drag,
 // what's kept per slot, a folder's facts.
 
+import { Array as Arr } from "effect";
 import { isBoolean, isNumber, object } from "./guard.ts";
 
 /** How much wider than tall (or taller than wide) a pane is before its
@@ -101,7 +102,7 @@ export interface Entry {
 
 /** A folder's summary in the preview: "3 folders · 12 files". */
 export function folderFacts(entries: readonly Entry[]): string {
-  const dirs = entries.filter((e) => e.dir).length;
+  const dirs = Arr.filter(entries, (e) => e.dir).length;
   const files = entries.length - dirs;
   const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
 

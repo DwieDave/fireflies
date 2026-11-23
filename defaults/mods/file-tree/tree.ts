@@ -2,6 +2,7 @@
 // again on changes, folding, and the rows it shows (the tree, or the search's
 // hits; the name row of a new file among them).
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type { Context } from "gpui-kit";
 import { exec, panes, watchFolder } from "herdr";
 import type { Row, TreeRow } from "./logic.ts";
@@ -76,13 +77,13 @@ export function refreshTree(v: Files, cx: Context): void {
       if (top?.code === 0) {
         // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would fire again.
         const st = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { cwd: root, on }).catch(() => null);
-        const base = top.stdout.trim();
+        const base = Str.trim(top.stdout);
 
         if (st?.code === 0) {
-          for (const entry of st.stdout.split("\0").filter(Boolean).slice(0, TOTAL)) {
-            const xy = entry.slice(0, 2);
-            const mark = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
-            const abs = `${base}/${entry.slice(3)}`;
+          for (const entry of Arr.filter(Str.split(st.stdout, "\0"), Boolean).slice(0, TOTAL)) {
+            const xy = Str.slice(0, 2)(entry);
+            const mark = xy === "??" || Str.includes("A")(xy) ? "A" : Str.includes("U")(xy) ? "U" : Str.includes("D")(xy) ? "D" : "M";
+            const abs = `${base}/${Str.slice(3)(entry)}`;
 
             marks.set(abs, mark);
 
@@ -96,7 +97,7 @@ export function refreshTree(v: Files, cx: Context): void {
 
         if (ig?.code === 0) ignored = parseIgnored(ig.stdout);
 
-        v.branch = (await exec("git", ["branch", "--show-current"], { cwd: root, on }).catch(() => null))?.stdout.trim() || null;
+        v.branch = Str.trim((await exec("git", ["branch", "--show-current"], { cwd: root, on }).catch(() => null))?.stdout ?? "") || null;
       } else v.branch = null;
 
       if (gen !== v.gen) return;
@@ -144,7 +145,7 @@ export function watchTree(v: Files, cx: Context): void {
 export function toggleFolder(v: Files, path: string, cx: Context): void {
   if (v.folders.has(path)) {
     for (const f of v.folders) {
-      if (f === path || f.startsWith(`${path}/`)) {
+      if (f === path || Str.startsWith(`${path}/`)(f)) {
         v.folders.delete(f);
         v.entries.delete(f);
       }
@@ -207,17 +208,17 @@ export function treeRows(v: Files): TreeRow[] {
 
 /** What the list shows: the search's hits while there's a query, else the tree. */
 export function shownRows(v: Files): readonly Row[] {
-  return (v.query.trim()) !== "" && v.hits !== null ? v.hits : v.rows();
+  return (Str.trim(v.query)) !== "" && v.hits !== null ? v.hits : v.rows();
 }
 
 /** The row at `path` in the list. */
 export function rowAt(v: Files, path: string | null): Row | null {
-  return path === null ? null : v.shown().find((r) => r.path === path) ?? null;
+  return path === null ? null : Option.getOrUndefined(Arr.findFirst(v.shown(), (r) => r.path === path)) ?? null;
 }
 
 /** The slots of the files panes there are now (a kept entry of another is dropped). */
 export function liveSlots(): Set<string> {
-  return new Set(panes().flatMap((p) => (p.mod === MOD && isSlotted(p.props) && p.props.slot !== "" ? [p.props.slot] : [])));
+  return new Set(Arr.flatMap(panes(), (p) => (p.mod === MOD && isSlotted(p.props) && p.props.slot !== "" ? [p.props.slot] : [])));
 }
 
 /** `map` with this pane's `value` under its slot, the panes that are gone left out. */

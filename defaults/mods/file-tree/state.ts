@@ -4,6 +4,7 @@
 // the shapes the pane holds (the name row, the delete question, the menu, a
 // drag, the preview's target). main.ts's Files holds these fields.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import type * as herdr from "herdr";
 import { exec, home, appHome } from "herdr";
 import type { Guarded } from "./guard.ts";
@@ -40,7 +41,7 @@ export const VIEWERS: readonly ViewerKind[] = [
   { test: /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|sqlite3?|db3?|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i, open: "preview.open", other: "system" },
 ];
 
-export const viewerFor = (name: string): ViewerKind | null => VIEWERS.find((v) => v.test.test(name)) ?? null;
+export const viewerFor = (name: string): ViewerKind | null => Option.getOrUndefined(Arr.findFirst(VIEWERS, (v) => v.test.test(name))) ?? null;
 
 /** A preview file: one the preview draws and the editor doesn't edit (a
  *  picture, SVG too, a PDF, a database, a font, a clip): from the files pane
@@ -114,7 +115,7 @@ export const EDGE = 18;
 export const tilde = (p: string | null): string => {
   const h = home();
 
-  return p === null || p === "" ? "" : p === h ? "~" : p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
+  return p === null || p === "" ? "" : p === h ? "~" : Str.startsWith(`${h}/`)(p) ? `~${Str.slice(h.length)(p)}` : p;
 };
 
 /** A folder's entries, folders first, capped at PER_FOLDER (+1 to tell it was cut). */
@@ -124,7 +125,7 @@ export async function directory(path: string, on: string | null): Promise<Entry[
 
   if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
 
-  const fields = r.stdout.split("\0");
+  const fields = Str.split(r.stdout, "\0");
   const out: Entry[] = [];
 
   for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1] ?? "", dir: fields[i] === "d" });

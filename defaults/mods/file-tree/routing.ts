@@ -15,6 +15,7 @@
 //   (editor-route.ts), beside; the preview pane stays a preview.
 // A pane closed by hand (or moved to another tab) is no longer this pane's.
 
+import { Array as Arr, Option } from "effect";
 import type { PaneInfo } from "herdr";
 import { panes, run, shared, setShared } from "herdr";
 import type { Guarded } from "./guard.ts";
@@ -80,10 +81,10 @@ function own(v: Files, which: "editor" | "preview"): PaneInfo | null {
   if ((mine === null || mine === undefined) || (v.on !== null && v.on !== "")) return null;
 
   const tab = v.shownTab() ?? null;
-  const fit = panes().filter((p) => p.tab === tab && canBeMine(p, which));
+  const fit = Arr.filter(panes(), (p) => p.tab === tab && canBeMine(p, which));
   const slotOf = (p: PaneInfo): string | null => editorProps(p).slot ?? null;
   const fileOf = (p: PaneInfo): string | null => (which === "preview" ? previewFile(p) : editorProps(p).path ?? null);
-  const found = mine.slot !== undefined && mine.slot !== "" ? fit.find((p) => slotOf(p) === mine.slot) : fit.find((p) => fileOf(p) === mine.path);
+  const found = mine.slot !== undefined && mine.slot !== "" ? Option.getOrUndefined(Arr.findFirst(fit, (p) => slotOf(p) === mine.slot)) : Option.getOrUndefined(Arr.findFirst(fit, (p) => fileOf(p) === mine.path));
 
   if (found !== undefined && (mine.slot === undefined || mine.slot === "")) {
     const slot = slotOf(found);

@@ -2,6 +2,7 @@
 // matched letters, its git or cut mark), a folder's look, the split between
 // the tree and the preview, the empty states; the cursor moving through rows.
 
+import { Array as Arr, Option, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import type { Theme } from "herdr";
@@ -26,13 +27,13 @@ export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
   const open = r.dir && v.folders.has(r.path);
   const cut = r.draft !== true && isCut(v, absOf(v, r.path));
   const ask = v.ask;
-  const doomed = ask !== null ? (ask.set !== undefined ? ask.set.some((x) => x.path === r.path) : ask.path === r.path) : false;
+  const doomed = ask !== null ? (ask.set !== undefined ? Arr.some(ask.set, (x) => x.path === r.path) : ask.path === r.path) : false;
   // Marked (t, cmd-click, a range); dragged; the folder a drop would land in.
   const marked = v.marked.has(r.path);
   const dragged = Boolean(v.drag?.paths.includes(r.path));
   const target = Boolean(v.drag?.ok) && v.drag?.into === r.path && r.path !== "";
   const mark = cut ? "cut" : r.hit === true ? ((r.git !== null && r.git !== "") && markColor(t, r.git) ? r.git : null) : v.marks.get(`${v.root}/${r.path}`) ?? null;
-  const hidden = r.name.startsWith(".");
+  const hidden = Str.startsWith(".")(r.name);
   const tinted = (mark !== null && mark !== "") && mark !== "•" ? markColor(t, mark) : null;
   const color = doomed ? t.ansi1 : cut ? t.dim : sel ? t.foreground : tinted ?? (hidden || r.ignored === true ? t.dim : r.dir ? t.foreground : t.muted);
   const input = v.nameInput;
@@ -62,12 +63,12 @@ export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
 /** Text with the matched characters in the accent. */
 export function matched(v: Files, t: Theme, id: string, text: string, ranges: readonly Range[], color: Color): Element {
   return h_flex().relative().flex_1().min_w(0).overflow_hidden()
-    .children(marks(text, ranges).map(([piece, hit], j) => div().id(`${id}-${j}`).flex_none().text_color(hit ? t.accent : color).child(piece)));
+    .children(Arr.map(marks(text, ranges), ([piece, hit], j) => div().id(`${id}-${j}`).flex_none().text_color(hit ? t.accent : color).child(piece)));
 }
 
 /** A folder in the preview: its name, what it holds (as the filters list it), its first entries. */
 export function drawFolderView(v: Files, t: Theme, d: LookDir): Element {
-  const entries = (d.entries ?? []).filter((e) => lists(d.rel !== "" ? `${d.rel}/${e.name}` : e.name, v.filters, v.ignored));
+  const entries = Arr.filter((d.entries ?? []), (e) => lists(d.rel !== "" ? `${d.rel}/${e.name}` : e.name, v.filters, v.ignored));
   const facts = d.error !== null && d.error !== "" ? "" : d.entries !== null ? folderFacts(entries) : "listing…";
 
   const bar = h_flex().id("nf-look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
@@ -78,7 +79,7 @@ export function drawFolderView(v: Files, t: Theme, d: LookDir): Element {
 
   const list = v_flex().flex_1().min_h(0).overflow_hidden().py(4).text_size(12)
     .children(d.error !== null && d.error !== "" ? [div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)] : [])
-    .children(entries.slice(0, 120).map((e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
+    .children(Arr.map(entries.slice(0, 120), (e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
       .child(e.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(t.ansi4) : typeMark(t, e.name, `nf-lk-icon-${i}`))
       .child(div().min_w(0).truncate().text_color(e.dir ? t.foreground : t.muted).child(e.name))));
 
@@ -169,7 +170,7 @@ export function selectRow(v: Files, rows: readonly Row[], i: number): void {
 /** One step through the hits while typing (folder lines skipped). */
 export function stepRow(v: Files, d: number): void {
   const rows = v.shown();
-  let i = rows.findIndex((r) => r.path === v.sel);
+  let i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.sel), () => -1);
 
   do i += d; while (rows[i]?.head);
 
@@ -180,19 +181,19 @@ export function stepRow(v: Files, d: number): void {
  *  it came from; a row asked for once it shows; none when its row went. */
 export function settleSelection(v: Files, rows: readonly Row[]): void {
   if ((v.pendingSel !== null && v.pendingSel !== "") && rows.length !== 0) {
-    const back = v.pendingSel.startsWith(`${v.root}/`) ? v.pendingSel.slice(v.root.length + 1).split("/")[0] : null;
+    const back = Str.startsWith(`${v.root}/`)(v.pendingSel) ? Str.split(Str.slice(v.root.length + 1)(v.pendingSel), "/")[0] : null;
 
     v.pendingSel = null;
 
     if (back !== null && back !== undefined && back !== "") {
-      const i = rows.findIndex((r) => r.path === back);
+      const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === back), () => -1);
 
       if (i >= 0) selectRow(v, rows, i);
     }
   }
 
   if (v.want !== null && v.want !== "") {
-    const i = rows.findIndex((r) => r.path === v.want);
+    const i = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === v.want), () => -1);
 
     if (i >= 0) {
       v.want = null;
@@ -200,7 +201,7 @@ export function settleSelection(v: Files, rows: readonly Row[]): void {
     }
   }
 
-  if ((v.sel !== null && v.sel !== "") && (v.want === null || v.want === "") && !rows.some((r) => r.path === v.sel)) v.sel = null;
+  if ((v.sel !== null && v.sel !== "") && (v.want === null || v.want === "") && !Arr.some(rows, (r) => r.path === v.sel)) v.sel = null;
 }
 
 /** The rows drawn: the tree or the hits with the name row; marks on rows no
@@ -213,15 +214,15 @@ export function listOf(v: Files, rows: readonly Row[]): readonly Row[] {
 
   // Marks on rows no longer shown (folded away, filtered out, gone) drop out.
   if (v.marked.size !== 0 && v.drag === null) {
-    const shownNow = new Set(rows.map((r) => r.path));
+    const shownNow = new Set(Arr.map(rows, (r) => r.path));
 
-    if ([...v.marked].some((p) => !shownNow.has(p))) v.marked = new Set([...v.marked].filter((p) => shownNow.has(p)));
+    if (Arr.some([...v.marked], (p) => !shownNow.has(p))) v.marked = new Set(Arr.filter([...v.marked], (p) => shownNow.has(p)));
   }
 
   const draft = v.draft;
 
   if (draft !== null && !draft.shown) {
-    const i = list.findIndex((r) => r.draft || (draft.kind === "rename" && r.path === draft.path));
+    const i = Option.getOrElse(Arr.findFirstIndex(list, (r) => r.draft || (draft.kind === "rename" && r.path === draft.path)), () => -1);
 
     if (i >= 0) {
       draft.shown = true;
@@ -235,20 +236,20 @@ export function listOf(v: Files, rows: readonly Row[]): readonly Row[] {
 
 /** The list's place: the rows (a virtual list), or why there are none. */
 export function listBody(v: Files, t: Theme, rows: readonly Row[], list: readonly Row[], focused: boolean): Element {
-  const searching = Boolean(v.query.trim());
+  const searching = Boolean(Str.trim(v.query));
   let body: Element;
 
-  if (searching && v.hits !== null && rows.length === 0) body = emptyView(v, t, "No files match", v.note ?? `“${v.query.trim()}” under ${tilde(v.root)}`);
+  if (searching && v.hits !== null && rows.length === 0) body = emptyView(v, t, "No files match", v.note ?? `“${Str.trim(v.query)}” under ${tilde(v.root)}`);
   else if (searching && v.hits === null) body = emptyView(v, t, "Searching…", null);
   else if ((v.error !== null && v.error !== "") && list.length === 0) body = emptyView(v, t, "Can't read this folder", v.error);
   else if (list.length === 0) body = emptyView(v, t, v.loading ? "Listing files…" : "Nothing here", v.loading ? null : tilde(v.root), !v.loading);
   else {
     const rowsList = v_virtual_list("nf-rows", list.length, ROW, (i) => list[i]?.path ?? "",
-      (range) => list.slice(range.start, range.end).map((r) => v.row(t, r, focused)))
+      (range) => Arr.map(list.slice(range.start, range.end), (r) => v.row(t, r, focused)))
       .on_item_click((path, cx) => v.pick(path, cx))
       // The pane's own right press comes after this and opens the menu for the row.
       .on_item_secondary_click((path) => {
-        v.pressed = rows.find((r) => r.path === path) ?? null;
+        v.pressed = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.path === path)) ?? null;
       })
       .size_full();
 

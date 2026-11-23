@@ -117,6 +117,7 @@
 // (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
 // cmd-e on an open panel (nocturne/files.ts focusFiles: "take-panel").
 
+import { Array as Arr, Option, String as Str } from "effect";
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, Entity, FocusHandle, KeyEvent, Modifiers } from "gpui-kit";
 import type { Props } from "gpui-shell";
@@ -326,7 +327,7 @@ export default class Files extends View {
     cx.timer.every(this.on !== null && this.on !== "" ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
       for (;;) {
-        const c = (await nextCommand()).replace(`${MOD}.`, "");
+        const c = Str.replace(`${MOD}.`, "")((await nextCommand()));
 
         if (c === "focus" || (c === "take-panel" && !this.alone && this.isFocusedPane())) this.takeKeys(cx);
         else if (c === "keys" && (this.alone || this.isFocusedPane())) this.keysShown = !this.keysShown;
@@ -357,14 +358,14 @@ export default class Files extends View {
 
   /** The shown tab's id. */
   shownTab(): string | undefined {
-    return spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    return Option.getOrUndefined(Option.flatMap(Arr.findFirst(spaces(), (s) => s.active), (s) => Arr.findFirst(s.tabs, (c) => c.active)))?.id;
   }
 
   /** The panel in the shown tab (a pane without a path of its own). */
   panel(): herdr.PaneInfo | null {
     const tab = this.shownTab();
 
-    return panes().find((p) => p.mod === MOD && p.tab === tab && !isAlone(p.props)) ?? null;
+    return Option.getOrUndefined(Arr.findFirst(panes(), (p) => p.mod === MOD && p.tab === tab && !isAlone(p.props))) ?? null;
   }
 
   /** Takes the keyboard, with a row picked so j / k start somewhere. */
@@ -385,7 +386,7 @@ export default class Files extends View {
     const from = readShared(shared, FROM, null);
     const mine = ownPane(this) ?? this.panel();
 
-    if ((from !== null && from !== "") && from !== mine?.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+    if ((from !== null && from !== "") && from !== mine?.pane && Arr.some(panes(), (p) => p.pane === from)) run("pane.focus", { pane: from });
     else run("pane.go", { direction: "left" });
   }
 
@@ -460,7 +461,7 @@ export default class Files extends View {
     // Kept per pane, by slot; panes that are gone drop out.
     if (this.slot !== null && this.slot !== "") writeSharedMap(setShared, FILTERS, keptFor(this, readSharedMap(shared, FILTERS), this.slot, this.filters));
 
-    if ((this.query.trim()) !== "") this.search(cx);
+    if ((Str.trim(this.query)) !== "") this.search(cx);
 
     cx.notify();
   }
@@ -592,7 +593,7 @@ export default class Files extends View {
     }
 
     const rows = this.shown();
-    const row = rows.find((r) => r.path === path);
+    const row = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.path === path));
 
     if (row === undefined) return;
 
@@ -603,12 +604,12 @@ export default class Files extends View {
     // the last clicked one to this one.
     if ((mods?.platform || mods?.shift) && row.head !== true) {
       if (mods.shift) {
-        const a = rows.findIndex((r) => r.path === (this.anchor ?? this.sel));
+        const a = Option.getOrElse(Arr.findFirstIndex(rows, (r) => r.path === (this.anchor ?? this.sel)), () => -1);
         const b = rows.indexOf(row);
 
         this.marked = new Set(rangePaths(rows, a < 0 ? b : a, b));
       } else {
-        if (this.marked.size === 0 && (this.sel !== null && this.sel !== "") && this.sel !== path && rows.some((r) => r.path === this.sel && r.head !== true)) this.marked = new Set([this.sel]);
+        if (this.marked.size === 0 && (this.sel !== null && this.sel !== "") && this.sel !== path && Arr.some(rows, (r) => r.path === this.sel && r.head !== true)) this.marked = new Set([this.sel]);
 
         markToggle(this, path);
       }
@@ -695,7 +696,7 @@ export default class Files extends View {
     const focused = Boolean(this.handle?.is_focused()) || this.typing || this.naming;
     const list = listOf(this, rows);
     const w = this.size.width;
-    const searching = Boolean(this.query.trim());
+    const searching = Boolean(Str.trim(this.query));
     const body = listBody(this, t, rows, list, focused);
     const foot = footer(this, t, searching);
     const { side, px } = placeLook(this, cx);
@@ -711,7 +712,7 @@ export default class Files extends View {
 
     const el = withPointer(this, root)
       .child(this.toolbar(t, w, focused))
-      .child(this.lens(t, w, rows.filter((r) => r.head !== true).length))
+      .child(this.lens(t, w, Arr.filter(rows, (r) => r.head !== true).length))
       .children(side === null || px === null ? [area, ...(foot !== null ? [foot] : [])] : [this.split(t, side, px, area, foot)])
       .children(menu !== null ? [menuBox(this, t, menu)] : [])
       // What's dragged, beside the pointer.

@@ -2,6 +2,7 @@
 // chip), the filter line (the lens with its filters and + new), and the
 // footer's hint line and keys strip.
 
+import { Array as Arr, String as Str } from "effect";
 import { div, svg } from "gpui-kit";
 import type { Context, Element } from "gpui-kit";
 import type { Theme } from "herdr";
@@ -39,7 +40,7 @@ export function drawToolbar(v: Files, t: Theme, w: number, focused: boolean): El
 
   for (const m of v.marks.values()) if (m !== "•") changed++;
 
-  const name = v.root === "/" ? "/" : v.root.split("/").pop() ?? "";
+  const name = v.root === "/" ? "/" : Str.split(v.root, "/").pop() ?? "";
   const fit = toolbarFit(w, { alone: v.alone, branch: v.branch, changed, name });
   const branch = v.branch;
 
@@ -93,7 +94,7 @@ export function filterChip(v: Files, t: Theme, id: string, label: string, on: bo
 
 /** + file / + folder (or a bare +): `a` / `A`'s name row; the accent +, a muted word. */
 export function addChip(v: Files, t: Theme, kind: NewKind, label: string, ringed: boolean): Element {
-  const word = label.replace(/^\+\s*/, "");
+  const word = Str.replace(/^\+\s*/, "")(label);
 
   return h_flex().id(`nf-add-${kind}`).relative().h(20).px(4).gap(7).flex_none().items_center().text_color(t.muted)
     .hover((s) => s.bg(`${edge(t)}55`).text_color(t.foreground))
@@ -114,7 +115,7 @@ export function addChip(v: Files, t: Theme, kind: NewKind, label: string, ringed
 export function drawLens(v: Files, t: Theme, w: number, found: number): Element {
   const live = v.typing || v.finding || Boolean(v.query);
   const cut = v.cut;
-  const searching = Boolean(v.query.trim());
+  const searching = Boolean(Str.trim(v.query));
   // What fits this width: the placeholder shortens, then the switches' labels; then two rows.
   const fit = lensLayout(w, { cut: { hidden: v.filters.hidden ? 0 : cut.hidden, ignored: v.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
   const [hLabel, iLabel] = fit.labels;
@@ -143,7 +144,7 @@ export function drawLens(v: Files, t: Theme, w: number, found: number): Element 
   const chips = [
     filterChip(v, t, "nf-hidden", hLabel, v.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => v.setFilter("hidden", cx), at === "hidden"),
     filterChip(v, t, "nf-ignored", iLabel, v.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => v.setFilter("ignored", cx), at === "ignored"),
-    ...adds.map(([kind, label]) => addChip(v, t, kind, label, at === `add-${kind}`)),
+    ...Arr.map(adds, ([kind, label]) => addChip(v, t, kind, label, at === `add-${kind}`)),
   ];
 
   // ? keys: the line's last item (keyhelp.ts).
